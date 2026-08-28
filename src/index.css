@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Noto Sans SC', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Noto Serif SC', ui-serif, Georgia, serif;
+}
+
+body {
+  background-color: #09090b;
+  color: #fafafa;
+  overflow: hidden;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html[data-theme="light"] {
+  --color-zinc-950: #fafafa;
+  --color-zinc-900: #f4f4f5;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-400: #52525b;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a;
+  --color-zinc-100: #18181b;
+  --color-zinc-50: #09090b;
+
+  --color-white: #09090b;
+  --color-black: #fafafa;
+  
+  background-color: var(--color-zinc-950);
+  color: var(--color-white);
+}
+
+html[data-theme="light"] body {
+  background-color: var(--color-zinc-950);
+  color: var(--color-white);
+}
+
+@media print {
+  #root,
+  .no-print {
+    display: none !important;
+  }
+
+  iframe#print-menu-iframe,
+  iframe#print-receipt-iframe {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+  }
+}

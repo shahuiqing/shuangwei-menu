@@ -1,0 +1,6 @@
+{
+  "name": "数字轮播看板 | Digital Auto-flip Menu",
+  "description": "高端餐饮级别的数字菜单看板，支持全自动轮播翻页展示、流畅的过度动画和手动操控功能。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
