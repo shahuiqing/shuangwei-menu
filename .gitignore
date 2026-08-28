@@ -13,3 +13,6 @@ local-settings.json
 kv-data/
 blob-data/
 .opencode/
+cf-test.ts
+cf-test.ts
+workspace/
