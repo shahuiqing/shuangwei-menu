@@ -11,11 +11,8 @@ import {
   Wallet,
   Percent,
   Receipt,
-  Boxes,
   AlertTriangle,
-  CheckCircle2,
-  Search,
-  X
+  X,
 } from "lucide-react";
 import { api } from "../../api";
 import { isSupabaseConfigured, isSupabaseHealthy } from "../../supabase";
@@ -23,11 +20,10 @@ import {
   getPurchaseOrders,
   savePurchaseOrder,
   deletePurchaseOrder,
-  getInventoryTransactions,
   addInventoryTransaction,
   getDailySummaries,
   getWasteAnalysis,
-  getPeriodTotals
+  getPeriodTotals,
 } from "../../api_modules/finance";
 import type { InventoryItem } from "../../types/inventory";
 import { toast } from "../../utils/toast";
@@ -42,7 +38,11 @@ const daysAgo = (n: number) => {
   return d.toISOString().slice(0, 10);
 };
 const fmtMoney = (v: number) =>
-  "MAD " + Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  "MAD " +
+  Number(v || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const fmtNum = (v: number) =>
   Number(v || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -62,7 +62,7 @@ export function FinanceReports() {
     quantity: "1",
     unit_price: "0",
     purchased_at: todayStr(),
-    notes: ""
+    notes: "",
   });
 
   // 报表周期
@@ -71,25 +71,23 @@ export function FinanceReports() {
   const [summaries, setSummaries] = useState<any[]>([]);
   const [totals, setTotals] = useState<any>(null);
   const [waste, setWaste] = useState<any[]>([]);
-  const [txs, setTxs] = useState<any[]>([]);
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [inv, pos, summariesData, wasteData, totalsData, txsData] = await Promise.all([
-        api.getInventoryItems(),
-        getPurchaseOrders(),
-        getDailySummaries(rangeStart, rangeEnd),
-        getWasteAnalysis(rangeStart, rangeEnd),
-        getPeriodTotals(rangeStart, rangeEnd),
-        getInventoryTransactions()
-      ]);
+      const [inv, pos, summariesData, wasteData, totalsData] =
+        await Promise.all([
+          api.getInventoryItems(),
+          getPurchaseOrders(),
+          getDailySummaries(rangeStart, rangeEnd),
+          getWasteAnalysis(rangeStart, rangeEnd),
+          getPeriodTotals(rangeStart, rangeEnd),
+        ]);
       setInventory(inv || []);
       setPurchases(pos || []);
       setSummaries(summariesData || []);
       setWaste(wasteData || []);
       setTotals(totalsData);
-      setTxs(txsData || []);
     } catch (e) {
       console.error("FinanceReports load failed:", e);
       toast("加载报表数据失败", "error");
@@ -101,29 +99,17 @@ export function FinanceReports() {
   useEffect(() => {
     loadAll();
     const unsub = api.subscribeToInventory(() => loadAll());
-    return () => { unsub(); };
+    return () => {
+      unsub();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeStart, rangeEnd]);
 
-  const reloadReports = async () => {
-    setLoading(true);
-    try {
-      const [summariesData, wasteData, totalsData] = await Promise.all([
-        getDailySummaries(rangeStart, rangeEnd),
-        getWasteAnalysis(rangeStart, rangeEnd),
-        getPeriodTotals(rangeStart, rangeEnd)
-      ]);
-      setSummaries(summariesData || []);
-      setWaste(wasteData || []);
-      setTotals(totalsData);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 采购表单
-  const selectedInvItem = inventory.find(i => i.id === purchaseForm.item_id);
-  const computedTotal = (parseFloat(purchaseForm.quantity) || 0) * (parseFloat(purchaseForm.unit_price) || 0);
+  const selectedInvItem = inventory.find((i) => i.id === purchaseForm.item_id);
+  const computedTotal =
+    (parseFloat(purchaseForm.quantity) || 0) *
+    (parseFloat(purchaseForm.unit_price) || 0);
 
   const openPurchaseModal = () => {
     setPurchaseForm({
@@ -133,15 +119,18 @@ export function FinanceReports() {
       quantity: "1",
       unit_price: String(inventory[0]?.price || "0"),
       purchased_at: todayStr(),
-      notes: ""
+      notes: "",
     });
     setPurchaseModalOpen(true);
   };
 
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!purchaseForm.item_id) { toast("请选择采购物料", "warn"); return; }
-    const item = inventory.find(i => i.id === purchaseForm.item_id);
+    if (!purchaseForm.item_id) {
+      toast("请选择采购物料", "warn");
+      return;
+    }
+    const item = inventory.find((i) => i.id === purchaseForm.item_id);
     const po = {
       id: purchaseForm.id || undefined,
       supplier: purchaseForm.supplier.trim(),
@@ -152,16 +141,19 @@ export function FinanceReports() {
       unit_price: parseFloat(purchaseForm.unit_price) || 0,
       total_cost: computedTotal,
       purchased_at: purchaseForm.purchased_at || todayStr(),
-      notes: purchaseForm.notes.trim()
+      notes: purchaseForm.notes.trim(),
     };
-    if (po.quantity <= 0) { toast("采购数量必须大于 0", "warn"); return; }
+    if (po.quantity <= 0) {
+      toast("采购数量必须大于 0", "warn");
+      return;
+    }
     const saved = await savePurchaseOrder(po as any);
     // 同步增加库存并记录流水
     if (item) {
       await api.saveInventoryItem({
         ...item,
         stock: Number((Number(item.stock) + po.quantity).toFixed(2)),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       });
     }
     await addInventoryTransaction({
@@ -174,7 +166,7 @@ export function FinanceReports() {
       unit_cost: po.unit_price,
       reference: saved.id,
       notes: "采购入库: " + (po.supplier || "供应商"),
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     });
     setPurchaseModalOpen(false);
     toast(`采购成功，库存已增加 ${po.quantity} ${po.unit}`, "success");
@@ -191,9 +183,8 @@ export function FinanceReports() {
   // 成本分析：按物料分类汇总理论成本
   const costByCategory = useMemo(() => {
     const map = new Map<string, number>();
-    summaries.forEach(() => {});
-    waste.forEach(w => {
-      const item = inventory.find(i => i.id === w.item_id);
+    waste.forEach((w) => {
+      const item = inventory.find((i) => i.id === w.item_id);
       const cat = item?.category || "其他";
       const cost = Number(w.actual_consumption) * Number(item?.price || 0);
       map.set(cat, (map.get(cat) || 0) + cost);
@@ -203,7 +194,7 @@ export function FinanceReports() {
 
   const wasteTotal = useMemo(
     () => waste.reduce((s, w) => s + Number(w.waste_cost || 0), 0),
-    [waste]
+    [waste],
   );
 
   const dbConnected = isSupabaseConfigured && isSupabaseHealthy;
@@ -223,13 +214,18 @@ export function FinanceReports() {
                 经营财务与库存盈亏分析
               </h2>
               <p className="text-xs sm:text-sm text-zinc-400">
-                每日盈亏、采购、成本与周期性损耗测算（基于订单与 BOM 配方自动核算）
+                每日盈亏、采购、成本与周期性损耗测算（基于订单与 BOM
+                配方自动核算）
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${dbConnected ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
-              <span className={`w-2 h-2 rounded-full ${dbConnected ? "bg-green-500 animate-pulse" : "bg-amber-500"}`} />
+            <span
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${dbConnected ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${dbConnected ? "bg-green-500 animate-pulse" : "bg-amber-500"}`}
+              />
               {dbConnected ? "Supabase 云端已连接" : "本地离线模式"}
             </span>
             <button
@@ -268,7 +264,10 @@ export function FinanceReports() {
             {[7, 14, 30].map((d) => (
               <button
                 key={d}
-                onClick={() => { setRangeStart(daysAgo(d - 1)); setRangeEnd(todayStr()); }}
+                onClick={() => {
+                  setRangeStart(daysAgo(d - 1));
+                  setRangeEnd(todayStr());
+                }}
                 className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-semibold transition-colors"
               >
                 近{d}天
@@ -286,7 +285,9 @@ export function FinanceReports() {
                 <span>{fmtMoney(totals.revenue)}</span>
                 <TrendingUp size={16} className="text-emerald-500 shrink-0" />
               </div>
-              <span className="text-[10px] text-zinc-500">{totals.order_count} 单</span>
+              <span className="text-[10px] text-zinc-500">
+                {totals.order_count} 单
+              </span>
             </div>
             <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5">
               <span className="text-xs text-zinc-400 block mb-1">食材成本</span>
@@ -302,11 +303,21 @@ export function FinanceReports() {
                 <ShoppingCart size={16} className="text-sky-500 shrink-0" />
               </div>
             </div>
-            <div className={`bg-zinc-950/60 border rounded-xl p-3.5 ${totals.gross_profit >= 0 ? "border-emerald-500/30" : "border-red-500/30"}`}>
-              <span className="text-xs text-zinc-400 block mb-1">毛利（利润）</span>
-              <div className={`text-lg sm:text-xl font-bold flex items-center justify-between gap-2 ${totals.gross_profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            <div
+              className={`bg-zinc-950/60 border rounded-xl p-3.5 ${totals.gross_profit >= 0 ? "border-emerald-500/30" : "border-red-500/30"}`}
+            >
+              <span className="text-xs text-zinc-400 block mb-1">
+                毛利（利润）
+              </span>
+              <div
+                className={`text-lg sm:text-xl font-bold flex items-center justify-between gap-2 ${totals.gross_profit >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              >
                 <span>{fmtMoney(totals.gross_profit)}</span>
-                {totals.gross_profit >= 0 ? <TrendingUp size={16} className="shrink-0" /> : <TrendingDown size={16} className="shrink-0" />}
+                {totals.gross_profit >= 0 ? (
+                  <TrendingUp size={16} className="shrink-0" />
+                ) : (
+                  <TrendingDown size={16} className="shrink-0" />
+                )}
               </div>
             </div>
             <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5">
@@ -317,12 +328,16 @@ export function FinanceReports() {
               </div>
             </div>
             <div className="bg-zinc-950/60 border border-red-500/30 rounded-xl p-3.5">
-              <span className="text-xs text-red-400 block mb-1">测算损耗金额</span>
+              <span className="text-xs text-red-400 block mb-1">
+                测算损耗金额
+              </span>
               <div className="text-lg sm:text-xl font-bold text-red-400 flex items-center justify-between gap-2">
                 <span>{fmtMoney(totals.waste_cost)}</span>
                 <AlertTriangle size={16} className="text-red-500 shrink-0" />
               </div>
-              <span className="text-[10px] text-zinc-500">占成本 {totals.waste_rate}%</span>
+              <span className="text-[10px] text-zinc-500">
+                占成本 {totals.waste_rate}%
+              </span>
             </div>
           </div>
         )}
@@ -375,17 +390,43 @@ export function FinanceReports() {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {summaries.length === 0 ? (
-                    <tr><td colSpan={7} className="py-8 text-center text-zinc-500">该周期内暂无订单数据</td></tr>
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-8 text-center text-zinc-500"
+                      >
+                        该周期内暂无订单数据
+                      </td>
+                    </tr>
                   ) : (
                     [...summaries].reverse().map((d: any) => (
-                      <tr key={d.date} className="hover:bg-zinc-800/40 transition-colors">
-                        <td className="py-3 px-4 font-mono text-zinc-200">{d.date}</td>
-                        <td className="py-3 px-4 text-right">{d.order_count}</td>
-                        <td className="py-3 px-4 text-right font-mono text-emerald-400">{fmtMoney(d.revenue)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-amber-400">{fmtMoney(d.food_cost)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sky-400">{fmtMoney(d.purchases_total)}</td>
-                        <td className={`py-3 px-4 text-right font-mono font-bold ${d.gross_profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtMoney(d.gross_profit)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-zinc-300">{d.gross_margin}%</td>
+                      <tr
+                        key={d.date}
+                        className="hover:bg-zinc-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-4 font-mono text-zinc-200">
+                          {d.date}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {d.order_count}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-emerald-400">
+                          {fmtMoney(d.revenue)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-amber-400">
+                          {fmtMoney(d.food_cost)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-sky-400">
+                          {fmtMoney(d.purchases_total)}
+                        </td>
+                        <td
+                          className={`py-3 px-4 text-right font-mono font-bold ${d.gross_profit >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                        >
+                          {fmtMoney(d.gross_profit)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-zinc-300">
+                          {d.gross_margin}%
+                        </td>
                       </tr>
                     ))
                   )}
@@ -394,7 +435,9 @@ export function FinanceReports() {
             </div>
           </div>
           <p className="text-[11px] text-zinc-500 leading-relaxed">
-            说明：营业收入 = 已完成/进行中订单金额合计；食材成本 = 按订单菜品与 BOM 配方自动折算的理论食材成本（Σ 剂量×数量×单价）；毛利 = 收入 - 成本。
+            说明：营业收入 = 已完成/进行中订单金额合计；食材成本 = 按订单菜品与
+            BOM 配方自动折算的理论食材成本（Σ 剂量×数量×单价）；毛利 = 收入 -
+            成本。
           </p>
         </div>
       )}
@@ -430,19 +473,43 @@ export function FinanceReports() {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {purchases.length === 0 ? (
-                    <tr><td colSpan={7} className="py-8 text-center text-zinc-500">暂无采购记录，点击【新增采购记录】开始录入</td></tr>
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-8 text-center text-zinc-500"
+                      >
+                        暂无采购记录，点击【新增采购记录】开始录入
+                      </td>
+                    </tr>
                   ) : (
                     purchases.map((p) => (
-                      <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
-                        <td className="py-3 px-4 font-mono text-zinc-300">{String(p.purchased_at || "").slice(0, 10)}</td>
-                        <td className="py-3 px-4">
-                          <div className="font-semibold text-white">{p.item_name}</div>
-                          <div className="text-xs font-mono text-zinc-500">{p.item_id}</div>
+                      <tr
+                        key={p.id}
+                        className="hover:bg-zinc-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-4 font-mono text-zinc-300">
+                          {String(p.purchased_at || "").slice(0, 10)}
                         </td>
-                        <td className="py-3 px-4 text-zinc-400">{p.supplier || "—"}</td>
-                        <td className="py-3 px-4 text-right font-mono">{fmtNum(p.quantity)} {p.unit}</td>
-                        <td className="py-3 px-4 text-right font-mono">{fmtMoney(p.unit_price)}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">{fmtMoney(p.total_cost)}</td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-white">
+                            {p.item_name}
+                          </div>
+                          <div className="text-xs font-mono text-zinc-500">
+                            {p.item_id}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-zinc-400">
+                          {p.supplier || "—"}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono">
+                          {fmtNum(p.quantity)} {p.unit}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono">
+                          {fmtMoney(p.unit_price)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">
+                          {fmtMoney(p.total_cost)}
+                        </td>
                         <td className="py-3 px-4 text-center">
                           <button
                             onClick={() => handleDeletePurchase(p.id)}
@@ -472,18 +539,30 @@ export function FinanceReports() {
                 分类成本占比
               </h3>
               {costByCategory.length === 0 ? (
-                <div className="py-8 text-center text-zinc-500 text-sm">该周期暂无成本数据</div>
+                <div className="py-8 text-center text-zinc-500 text-sm">
+                  该周期暂无成本数据
+                </div>
               ) : (
                 <div className="space-y-3">
                   {costByCategory.map(([cat, cost], idx) => {
-                    const max = costByCategory.reduce((m, c) => Math.max(m, c[1]), 0) || 1;
+                    const max =
+                      costByCategory.reduce((m, c) => Math.max(m, c[1]), 0) ||
+                      1;
                     const pct = max > 0 ? (cost / max) * 100 : 0;
-                    const share = (totals?.food_cost || 1) > 0 ? ((cost / (totals?.food_cost || 1)) * 100).toFixed(1) : "0";
+                    const share =
+                      (totals?.food_cost || 1) > 0
+                        ? ((cost / (totals?.food_cost || 1)) * 100).toFixed(1)
+                        : "0";
                     return (
                       <div key={cat}>
                         <div className="flex justify-between text-sm mb-1">
-                          <span className="text-zinc-300 font-medium">{cat}</span>
-                          <span className="font-mono text-zinc-400">{fmtMoney(cost)} <span className="text-zinc-600">({share}%)</span></span>
+                          <span className="text-zinc-300 font-medium">
+                            {cat}
+                          </span>
+                          <span className="font-mono text-zinc-400">
+                            {fmtMoney(cost)}{" "}
+                            <span className="text-zinc-600">({share}%)</span>
+                          </span>
                         </div>
                         <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
                           <div
@@ -507,27 +586,44 @@ export function FinanceReports() {
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between py-2 border-b border-zinc-800">
                     <span className="text-zinc-400">营业收入</span>
-                    <span className="font-mono text-emerald-400 font-semibold">{fmtMoney(totals.revenue)}</span>
+                    <span className="font-mono text-emerald-400 font-semibold">
+                      {fmtMoney(totals.revenue)}
+                    </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-zinc-800">
                     <span className="text-zinc-400">理论食材成本</span>
-                    <span className="font-mono text-amber-400 font-semibold">{fmtMoney(totals.food_cost)}</span>
+                    <span className="font-mono text-amber-400 font-semibold">
+                      {fmtMoney(totals.food_cost)}
+                    </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-zinc-800">
                     <span className="text-zinc-400">成本率</span>
-                    <span className="font-mono text-amber-400 font-semibold">{totals.revenue > 0 ? ((totals.food_cost / totals.revenue) * 100).toFixed(1) : "0"}%</span>
+                    <span className="font-mono text-amber-400 font-semibold">
+                      {totals.revenue > 0
+                        ? ((totals.food_cost / totals.revenue) * 100).toFixed(1)
+                        : "0"}
+                      %
+                    </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-zinc-800">
                     <span className="text-zinc-400">采购支出</span>
-                    <span className="font-mono text-sky-400 font-semibold">{fmtMoney(totals.purchases)}</span>
+                    <span className="font-mono text-sky-400 font-semibold">
+                      {fmtMoney(totals.purchases)}
+                    </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-zinc-800">
                     <span className="text-zinc-400">测算损耗金额</span>
-                    <span className="font-mono text-red-400 font-semibold">{fmtMoney(wasteTotal)}</span>
+                    <span className="font-mono text-red-400 font-semibold">
+                      {fmtMoney(wasteTotal)}
+                    </span>
                   </div>
                   <div className="flex justify-between py-2">
-                    <span className="text-zinc-300 font-semibold">预估净利润</span>
-                    <span className={`font-mono font-bold ${totals.gross_profit - wasteTotal >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <span className="text-zinc-300 font-semibold">
+                      预估净利润
+                    </span>
+                    <span
+                      className={`font-mono font-bold ${totals.gross_profit - wasteTotal >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                    >
                       {fmtMoney(totals.gross_profit - wasteTotal)}
                     </span>
                   </div>
@@ -547,7 +643,9 @@ export function FinanceReports() {
               损耗测算逻辑
             </h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              理论消耗 = Σ(BOM 配方剂量 × 订单售出数量)；实际消耗 = 期初库存 + 采购入库 − 期末库存；损耗量 = 实际消耗 − 理论消耗，损耗率 = 损耗量 ÷ 实际消耗。
+              理论消耗 = Σ(BOM 配方剂量 × 订单售出数量)；实际消耗 = 期初库存 +
+              采购入库 − 期末库存；损耗量 = 实际消耗 − 理论消耗，损耗率 = 损耗量
+              ÷ 实际消耗。
               负数表示盘点富余（可能盘点误差或配方偏保守），正数表示异常损耗（需排查浪费、过期、偷漏）。
             </p>
           </div>
@@ -569,32 +667,64 @@ export function FinanceReports() {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {waste.length === 0 ? (
-                    <tr><td colSpan={8} className="py-8 text-center text-zinc-500">该周期内无库存损耗数据</td></tr>
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-8 text-center text-zinc-500"
+                      >
+                        该周期内无库存损耗数据
+                      </td>
+                    </tr>
                   ) : (
-                    waste.filter(w => Number(w.waste_quantity) !== 0).map((w) => {
-                      const isWaste = Number(w.waste_quantity) > 0;
-                      return (
-                        <tr key={w.item_id} className="hover:bg-zinc-800/40 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="font-semibold text-white">{w.item_name}</div>
-                            <div className="text-xs font-mono text-zinc-500">{w.item_id}</div>
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono text-zinc-400">{fmtNum(w.opening_stock)} {w.unit}</td>
-                          <td className="py-3 px-4 text-right font-mono text-sky-400">{fmtNum(w.purchases)} {w.unit}</td>
-                          <td className="py-3 px-4 text-right font-mono text-zinc-200">{fmtNum(w.theoretical_consumption)} {w.unit}</td>
-                          <td className="py-3 px-4 text-right font-mono text-zinc-300">{fmtNum(w.actual_consumption)} {w.unit}</td>
-                          <td className={`py-3 px-4 text-right font-mono font-bold ${isWaste ? "text-red-400" : "text-emerald-400"}`}>
-                            {isWaste ? "+" : ""}{fmtNum(w.waste_quantity)} {w.unit}
-                          </td>
-                          <td className={`py-3 px-4 text-right font-mono ${isWaste ? "text-red-400" : "text-emerald-400"}`}>
-                            {isWaste ? "+" : ""}{w.waste_rate}%
-                          </td>
-                          <td className={`py-3 px-4 text-right font-mono font-bold ${isWaste ? "text-red-400" : "text-emerald-400"}`}>
-                            {fmtMoney(w.waste_cost)}
-                          </td>
-                        </tr>
-                      );
-                    })
+                    waste
+                      .filter((w) => Number(w.waste_quantity) !== 0)
+                      .map((w) => {
+                        const isWaste = Number(w.waste_quantity) > 0;
+                        return (
+                          <tr
+                            key={w.item_id}
+                            className="hover:bg-zinc-800/40 transition-colors"
+                          >
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-white">
+                                {w.item_name}
+                              </div>
+                              <div className="text-xs font-mono text-zinc-500">
+                                {w.item_id}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-zinc-400">
+                              {fmtNum(w.opening_stock)} {w.unit}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-sky-400">
+                              {fmtNum(w.purchases)} {w.unit}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-zinc-200">
+                              {fmtNum(w.theoretical_consumption)} {w.unit}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-zinc-300">
+                              {fmtNum(w.actual_consumption)} {w.unit}
+                            </td>
+                            <td
+                              className={`py-3 px-4 text-right font-mono font-bold ${isWaste ? "text-red-400" : "text-emerald-400"}`}
+                            >
+                              {isWaste ? "+" : ""}
+                              {fmtNum(w.waste_quantity)} {w.unit}
+                            </td>
+                            <td
+                              className={`py-3 px-4 text-right font-mono ${isWaste ? "text-red-400" : "text-emerald-400"}`}
+                            >
+                              {isWaste ? "+" : ""}
+                              {w.waste_rate}%
+                            </td>
+                            <td
+                              className={`py-3 px-4 text-right font-mono font-bold ${isWaste ? "text-red-400" : "text-emerald-400"}`}
+                            >
+                              {fmtMoney(w.waste_cost)}
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
@@ -615,78 +745,113 @@ export function FinanceReports() {
                 <ShoppingCart size={18} className="text-emerald-500" />
                 新增采购入库
               </h3>
-              <button onClick={() => setPurchaseModalOpen(false)} className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800">
+              <button
+                onClick={() => setPurchaseModalOpen(false)}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800"
+              >
                 <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleSavePurchase} className="space-y-3">
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">采购物料</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  采购物料
+                </label>
                 <select
                   value={purchaseForm.item_id}
                   onChange={(e) => {
-                    const item = inventory.find(i => i.id === e.target.value);
+                    const item = inventory.find((i) => i.id === e.target.value);
                     setPurchaseForm({
                       ...purchaseForm,
                       item_id: e.target.value,
-                      unit_price: String(item?.price || "0")
+                      unit_price: String(item?.price || "0"),
                     });
                   }}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                 >
                   {inventory.map((i) => (
-                    <option key={i.id} value={i.id}>{i.name} ({i.id}) - 余 {i.stock} {i.unit}</option>
+                    <option key={i.id} value={i.id}>
+                      {i.name} ({i.id}) - 余 {i.stock} {i.unit}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">数量</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    数量
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     required
                     value={purchaseForm.quantity}
-                    onChange={(e) => setPurchaseForm({ ...purchaseForm, quantity: e.target.value })}
+                    onChange={(e) =>
+                      setPurchaseForm({
+                        ...purchaseForm,
+                        quantity: e.target.value,
+                      })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">单价 ({selectedInvItem?.unit || "kg"})</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    单价 ({selectedInvItem?.unit || "kg"})
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     required
                     value={purchaseForm.unit_price}
-                    onChange={(e) => setPurchaseForm({ ...purchaseForm, unit_price: e.target.value })}
+                    onChange={(e) =>
+                      setPurchaseForm({
+                        ...purchaseForm,
+                        unit_price: e.target.value,
+                      })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">供应商</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  供应商
+                </label>
                 <input
                   type="text"
                   value={purchaseForm.supplier}
-                  onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })}
+                  onChange={(e) =>
+                    setPurchaseForm({
+                      ...purchaseForm,
+                      supplier: e.target.value,
+                    })
+                  }
                   placeholder="如：本地肉类批发商"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">采购日期</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  采购日期
+                </label>
                 <input
                   type="date"
                   required
                   value={purchaseForm.purchased_at}
                   max={todayStr()}
-                  onChange={(e) => setPurchaseForm({ ...purchaseForm, purchased_at: e.target.value })}
+                  onChange={(e) =>
+                    setPurchaseForm({
+                      ...purchaseForm,
+                      purchased_at: e.target.value,
+                    })
+                  }
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -696,7 +861,9 @@ export function FinanceReports() {
                 <input
                   type="text"
                   value={purchaseForm.notes}
-                  onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
+                  onChange={(e) =>
+                    setPurchaseForm({ ...purchaseForm, notes: e.target.value })
+                  }
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -704,7 +871,13 @@ export function FinanceReports() {
               <div className="bg-zinc-950 border border-emerald-500/30 rounded-xl p-3 flex justify-between items-center">
                 <span className="text-xs text-zinc-400">预计入库后库存:</span>
                 <span className="font-mono font-bold text-emerald-400 text-sm">
-                  {selectedInvItem ? fmtNum(Number(selectedInvItem.stock) + (parseFloat(purchaseForm.quantity) || 0)) : "0"} {selectedInvItem?.unit || ""}
+                  {selectedInvItem
+                    ? fmtNum(
+                        Number(selectedInvItem.stock) +
+                          (parseFloat(purchaseForm.quantity) || 0),
+                      )
+                    : "0"}{" "}
+                  {selectedInvItem?.unit || ""}
                 </span>
               </div>
 

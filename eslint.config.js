@@ -1,14 +1,25 @@
-import firebaseRules from '@firebase/eslint-plugin-security-rules';
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
 
-export default [
-  { ignores: ['dist/**', 'node_modules/**', 'scripts/migrations/**'] },
+export default tseslint.config(
+  { ignores: ['dist/**', 'node_modules/**', 'scripts/migrations/**', 'src/server/*.js', 'server.cjs'] },
   { rules: { 'no-console': 'off' } },
+  ...tseslint.configs.recommended,
   {
-    ...firebaseRules.configs['flat/recommended'],
-    rules: {
-      '@firebase/security-rules/no-open-reads': 'warn',
-      '@firebase/security-rules/no-open-writes': 'error',
-      '@firebase/security-rules/no-redundant-matches': 'error',
+    files: ['**/*.{ts,tsx}'],
+    extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
+    languageOptions: {
+      ecmaVersion: 2022,
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
     },
-  },
-];
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  }
+);

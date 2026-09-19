@@ -1,8 +1,9 @@
 import { InventoryManager } from "./InventoryManager";
+import type { MenuCategory } from "../../types/menu";
 
 interface InventoryTabProps {
-  categories: any[];
-  setCategories: (categories: any[]) => void;
+  categories: MenuCategory[];
+  setCategories: (categories: MenuCategory[]) => void;
 }
 
 export function InventoryTab({ categories, setCategories }: InventoryTabProps) {

@@ -5,7 +5,7 @@ import { safeGetItem, safeSetItem } from "./utils/storage";
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import type { TouchEvent, FormEvent, MouseEvent, WheelEvent } from "react";
+import type { TouchEvent, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Play,
@@ -24,28 +24,34 @@ import {
   X,
   Database,
   Loader2,
-  ImageOff,
   Lock,
   XCircle,
   Download,
 } from "lucide-react";
-import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
-import { drawBeautifulTableCard, getOptimizedImageUrl } from "./utils/image";
+import { QRCodeCanvas } from "qrcode.react";
+import { getOptimizedImageUrl } from "./utils/image";
 import { lazy, Suspense } from "react";
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 import CartMenu from "./components/CartMenu";
 import DiagnosticModal from "./components/DiagnosticModal";
 import { playPageTurnSound } from "./utils/audio";
 import { ALLERGEN_OPTIONS } from "./constants";
-import { api, onQuotaExceededChange, isQuotaExceeded as apiIsQuotaExceeded, setQuotaExceeded } from "./api";
+import {
+  api,
+  onQuotaExceededChange,
+  isQuotaExceeded as apiIsQuotaExceeded,
+  setQuotaExceeded,
+} from "./api";
 
-import { INITIAL_MENU_CATEGORIES, mergeAndOrderCategories } from "./initialData";
+import {
+  INITIAL_MENU_CATEGORIES,
+  mergeAndOrderCategories,
+} from "./initialData";
+import type { MenuCategory, Promotion, MenuItem } from "./types/menu";
 
 import { getLoc, getSubLoc, Language } from "./utils/loc";
 
 const AUTO_PLAY_INTERVAL = 12000; // 12 seconds per category page
-
-const LANGUAGES = ["zh", "en", "fr", "ar", "ma"] as const;
 
 const ImageWithSkeleton = ({
   src,
@@ -132,7 +138,10 @@ const HalalBadge = ({
 );
 
 export default function App() {
-  const [scanSession, setScanSession] = useState<any>(null);
+  const [scanSession, setScanSession] = useState<{
+    tableNo: string;
+    key: string;
+  } | null>(null);
   const [scanSessionError, setScanSessionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -165,7 +174,7 @@ export default function App() {
     }
   }, []);
 
-  const [categories, setCategories] = useState<any[]>(() => {
+  const [categories, setCategories] = useState<MenuCategory[]>(() => {
     const saved = safeGetItem("menuCategories");
     const version = safeGetItem("menuVersion");
     if (saved && version === "2.0") {
@@ -174,7 +183,11 @@ export default function App() {
         if (Array.isArray(parsed)) {
           const savedDel = safeGetItem("menuDeletedItemIds");
           const delIds = savedDel ? JSON.parse(savedDel) : [];
-          return mergeAndOrderCategories(parsed, INITIAL_MENU_CATEGORIES, delIds);
+          return mergeAndOrderCategories(
+            parsed,
+            INITIAL_MENU_CATEGORIES,
+            delIds,
+          );
         }
       } catch (e) {
         console.error("Failed to parse categories from local storage:", e);
@@ -188,7 +201,7 @@ export default function App() {
     return INITIAL_MENU_CATEGORIES;
   });
 
-  const [promotions, setPromotions] = useState<any[]>(() => {
+  const [promotions, setPromotions] = useState<Promotion[]>(() => {
     const saved = safeGetItem("menuPromotions");
     if (saved) {
       try {
@@ -233,7 +246,12 @@ export default function App() {
     () => safeGetItem("menuLogoUrl") || "",
   );
   const [adminPassword, setAdminPassword] = useState(
-    () => safeGetItem("adminHash") || safeGetItem("menuAdminPassword") /* migration compat: old plaintext -> will be hashed on next save */ || "admin123",
+    () =>
+      safeGetItem("adminHash") ||
+      safeGetItem(
+        "menuAdminPassword",
+      ) /* migration compat: old plaintext -> will be hashed on next save */ ||
+      "admin123",
   );
   const [devicePasswords, setDevicePasswords] = useState<
     { name: string; password: string }[]
@@ -256,10 +274,11 @@ export default function App() {
     () => safeGetItem("menuSoundEnabled") !== "false",
   );
   const [layoutStyle, setLayoutStyle] = useState<"grid" | "list" | "bento">(
-    () => (safeGetItem("menuLayoutStyle") as any) || "grid",
+    () =>
+      (safeGetItem("menuLayoutStyle") as "grid" | "list" | "bento") || "grid",
   );
   const [theme, setTheme] = useState<"midnight" | "light">(
-    () => (safeGetItem("menuThemeMode") as any) || "midnight",
+    () => (safeGetItem("menuThemeMode") as "midnight" | "light") || "midnight",
   );
   const [receiptSettings, setReceiptSettings] = useState(() => {
     try {
@@ -321,19 +340,25 @@ export default function App() {
       "[Supabase] Initializing settings fetch and realtime listener...",
     );
 
-    
     const processSettingsData = (data: any) => {
       if (!data) return;
 
       let currentDeletedIds = deletedItemIds;
-      if (data.deletedItemIds !== undefined && Array.isArray(data.deletedItemIds)) {
+      if (
+        data.deletedItemIds !== undefined &&
+        Array.isArray(data.deletedItemIds)
+      ) {
         currentDeletedIds = data.deletedItemIds;
         setDeletedItemIds(data.deletedItemIds);
         safeSetItem("menuDeletedItemIds", JSON.stringify(data.deletedItemIds));
       }
 
       if (data.categories && Array.isArray(data.categories)) {
-        const migratedCategories = mergeAndOrderCategories(data.categories, INITIAL_MENU_CATEGORIES, currentDeletedIds);
+        const migratedCategories = mergeAndOrderCategories(
+          data.categories,
+          INITIAL_MENU_CATEGORIES,
+          currentDeletedIds,
+        );
         setCategories(migratedCategories);
         safeSetItem("menuCategories", JSON.stringify(migratedCategories));
       }
@@ -342,49 +367,67 @@ export default function App() {
         safeSetItem("menuPromotions", JSON.stringify(data.promotions));
       }
       if (data.bgUrl !== undefined) {
-        setBgUrl(data.bgUrl);
-        safeSetItem("menuBgUrl", data.bgUrl);
+        setBgUrl(String(data.bgUrl));
+        safeSetItem("menuBgUrl", String(data.bgUrl));
       }
       if (data.restaurantName !== undefined) {
-        setRestaurantName(data.restaurantName);
-        safeSetItem("menuRestaurantName", data.restaurantName);
+        setRestaurantName(String(data.restaurantName));
+        safeSetItem("menuRestaurantName", String(data.restaurantName));
       }
       if (data.welcomeMessage !== undefined) {
-        setWelcomeMessage(data.welcomeMessage);
-        safeSetItem("menuWelcomeMessage", data.welcomeMessage);
+        setWelcomeMessage(String(data.welcomeMessage));
+        safeSetItem("menuWelcomeMessage", String(data.welcomeMessage));
       }
       if (data.logoUrl !== undefined) {
-        setLogoUrl(data.logoUrl);
-        safeSetItem("menuLogoUrl", data.logoUrl);
+        setLogoUrl(String(data.logoUrl));
+        safeSetItem("menuLogoUrl", String(data.logoUrl));
       }
-      if ((data as any).adminHash !== undefined) {
-        setAdminPassword((data as any).adminHash);
-        safeSetItem("adminHash", (data as any).adminHash);
+      if ((data as Record<string, unknown>).adminHash !== undefined) {
+        setAdminPassword(String((data as Record<string, unknown>).adminHash));
+        safeSetItem(
+          "adminHash",
+          String((data as Record<string, unknown>).adminHash),
+        );
       } else if (data.adminPassword !== undefined) {
         // migration compat: old plaintext -> hash on next save
-        setAdminPassword(data.adminPassword);
-        safeSetItem("adminHash", data.adminPassword);
+        setAdminPassword(String(data.adminPassword));
+        safeSetItem("adminHash", String(data.adminPassword));
       }
-      if ((data as any).deviceHash !== undefined) {
-        setDevicePasswords((data as any).deviceHash);
-        safeSetItem("deviceHash", JSON.stringify((data as any).deviceHash));
+      if ((data as Record<string, unknown>).deviceHash !== undefined) {
+        setDevicePasswords(
+          (data as Record<string, unknown>).deviceHash as {
+            name: string;
+            password: string;
+          }[],
+        );
+        safeSetItem(
+          "deviceHash",
+          JSON.stringify((data as Record<string, unknown>).deviceHash),
+        );
       } else if (data.devicePasswords !== undefined) {
-        setDevicePasswords(data.devicePasswords);
+        setDevicePasswords(
+          data.devicePasswords as { name: string; password: string }[],
+        );
         safeSetItem("deviceHash", JSON.stringify(data.devicePasswords));
       }
       if (data.securityQuestion !== undefined) {
-        setSecurityQuestion(data.securityQuestion);
-        safeSetItem("menuSecurityQuestion", data.securityQuestion);
+        setSecurityQuestion(String(data.securityQuestion));
+        safeSetItem("menuSecurityQuestion", String(data.securityQuestion));
       }
-      if ((data as any).secAnswerHash !== undefined) {
-        setSecurityAnswer((data as any).secAnswerHash);
-        safeSetItem("menuSecurityAnswerHash", (data as any).secAnswerHash);
+      if ((data as Record<string, unknown>).secAnswerHash !== undefined) {
+        setSecurityAnswer(
+          String((data as Record<string, unknown>).secAnswerHash),
+        );
+        safeSetItem(
+          "menuSecurityAnswerHash",
+          String((data as Record<string, unknown>).secAnswerHash),
+        );
       } else if (data.securityAnswer !== undefined) {
-        setSecurityAnswer(data.securityAnswer);
-        safeSetItem("menuSecurityAnswerHash", data.securityAnswer);
+        setSecurityAnswer(String(data.securityAnswer));
+        safeSetItem("menuSecurityAnswerHash", String(data.securityAnswer));
       }
       if (data.soundEnabled !== undefined) {
-        setSoundEnabled(data.soundEnabled);
+        setSoundEnabled(!!data.soundEnabled);
         safeSetItem("menuSoundEnabled", String(data.soundEnabled));
       }
       if (data.layoutStyle !== undefined) {
@@ -400,14 +443,17 @@ export default function App() {
           document.documentElement.removeAttribute("data-theme");
         }
       }
-        if (data.receiptSettings !== undefined) {
+      if (data.receiptSettings !== undefined) {
         setReceiptSettings(data.receiptSettings);
         safeSetItem(
           "menuReceiptSettings",
           JSON.stringify(data.receiptSettings),
         );
       }
-      if (data.deletedItemIds !== undefined && Array.isArray(data.deletedItemIds)) {
+      if (
+        data.deletedItemIds !== undefined &&
+        Array.isArray(data.deletedItemIds)
+      ) {
         setDeletedItemIds(data.deletedItemIds);
         safeSetItem("menuDeletedItemIds", JSON.stringify(data.deletedItemIds));
       }
@@ -454,7 +500,7 @@ export default function App() {
           processSettingsData(defaultSettings);
           setIsSynced(true);
         }
-        
+
         // Start real-time subscription after initial load/creation
         unsubscribe = api.subscribeToSettings((updatedData) => {
           if (updatedData) {
@@ -467,42 +513,64 @@ export default function App() {
           const cachedCategories = localStorage.getItem("menuCategories");
           const cachedPromotions = localStorage.getItem("menuPromotions");
           const cachedBgUrl = localStorage.getItem("menuBgUrl");
-          const cachedRestaurantName = localStorage.getItem("menuRestaurantName");
-          const cachedWelcomeMessage = localStorage.getItem("menuWelcomeMessage");
+          const cachedRestaurantName =
+            localStorage.getItem("menuRestaurantName");
+          const cachedWelcomeMessage =
+            localStorage.getItem("menuWelcomeMessage");
           const cachedLogoUrl = localStorage.getItem("menuLogoUrl");
-          const cachedAdminPassword = localStorage.getItem("adminHash") || localStorage.getItem("menuAdminPassword") /* migration compat */;
-          const cachedDevicePasswords = localStorage.getItem("deviceHash") || localStorage.getItem("menuDevicePasswords") /* migration */;
-          const cachedSecurityQuestion = localStorage.getItem("menuSecurityQuestion");
-          const cachedSecurityAnswer = localStorage.getItem("menuSecurityAnswerHash") || localStorage.getItem("menuSecurityAnswer") /* migration */;
+          const cachedAdminPassword =
+            localStorage.getItem("adminHash") ||
+            localStorage.getItem("menuAdminPassword"); /* migration compat */
+          const cachedDevicePasswords =
+            localStorage.getItem("deviceHash") ||
+            localStorage.getItem("menuDevicePasswords"); /* migration */
+          const cachedSecurityQuestion = localStorage.getItem(
+            "menuSecurityQuestion",
+          );
+          const cachedSecurityAnswer =
+            localStorage.getItem("menuSecurityAnswerHash") ||
+            localStorage.getItem("menuSecurityAnswer"); /* migration */
           const cachedSoundEnabled = localStorage.getItem("menuSoundEnabled");
           const cachedLayoutStyle = localStorage.getItem("menuLayoutStyle");
-          const cachedReceiptSettings = localStorage.getItem("menuReceiptSettings");
+          const cachedReceiptSettings = localStorage.getItem(
+            "menuReceiptSettings",
+          );
 
           const fallbackSettings = {
-            categories: cachedCategories ? JSON.parse(cachedCategories) : INITIAL_MENU_CATEGORIES,
+            categories: cachedCategories
+              ? JSON.parse(cachedCategories)
+              : INITIAL_MENU_CATEGORIES,
             promotions: cachedPromotions ? JSON.parse(cachedPromotions) : [],
             bgUrl: cachedBgUrl || "",
             restaurantName: cachedRestaurantName || "炙·双味居",
             welcomeMessage: cachedWelcomeMessage || "Premium Charcoal BBQ",
             logoUrl: cachedLogoUrl || "",
             adminPassword: cachedAdminPassword || "admin123",
-            devicePasswords: cachedDevicePasswords ? JSON.parse(cachedDevicePasswords) : {},
-            securityQuestion: cachedSecurityQuestion || "你的第一只宠物的名字？ (What is the name of your first pet?)",
+            devicePasswords: cachedDevicePasswords
+              ? JSON.parse(cachedDevicePasswords)
+              : {},
+            securityQuestion:
+              cachedSecurityQuestion ||
+              "你的第一只宠物的名字？ (What is the name of your first pet?)",
             securityAnswer: cachedSecurityAnswer || "小黑",
-            soundEnabled: cachedSoundEnabled ? cachedSoundEnabled === "true" : true,
+            soundEnabled: cachedSoundEnabled
+              ? cachedSoundEnabled === "true"
+              : true,
             layoutStyle: cachedLayoutStyle || "grid",
-            receiptSettings: cachedReceiptSettings ? JSON.parse(cachedReceiptSettings) : {
-              storeName: cachedRestaurantName || "炙·双味居",
-              showStoreName: true,
-              showDate: true,
-              showQrCode: true,
-              fontSize: "14px",
-              columnWidth: "80mm",
-              footerText1: "谢谢惠顾，欢迎下次光临！",
-              footerText2: "Thank you for your visit!",
-              topLogoUrl: "",
-              bottomLogoUrl: "",
-            }
+            receiptSettings: cachedReceiptSettings
+              ? JSON.parse(cachedReceiptSettings)
+              : {
+                  storeName: cachedRestaurantName || "炙·双味居",
+                  showStoreName: true,
+                  showDate: true,
+                  showQrCode: true,
+                  fontSize: "14px",
+                  columnWidth: "80mm",
+                  footerText1: "谢谢惠顾，欢迎下次光临！",
+                  footerText2: "Thank you for your visit!",
+                  topLogoUrl: "",
+                  bottomLogoUrl: "",
+                },
           };
           processSettingsData(fallbackSettings);
           setIsSynced(true);
@@ -516,33 +584,34 @@ export default function App() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTestConnection = () => {
     setIsDiagnosticOpen(true);
   };
 
-  const handleUpdateCategories = (newCategories: any[]) => {
+  const handleUpdateCategories = (newCategories: MenuCategory[]) => {
     setCategories(newCategories);
     try {
       safeSetItem("menuCategories", JSON.stringify(newCategories));
-    } catch (e: any) {
+    } catch (e) {
       console.warn(
         "localStorage quota exceeded, skipping local cache update",
         e,
       );
     }
-    
+
     // Automatically synchronize deleted default item IDs
-    let updatedDeletedItemIds = [...deletedItemIds];
+    const updatedDeletedItemIds = [...deletedItemIds];
     let hasChanges = false;
-    
-    INITIAL_MENU_CATEGORIES.forEach(cat => {
-      (cat.items || []).forEach((item: any) => {
+
+    INITIAL_MENU_CATEGORIES.forEach((cat) => {
+      (cat.items || []).forEach((item: MenuItem) => {
         if (item.id) {
           let found = false;
           for (const c of newCategories) {
-            if ((c.items || []).find((i: any) => i.id === item.id)) {
+            if ((c.items || []).find((i: MenuItem) => i.id === item.id)) {
               found = true;
               break;
             }
@@ -569,11 +638,11 @@ export default function App() {
     }
   };
 
-  const handleUpdatePromotions = (newPromotions: any[]) => {
+  const handleUpdatePromotions = (newPromotions: Promotion[]) => {
     setPromotions(newPromotions);
     try {
       safeSetItem("menuPromotions", JSON.stringify(newPromotions));
-    } catch (e: any) {
+    } catch (e) {
       console.warn("localStorage quota exceeded", e);
     }
     // autosave disabled
@@ -601,13 +670,15 @@ export default function App() {
 
   const handleUpdateAdminPassword = async (newPassword: string) => {
     setAdminPassword(newPassword);
-    try{
+    try {
       const { hashPassword } = await import("./utils/password");
       const h = await hashPassword(newPassword);
       safeSetItem("adminHash", h);
       // migration: 清理旧明文
-      try{ localStorage.removeItem("menuAdminPassword"); } catch{}
-    } catch{
+      try {
+        localStorage.removeItem("menuAdminPassword");
+      } catch {}
+    } catch {
       // fallback 兼容期仍存哈希（明文已不再写入）
       safeSetItem("adminHash", newPassword);
     }
@@ -650,39 +721,54 @@ export default function App() {
   async function handleSaveToCloud(overrides?: any) {
     try {
       setSyncProgress("正在保存...");
-      
-      let updatedDeletedItemIds = Array.from(
-        new Set([...deletedItemIds, ...(overrides?.deletedItemIds || [])])
+
+      const updatedDeletedItemIds = Array.from(
+        new Set([...deletedItemIds, ...(overrides?.deletedItemIds || [])]),
       );
       const catsToSave = overrides?.categories || categories;
 
       INITIAL_MENU_CATEGORIES.forEach((cat) => {
         const catFound = catsToSave.find(
-          (c: any) => c.id === cat.id || c.name === cat.name || c.title === cat.title
+          (c: MenuCategory) =>
+            c.id === cat.id ||
+            c.name === cat.name ||
+            (c as any).title === cat.title,
         );
         if (!catFound) {
-          if (cat.id && !updatedDeletedItemIds.includes(cat.id)) updatedDeletedItemIds.push(cat.id);
-          if (cat.name && !updatedDeletedItemIds.includes(cat.name)) updatedDeletedItemIds.push(cat.name);
-          if (cat.title && !updatedDeletedItemIds.includes(cat.title)) updatedDeletedItemIds.push(cat.title);
-          (cat.items || []).forEach((item: any) => {
-            if (item.id && !updatedDeletedItemIds.includes(item.id)) updatedDeletedItemIds.push(item.id);
-            if (item.title && !updatedDeletedItemIds.includes(item.title)) updatedDeletedItemIds.push(item.title);
-            if (item.name && !updatedDeletedItemIds.includes(item.name)) updatedDeletedItemIds.push(item.name);
+          if (cat.id && !updatedDeletedItemIds.includes(cat.id))
+            updatedDeletedItemIds.push(cat.id);
+          if (cat.name && !updatedDeletedItemIds.includes(cat.name))
+            updatedDeletedItemIds.push(cat.name);
+          if (cat.title && !updatedDeletedItemIds.includes(cat.title))
+            updatedDeletedItemIds.push(cat.title);
+          (cat.items || []).forEach((item: MenuItem) => {
+            if (item.id && !updatedDeletedItemIds.includes(item.id))
+              updatedDeletedItemIds.push(item.id);
+            if (item.title && !updatedDeletedItemIds.includes(item.title))
+              updatedDeletedItemIds.push(item.title);
+            if (item.name && !updatedDeletedItemIds.includes(item.name))
+              updatedDeletedItemIds.push(item.name);
           });
         } else {
-          (cat.items || []).forEach((item: any) => {
+          (cat.items || []).forEach((item: MenuItem) => {
             const itemFound = (catFound.items || []).find(
-              (i: any) => i.id === item.id || i.title === item.title || i.name === item.name
+              (i: MenuItem) =>
+                i.id === item.id ||
+                i.title === item.title ||
+                i.name === item.name,
             );
             if (!itemFound) {
-              if (item.id && !updatedDeletedItemIds.includes(item.id)) updatedDeletedItemIds.push(item.id);
-              if (item.title && !updatedDeletedItemIds.includes(item.title)) updatedDeletedItemIds.push(item.title);
-              if (item.name && !updatedDeletedItemIds.includes(item.name)) updatedDeletedItemIds.push(item.name);
+              if (item.id && !updatedDeletedItemIds.includes(item.id))
+                updatedDeletedItemIds.push(item.id);
+              if (item.title && !updatedDeletedItemIds.includes(item.title))
+                updatedDeletedItemIds.push(item.title);
+              if (item.name && !updatedDeletedItemIds.includes(item.name))
+                updatedDeletedItemIds.push(item.name);
             }
           });
         }
       });
-      
+
       setDeletedItemIds(updatedDeletedItemIds);
       safeSetItem("menuDeletedItemIds", JSON.stringify(updatedDeletedItemIds));
 
@@ -728,9 +814,12 @@ export default function App() {
       if (!overrides?.silent) {
         alert("✅ 成功保存到云端 (Saved to cloud successfully)");
       }
-    } catch (err: any) {
+    } catch (err) {
       if (!overrides?.silent) {
-        alert("❌ 保存到云端失败 (Cloud sync failed): " + err.message);
+        alert(
+          "❌ 保存到云端失败 (Cloud sync failed): " +
+            ((err as Error)?.message || err),
+        );
       }
     } finally {
       setSyncProgress("保存完成");
@@ -741,7 +830,7 @@ export default function App() {
   async function handleRestoreBackup(data: any) {
     try {
       setSyncProgress("正在还原备份...");
-      
+
       // 1. Update React local states
       if (data.categories) {
         setCategories(data.categories);
@@ -784,24 +873,41 @@ export default function App() {
         setSoundEnabled(data.soundEnabled);
         safeSetItem("menuSoundEnabled", String(data.soundEnabled));
       }
-      if ((data as any).adminHash !== undefined) {
-        setAdminPassword((data as any).adminHash);
-        safeSetItem("adminHash", (data as any).adminHash);
+      if ((data as Record<string, unknown>).adminHash !== undefined) {
+        setAdminPassword(String((data as Record<string, unknown>).adminHash));
+        safeSetItem(
+          "adminHash",
+          String((data as Record<string, unknown>).adminHash),
+        );
       } else if (data.adminPassword !== undefined) {
         setAdminPassword(data.adminPassword);
         safeSetItem("adminHash", data.adminPassword);
       }
-      if ((data as any).deviceHash !== undefined) {
-        setDevicePasswords((data as any).deviceHash);
-        safeSetItem("deviceHash", JSON.stringify((data as any).deviceHash));
+      if ((data as Record<string, unknown>).deviceHash !== undefined) {
+        setDevicePasswords(
+          (data as Record<string, unknown>).deviceHash as {
+            name: string;
+            password: string;
+          }[],
+        );
+        safeSetItem(
+          "deviceHash",
+          JSON.stringify((data as Record<string, unknown>).deviceHash),
+        );
       } else if (data.devicePasswords !== undefined) {
         setDevicePasswords(data.devicePasswords);
         safeSetItem("deviceHash", JSON.stringify(data.devicePasswords));
       }
-      if (data.securityQuestion !== undefined && (data.securityAnswer !== undefined || (data as any).secAnswerHash !== undefined)) {
+      if (
+        data.securityQuestion !== undefined &&
+        (data.securityAnswer !== undefined ||
+          (data as Record<string, unknown>).secAnswerHash !== undefined)
+      ) {
         setSecurityQuestion(data.securityQuestion);
         safeSetItem("menuSecurityQuestion", data.securityQuestion);
-        const ansHash = (data as any).secAnswerHash ?? data.securityAnswer;
+        const ansHash =
+          (data as Record<string, unknown>).secAnswerHash ??
+          data.securityAnswer;
         setSecurityAnswer(ansHash);
         safeSetItem("menuSecurityAnswerHash", ansHash);
       }
@@ -811,20 +917,33 @@ export default function App() {
         categories: data.categories || categories,
         promotions: data.promotions || promotions,
         bgUrl: data.bgUrl !== undefined ? data.bgUrl : bgUrl,
-        restaurantName: data.restaurantName !== undefined ? data.restaurantName : restaurantName,
-        welcomeMessage: data.welcomeMessage !== undefined ? data.welcomeMessage : welcomeMessage,
+        restaurantName:
+          data.restaurantName !== undefined
+            ? data.restaurantName
+            : restaurantName,
+        welcomeMessage:
+          data.welcomeMessage !== undefined
+            ? data.welcomeMessage
+            : welcomeMessage,
         logoUrl: data.logoUrl !== undefined ? data.logoUrl : logoUrl,
-        adminPassword: data.adminPassword !== undefined ? data.adminPassword : adminPassword,
+        adminPassword:
+          data.adminPassword !== undefined ? data.adminPassword : adminPassword,
         devicePasswords: data.devicePasswords || devicePasswords,
-        securityQuestion: data.securityQuestion !== undefined ? data.securityQuestion : securityQuestion,
-        securityAnswer: data.securityAnswer !== undefined ? data.securityAnswer : securityAnswer,
-        soundEnabled: data.soundEnabled !== undefined ? data.soundEnabled : soundEnabled,
+        securityQuestion:
+          data.securityQuestion !== undefined
+            ? data.securityQuestion
+            : securityQuestion,
+        securityAnswer:
+          data.securityAnswer !== undefined
+            ? data.securityAnswer
+            : securityAnswer,
+        soundEnabled:
+          data.soundEnabled !== undefined ? data.soundEnabled : soundEnabled,
         layoutStyle: data.layoutStyle || layoutStyle,
         theme: data.theme || theme,
         receiptSettings: data.receiptSettings || receiptSettings,
       });
-      
-    } catch (err: any) {
+    } catch (err) {
       console.error("Failed to restore backup in DB:", err);
       throw err;
     } finally {
@@ -842,24 +961,24 @@ export default function App() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [appMode, setAppMode] = useState<"menu" | "promotions">("menu");
-  const [selectedDish, setSelectedDish] = useState<any | null>(null);
+  const [selectedDish, setSelectedDish] = useState<MenuItem | null>(null);
 
   const allDishes = useMemo(() => {
-    return categories.reduce(
-      (acc: any[], cat: any) => [...acc, ...(cat.items || [])],
+    return categories.reduce<MenuItem[]>(
+      (acc, cat) => [...acc, ...(cat.items || [])],
       [],
     );
   }, [categories]);
 
   const handleDishSwipe = (direction: "left" | "right") => {
     if (!selectedDish) return;
-    const idx = allDishes.findIndex((d: any) => d.id === selectedDish.id);
+    const idx = allDishes.findIndex((d: MenuItem) => d.id === selectedDish.id);
     if (idx === -1) return;
 
     if (direction === "left" && idx < allDishes.length - 1) {
-      setSelectedDish(allDishes[idx + 1]);
+      setSelectedDish(allDishes[idx + 1] ?? null);
     } else if (direction === "right" && idx > 0) {
-      setSelectedDish(allDishes[idx - 1]);
+      setSelectedDish(allDishes[idx - 1] ?? null);
     }
   };
   const modalTouchStartX = useRef(0);
@@ -897,8 +1016,7 @@ export default function App() {
     isSettingsOpenRef.current = isSettingsOpen;
   }, [isSettingsOpen]);
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [shareFormat, setShareFormat] = useState<'standard' | 'stand'>('standard');
-  const [shareTableNo, setShareTableNo] = useState('');
+  const [shareFormat] = useState<"standard" | "stand">("standard");
   const [shareQrFgColor, setShareQrFgColor] = useState("");
   const [shareQrBgColor, setShareQrBgColor] = useState("");
 
@@ -987,7 +1105,7 @@ export default function App() {
     }
   });
 
-  const [bucketWarning, setBucketWarning] = useState<string>("");
+  const [bucketWarning] = useState<string>("");
 
   const isInternalCartUpdateRef = useRef(false);
 
@@ -996,18 +1114,23 @@ export default function App() {
       // 通知管理员：顾客已扫码（Supabase Realtime broadcast，替代原 WebSocket）
       api.notifyAdmin({
         table: scanSession.tableNo,
-        notifyType: 'scan',
+        notifyType: "scan",
         message: `桌号 ${scanSession.tableNo} 的顾客已扫码开始点餐`,
-        action: 'Customer Scanned QR'
+        action: "Customer Scanned QR",
       });
 
       // 订阅同桌购物车实时同步（Supabase Realtime broadcast，替代原 WebSocket cartHub）
-      const unsubscribe = api.subscribeCart(scanSession.tableNo, (syncedCart) => {
-        isInternalCartUpdateRef.current = true;
-        setCart(syncedCart);
-      });
+      const unsubscribe = api.subscribeCart(
+        scanSession.tableNo,
+        (syncedCart) => {
+          isInternalCartUpdateRef.current = true;
+          setCart(syncedCart);
+        },
+      );
 
-      return () => { unsubscribe(); };
+      return () => {
+        unsubscribe();
+      };
     }
   }, [scanSession]);
 
@@ -1024,13 +1147,13 @@ export default function App() {
     if (!cart || Object.keys(cart).length === 0) return;
     const activeItemIds = new Set<string>();
     categories.forEach((cat) => {
-      (cat.items || []).forEach((item: any) => {
+      (cat.items || []).forEach((item: MenuItem) => {
         if (item.id) activeItemIds.add(String(item.id));
       });
     });
 
     const deletedSet = new Set(
-      (deletedItemIds || []).map((id) => String(id).trim().toLowerCase())
+      (deletedItemIds || []).map((id) => String(id).trim().toLowerCase()),
     );
 
     let cartChanged = false;
@@ -1049,6 +1172,7 @@ export default function App() {
       setCart(newCart);
       safeSetItem("cart", JSON.stringify(newCart));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categories, deletedItemIds]);
 
   const [callWaiterFeedback, setCallWaiterFeedback] = useState(false);
@@ -1057,9 +1181,9 @@ export default function App() {
     if (scanSession?.tableNo) {
       api.notifyAdmin({
         table: scanSession.tableNo,
-        notifyType: 'call_waiter',
+        notifyType: "call_waiter",
         message: `桌号 ${scanSession.tableNo} 呼叫服务员！`,
-        action: 'Call Waiter'
+        action: "Call Waiter",
       });
       setCallWaiterFeedback(true);
       setTimeout(() => setCallWaiterFeedback(false), 3000);
@@ -1070,9 +1194,9 @@ export default function App() {
     setCart((prev) => {
       if (delta > 0) {
         // Find item in categories to check its stock
-        let itemObj: any = null;
+        let itemObj: MenuItem | null = null;
         for (const cat of categories) {
-          const found = (cat.items || []).find((it: any) => it.id === id);
+          const found = (cat.items || []).find((it: MenuItem) => it.id === id);
           if (found) {
             itemObj = found;
             break;
@@ -1085,7 +1209,7 @@ export default function App() {
               alert(
                 language === "zh"
                   ? "抱歉，该菜品已售罄 (Sorry, this dish is sold out)!"
-                  : "Sorry, this dish is sold out!"
+                  : "Sorry, this dish is sold out!",
               );
             }, 10);
             return prev;
@@ -1099,7 +1223,7 @@ export default function App() {
                 alert(
                   language === "zh"
                     ? `抱歉，该菜品仅剩 ${maxStock} 份 (Sorry, only ${maxStock} portions left!)`
-                    : `Sorry, only ${maxStock} portions left!`
+                    : `Sorry, only ${maxStock} portions left!`,
                 );
               }, 10);
               return prev;
@@ -1284,6 +1408,7 @@ export default function App() {
     }, AUTO_PLAY_INTERVAL);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isAutoPlaying, categories.length, isDesktop]);
 
   const safeCurrentIndex = currentIndex % Math.max(1, categories.length);
@@ -1304,14 +1429,14 @@ export default function App() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
           <div className="w-[40rem] h-[40rem] bg-red-900/30 rounded-full blur-3xl mix-blend-screen" />
         </div>
-        
-        <motion.div 
+
+        <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.5, type: "spring", bounce: 0.4 }}
           className="bg-zinc-900/80 backdrop-blur-xl p-8 sm:p-10 rounded-3xl border border-red-500/20 shadow-2xl text-center max-w-md w-full relative z-10"
         >
-          <motion.div 
+          <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring", bounce: 0.6 }}
@@ -1319,17 +1444,19 @@ export default function App() {
           >
             <XCircle size={48} className="text-red-500" strokeWidth={1.5} />
           </motion.div>
-          <h2 className="text-2xl font-bold mb-4 text-zinc-100">{scanSessionError}</h2>
+          <h2 className="text-2xl font-bold mb-4 text-zinc-100">
+            {scanSessionError}
+          </h2>
           <p className="text-zinc-400 text-sm mb-2 leading-relaxed">
             该二维码可能已过期或无效，请联系服务员重新生成。
           </p>
           <p className="text-zinc-500 text-xs mt-1 uppercase tracking-wider">
             Invalid or expired QR Code. Please ask staff for assistance.
           </p>
-          
+
           <div className="mt-8 pt-6 border-t border-zinc-800/50">
-            <button 
-              onClick={() => window.location.href = window.location.pathname}
+            <button
+              onClick={() => (window.location.href = window.location.pathname)}
               className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium rounded-xl transition-colors w-full"
             >
               返回首页 / Home
@@ -1382,10 +1509,12 @@ export default function App() {
                   数据库已达今日免费上限 (Database Quota Reached)
                 </h4>
                 <p className="text-[10px] text-zinc-300 leading-normal mt-1">
-                  因云端数据库今日免费额度用尽，系统已自动启用<strong>「本地离线备用模式」</strong>。您的所有点餐、修改及设置都将完美保存在此设备的本地浏览器中，请放心正常使用！
+                  因云端数据库今日免费额度用尽，系统已自动启用
+                  <strong>「本地离线备用模式」</strong>
+                  。您的所有点餐、修改及设置都将完美保存在此设备的本地浏览器中，请放心正常使用！
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setIsQuotaExceeded(false);
                   setQuotaExceeded(false);
@@ -1464,7 +1593,12 @@ export default function App() {
                     <motion.div
                       initial={{ opacity: 0, scale: 0.8, y: 10 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{ duration: 0.6, delay: 0.8, type: "spring", bounce: 0.5 }}
+                      transition={{
+                        duration: 0.6,
+                        delay: 0.8,
+                        type: "spring",
+                        bounce: 0.5,
+                      }}
                       className="mt-8 px-8 py-3 bg-gradient-to-r from-orange-500/10 via-orange-500/20 to-orange-500/10 text-orange-400 border border-orange-500/30 rounded-full font-bold tracking-widest text-sm shadow-lg shadow-orange-500/10 backdrop-blur-md flex items-center gap-3"
                     >
                       <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
@@ -1599,12 +1733,12 @@ export default function App() {
                 {scanSession && (
                   <button
                     onClick={handleCallWaiter}
-                    className={`relative w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 backdrop-blur-md border rounded-full flex items-center justify-center transition-all cursor-pointer shadow-lg shrink-0 ${callWaiterFeedback ? 'bg-green-500 border-green-500 text-white' : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-white hover:bg-orange-500 hover:border-orange-500 group'}`}
+                    className={`relative w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 backdrop-blur-md border rounded-full flex items-center justify-center transition-all cursor-pointer shadow-lg shrink-0 ${callWaiterFeedback ? "bg-green-500 border-green-500 text-white" : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-white hover:bg-orange-500 hover:border-orange-500 group"}`}
                     title="呼叫服务员 (Call Waiter)"
                   >
                     <Bell
                       size={16}
-                      className={`sm:w-5 sm:h-5 transition-transform duration-500 ${callWaiterFeedback ? 'scale-110' : 'group-hover:scale-110'}`}
+                      className={`sm:w-5 sm:h-5 transition-transform duration-500 ${callWaiterFeedback ? "scale-110" : "group-hover:scale-110"}`}
                     />
                   </button>
                 )}
@@ -1622,10 +1756,9 @@ export default function App() {
                     0,
                   ) > 0 && (
                     <span className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-5 sm:h-5 bg-orange-600 text-white text-[8px] sm:text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-zinc-950">
-                      {(Object.values(cart || {}) as unknown as number[]).reduce(
-                        (sum, q) => sum + q,
-                        0,
-                      )}
+                      {(
+                        Object.values(cart || {}) as unknown as number[]
+                      ).reduce((sum, q) => sum + q, 0)}
                     </span>
                   )}
                 </button>
@@ -1715,7 +1848,7 @@ export default function App() {
         </div>
 
         {/* Horizontal Scrollable Category Selector */}
-        <div 
+        <div
           className="w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] -mx-3 px-3 sm:mx-0 sm:px-0 mt-2 sm:mt-3 cursor-grab active:cursor-grabbing select-none"
           onWheel={handleCatWheel}
           onMouseDown={handleCatMouseDown}
@@ -1818,7 +1951,7 @@ export default function App() {
           >
             {appMode === "promotions" ? (
               !promotions ||
-              promotions.filter((p: any) => p.isActive).length === 0 ? (
+              promotions.filter((p: Promotion) => p.isActive).length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center py-20 px-4 text-zinc-500 gap-4 mt-12 bg-zinc-900/30 rounded-3xl border border-zinc-800/50 backdrop-blur-sm">
                   <Flame size={48} className="text-zinc-700 mx-auto" />
                   <div>
@@ -1834,13 +1967,18 @@ export default function App() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
                   {promotions
-                    .filter((p: any) => p.isActive)
-                    .map((promo: any, idx: number) => (
+                    .filter((p: Promotion) => p.isActive)
+                    .map((promo: Promotion, idx: number) => (
                       <motion.div
                         key={promo.id}
                         initial={{ opacity: 0, x: slideDirection * 20, y: 10 }}
                         animate={{ opacity: 1, x: 0, y: 0 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 24, delay: idx * 0.04 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 24,
+                          delay: idx * 0.04,
+                        }}
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.98 }}
                         className="bg-zinc-900/60 rounded-3xl overflow-hidden border border-zinc-800/80 backdrop-blur-md flex flex-col group shadow-2xl relative cursor-pointer"
@@ -1968,7 +2106,7 @@ export default function App() {
                       : `grid grid-cols-1 sm:grid-cols-2 ${category.items?.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-6 lg:gap-8`
                 }
               >
-                {category.items?.map((item: any, idx: number) => (
+                {category.items?.map((item: MenuItem, idx: number) => (
                   <motion.div
                     key={item.id}
                     onClick={() => {
@@ -1978,7 +2116,12 @@ export default function App() {
                     }}
                     initial={{ opacity: 0, x: slideDirection * 20, y: 10 }}
                     animate={{ opacity: 1, x: 0, y: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 24, delay: idx * 0.04 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 24,
+                      delay: idx * 0.04,
+                    }}
                     className={`cursor-pointer ring-0 hover:ring-2 hover:ring-orange-500/50 transition-all bg-zinc-900/60 rounded-3xl overflow-hidden border border-zinc-800/80 backdrop-blur-md flex group shadow-2xl ${
                       layoutStyle === "list"
                         ? "flex-row h-40 md:h-48"
@@ -2010,7 +2153,15 @@ export default function App() {
                           <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20">
                             <div className="bg-red-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-lg border border-red-500/50 shadow-[0_4px_20px_rgba(220,38,38,0.4)] font-black text-sm md:text-base tracking-widest flex items-center gap-1.5 transform rotate-3">
                               <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]"></span>
-                              {language === "zh" ? "已售罄" : language === "en" ? "SOLD OUT" : language === "fr" ? "ÉPUISÉ" : language === "ar" || language === "ma" ? "مباع" : "SOLD OUT"}
+                              {language === "zh"
+                                ? "已售罄"
+                                : language === "en"
+                                  ? "SOLD OUT"
+                                  : language === "fr"
+                                    ? "ÉPUISÉ"
+                                    : language === "ar" || language === "ma"
+                                      ? "مباع"
+                                      : "SOLD OUT"}
                             </div>
                           </div>
                         </>
@@ -2049,7 +2200,9 @@ export default function App() {
                         {getLoc(item, language, "title")}
                         {item.stock !== undefined && item.stock !== null && (
                           <span className="text-xs text-orange-400 font-sans ml-2 whitespace-nowrap bg-orange-950/40 px-1.5 py-0.5 rounded border border-orange-500/20 font-medium">
-                            {language === "zh" ? `余${item.stock}` : `${item.stock} left`}
+                            {language === "zh"
+                              ? `余${item.stock}`
+                              : `${item.stock} left`}
                           </span>
                         )}
                       </h3>
@@ -2115,7 +2268,7 @@ export default function App() {
                                   }
                                 }}
                                 disabled={item.isSoldOut}
-                                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${item.isSoldOut ? 'text-zinc-600 bg-zinc-800 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-orange-600'}`}
+                                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${item.isSoldOut ? "text-zinc-600 bg-zinc-800 cursor-not-allowed" : "text-zinc-400 hover:text-white hover:bg-orange-600"}`}
                               >
                                 <Plus size={18} />
                               </button>
@@ -2125,7 +2278,15 @@ export default function App() {
                               disabled
                               className="w-full h-10 md:h-12 flex items-center justify-center gap-2 px-3 md:px-4 rounded-xl bg-zinc-800/50 text-zinc-500 text-xs md:text-sm font-semibold border border-zinc-800 cursor-not-allowed"
                             >
-                              {language === "zh" ? "已售罄" : language === "en" ? "Sold Out" : language === "fr" ? "Épuisé" : language === "ar" || language === "ma" ? "مباع" : "Sold Out"}
+                              {language === "zh"
+                                ? "已售罄"
+                                : language === "en"
+                                  ? "Sold Out"
+                                  : language === "fr"
+                                    ? "Épuisé"
+                                    : language === "ar" || language === "ma"
+                                      ? "مباع"
+                                      : "Sold Out"}
                             </button>
                           ) : (
                             <button
@@ -2206,14 +2367,22 @@ export default function App() {
                     animationDuration={0} // Disable skeleton animation since it's static
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent opacity-80 md:hidden" />
-                  
+
                   {selectedDish.isSoldOut && (
                     <>
                       <div className="absolute inset-0 bg-zinc-950/70 z-10 backdrop-blur-[3px] transition-all duration-300" />
                       <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20">
                         <div className="bg-red-600/90 backdrop-blur-md text-white px-4 py-2 rounded-xl border border-red-500/50 shadow-[0_4px_30px_rgba(220,38,38,0.5)] font-black text-lg sm:text-xl tracking-widest flex items-center gap-2 transform rotate-3">
                           <span className="w-2 h-2 bg-white rounded-full animate-pulse shadow-[0_0_10px_rgba(255,255,255,0.8)]"></span>
-                          {language === "zh" ? "已售罄" : language === "en" ? "SOLD OUT" : language === "fr" ? "ÉPUISÉ" : language === "ar" || language === "ma" ? "مباع" : "SOLD OUT"}
+                          {language === "zh"
+                            ? "已售罄"
+                            : language === "en"
+                              ? "SOLD OUT"
+                              : language === "fr"
+                                ? "ÉPUISÉ"
+                                : language === "ar" || language === "ma"
+                                  ? "مباع"
+                                  : "SOLD OUT"}
                         </div>
                       </div>
                     </>
@@ -2364,7 +2533,7 @@ export default function App() {
                               }
                             }}
                             disabled={selectedDish.isSoldOut}
-                            className={`flex-1 h-12 flex items-center justify-center rounded-lg transition-colors ${selectedDish.isSoldOut ? 'text-zinc-600 bg-zinc-800 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-orange-600'}`}
+                            className={`flex-1 h-12 flex items-center justify-center rounded-lg transition-colors ${selectedDish.isSoldOut ? "text-zinc-600 bg-zinc-800 cursor-not-allowed" : "text-zinc-400 hover:text-white hover:bg-orange-600"}`}
                           >
                             <Plus size={20} />
                           </button>
@@ -2374,7 +2543,15 @@ export default function App() {
                           disabled
                           className="w-full h-12 md:h-14 flex items-center justify-center gap-2 px-4 rounded-xl bg-zinc-800/50 text-zinc-500 text-base font-bold border border-zinc-800 cursor-not-allowed"
                         >
-                          {language === "zh" ? "已售罄" : language === "en" ? "Sold Out" : language === "fr" ? "Épuisé" : language === "ar" || language === "ma" ? "مباع" : "Sold Out"}
+                          {language === "zh"
+                            ? "已售罄"
+                            : language === "en"
+                              ? "Sold Out"
+                              : language === "fr"
+                                ? "Épuisé"
+                                : language === "ar" || language === "ma"
+                                  ? "مباع"
+                                  : "Sold Out"}
                         </button>
                       ) : (
                         <button
@@ -2639,7 +2816,7 @@ export default function App() {
                   <div className="absolute top-2 right-2 w-8 h-8 border-t-[6px] border-r-[6px] border-orange-500 rounded-tr-2xl transition-all group-hover:scale-110 origin-top-right"></div>
                   <div className="absolute bottom-2 left-2 w-8 h-8 border-b-[6px] border-l-[6px] border-orange-500 rounded-bl-2xl transition-all group-hover:scale-110 origin-bottom-left"></div>
                   <div className="absolute bottom-2 right-2 w-8 h-8 border-b-[6px] border-r-[6px] border-orange-500 rounded-br-2xl transition-all group-hover:scale-110 origin-bottom-right"></div>
-                  
+
                   <div className="p-4 bg-white">
                     <QRCodeCanvas
                       id="main-share-qr"
@@ -2649,7 +2826,9 @@ export default function App() {
                       fgColor={shareQrFgColor || "#18181b"}
                       bgColor={shareQrBgColor || "#ffffff"}
                       imageSettings={{
-                        src: receiptSettings?.topLogoUrl || "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgMnY3YzAgMS4xLjkgMiAyIDJoNGEyIDIgMCAwIDAgMi0yVjIiLz48cGF0aCBkPSJNNyAydjIwIi8+PHBhdGggZD0iTTIxIDE1VjJ2MGE1IDUgMCAwIDAtNSA1djZjMCAxLjEuOSAyIDIgMmgzWm0wIDB2NyIvPjwvc3ZnPg==",
+                        src:
+                          receiptSettings?.topLogoUrl ||
+                          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgMnY3YzAgMS4xLjkgMiAyIDJoNGEyIDIgMCAwIDAgMi0yVjIiLz48cGF0aCBkPSJNNyAydjIwIi8+PHBhdGggZD0iTTIxIDE1VjJ2MGE1IDUgMCAwIDAtNSA1djZjMCAxLjEuOSAyIDIgMmgzWm0wIDB2NyIvPjwvc3ZnPg==",
                         height: 48,
                         width: 48,
                         excavate: true,
@@ -2662,7 +2841,9 @@ export default function App() {
               <div className="flex justify-center mb-6 w-full">
                 <button
                   onClick={() => {
-                    const canvas = document.getElementById('main-share-qr') as HTMLCanvasElement;
+                    const canvas = document.getElementById(
+                      "main-share-qr",
+                    ) as HTMLCanvasElement;
                     if (canvas) {
                       const url = canvas.toDataURL("image/png");
                       const a = document.createElement("a");
@@ -2676,7 +2857,9 @@ export default function App() {
                   className="w-full py-3 text-sm bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg"
                 >
                   <Download size={16} />
-                  {shareFormat === 'standard' ? '下载二维码 / Download QR' : '下载桌牌 / Download Card'}
+                  {shareFormat === "standard"
+                    ? "下载二维码 / Download QR"
+                    : "下载桌牌 / Download Card"}
                 </button>
               </div>
 
@@ -2690,45 +2873,51 @@ export default function App() {
 
       {/* Admin Settings Modal */}
       {isSettingsOpen && (
-        <Suspense fallback={<div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center text-white">加载中...</div>}>
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center text-white">
+              加载中...
+            </div>
+          }
+        >
           <AdminPanel
-          categories={categories}
-          setCategories={handleUpdateCategories}
-          deletedItemIds={deletedItemIds}
-          setDeletedItemIds={setDeletedItemIds}
-          promotions={promotions}
-          setPromotions={handleUpdatePromotions}
-          restaurantName={restaurantName}
-          setRestaurantName={handleUpdateRestaurantName}
-          welcomeMessage={welcomeMessage}
-          setWelcomeMessage={handleUpdateWelcomeMessage}
-          bgUrl={bgUrl}
-          setBgUrl={handleUpdateBgUrl}
-          logoUrl={logoUrl}
-          setLogoUrl={handleUpdateLogoUrl}
-          layoutStyle={layoutStyle}
-          setLayoutStyle={handleUpdateLayoutStyle}
-          theme={theme}
-          setTheme={handleUpdateTheme}
-          adminPassword={adminPassword}
-          setAdminPassword={handleUpdateAdminPassword}
-          devicePasswords={devicePasswords}
-          setDevicePasswords={handleUpdateDevicePasswords}
-          securityQuestion={securityQuestion}
-          securityAnswer={securityAnswer}
-          setSecurity={handleUpdateSecurity}
-          soundEnabled={soundEnabled}
-          setSoundEnabled={handleUpdateSoundEnabled}
-          isAuthed={isAdminAuthed}
-          setIsAuthed={setIsAdminAuthed}
-          onDeviceAuthed={() => setIsDeviceAuthed(true)}
-          isSynced={isSynced}
-          onSaveToCloud={handleSaveToCloud}
-          onRestoreBackup={handleRestoreBackup}
-          receiptSettings={receiptSettings}
-          setReceiptSettings={setReceiptSettings}
-          onClose={() => setIsSettingsOpen(false)}
-        />
+            categories={categories}
+            setCategories={handleUpdateCategories}
+            deletedItemIds={deletedItemIds}
+            setDeletedItemIds={setDeletedItemIds}
+            promotions={promotions}
+            setPromotions={handleUpdatePromotions}
+            restaurantName={restaurantName}
+            setRestaurantName={handleUpdateRestaurantName}
+            welcomeMessage={welcomeMessage}
+            setWelcomeMessage={handleUpdateWelcomeMessage}
+            bgUrl={bgUrl}
+            setBgUrl={handleUpdateBgUrl}
+            logoUrl={logoUrl}
+            setLogoUrl={handleUpdateLogoUrl}
+            layoutStyle={layoutStyle}
+            setLayoutStyle={handleUpdateLayoutStyle}
+            theme={theme}
+            setTheme={handleUpdateTheme}
+            adminPassword={adminPassword}
+            setAdminPassword={handleUpdateAdminPassword}
+            devicePasswords={devicePasswords}
+            setDevicePasswords={handleUpdateDevicePasswords}
+            securityQuestion={securityQuestion}
+            securityAnswer={securityAnswer}
+            setSecurity={handleUpdateSecurity}
+            soundEnabled={soundEnabled}
+            setSoundEnabled={handleUpdateSoundEnabled}
+            isAuthed={isAdminAuthed}
+            setIsAuthed={setIsAdminAuthed}
+            onDeviceAuthed={() => setIsDeviceAuthed(true)}
+            isSynced={isSynced}
+            onSaveToCloud={handleSaveToCloud}
+            onRestoreBackup={handleRestoreBackup}
+            receiptSettings={receiptSettings}
+            setReceiptSettings={setReceiptSettings}
+            onClose={() => setIsSettingsOpen(false)}
+          />
         </Suspense>
       )}
 

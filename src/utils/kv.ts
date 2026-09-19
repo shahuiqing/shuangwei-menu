@@ -26,7 +26,7 @@ export interface ListResult {
 export async function kvGet<T = any>(
   key: string,
   defaultValue: T | null = null,
-  type: "text" | "json" = "json"
+  type: "text" | "json" = "json",
 ): Promise<T | null> {
   try {
     console.log(`[KV Log] Fetching key "${key}" (type: ${type})...`);
@@ -34,23 +34,32 @@ export async function kvGet<T = any>(
     // 1. Try reading directly from EdgeOne Server KV endpoint if in browser
     if (typeof window !== "undefined") {
       try {
-        const res = await fetch(`/api/edgeone-kv/get?key=${encodeURIComponent(key)}&type=${type}`);
+        const res = await fetch(
+          `/api/edgeone-kv/get?key=${encodeURIComponent(key)}&type=${type}`,
+        );
         if (res.ok) {
           const data = await res.json();
           if (data && data.value !== null && data.value !== undefined) {
-            console.log(`[KV Log] Successfully retrieved key "${key}" from EdgeOne KV.`);
+            console.log(
+              `[KV Log] Successfully retrieved key "${key}" from EdgeOne KV.`,
+            );
             return data.value as T;
           }
         }
       } catch (apiErr) {
-        console.warn(`[KV Warning] Server EdgeOne KV fetch failed for "${key}", falling back:`, apiErr);
+        console.warn(
+          `[KV Warning] Server EdgeOne KV fetch failed for "${key}", falling back:`,
+          apiErr,
+        );
       }
     }
 
     // 2. Fallback to KVCacheManager
     const cached = await kvCache.get<T>(key);
     if (cached !== null && cached !== undefined) {
-      console.log(`[KV Log] Retrieved key "${key}" from local KV cache manager.`);
+      console.log(
+        `[KV Log] Retrieved key "${key}" from local KV cache manager.`,
+      );
       return cached;
     }
 
@@ -68,7 +77,11 @@ export async function kvGet<T = any>(
  * @param value Value to store (<= 25 MB)
  * @param ttlSeconds Optional Time-To-Live in seconds
  */
-export async function kvPut<T = any>(key: string, value: T, ttlSeconds?: number): Promise<boolean> {
+export async function kvPut<T = any>(
+  key: string,
+  value: T,
+  ttlSeconds?: number,
+): Promise<boolean> {
   try {
     console.log(`[KV Log] Putting key "${key}" to EdgeOne KV...`);
 
@@ -78,10 +91,13 @@ export async function kvPut<T = any>(key: string, value: T, ttlSeconds?: number)
         await fetch("/api/edgeone-kv/put", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key, value })
+          body: JSON.stringify({ key, value }),
         });
       } catch (apiErr) {
-        console.warn(`[KV Warning] Server API kvPut failed for key "${key}":`, apiErr);
+        console.warn(
+          `[KV Warning] Server API kvPut failed for key "${key}":`,
+          apiErr,
+        );
       }
     }
 
@@ -96,11 +112,6 @@ export async function kvPut<T = any>(key: string, value: T, ttlSeconds?: number)
 }
 
 /**
- * Alias for kvPut for backward compatibility
- */
-export const kvSet = kvPut;
-
-/**
  * Delete a key from EdgeOne KV storage.
  * @param key Key identifier to delete
  */
@@ -110,9 +121,14 @@ export async function kvDelete(key: string): Promise<boolean> {
 
     if (typeof window !== "undefined") {
       try {
-        await fetch(`/api/edgeone-kv/delete?key=${encodeURIComponent(key)}`, { method: "DELETE" });
+        await fetch(`/api/edgeone-kv/delete?key=${encodeURIComponent(key)}`, {
+          method: "DELETE",
+        });
       } catch (apiErr) {
-        console.warn(`[KV Warning] Server API kvDelete failed for key "${key}":`, apiErr);
+        console.warn(
+          `[KV Warning] Server API kvDelete failed for key "${key}":`,
+          apiErr,
+        );
       }
     }
 
@@ -134,17 +150,23 @@ export async function kvDelete(key: string): Promise<boolean> {
 export async function kvList(options: ListOptions = {}): Promise<ListResult> {
   try {
     const { prefix = "", limit = 256, cursor = "" } = options;
-    console.log(`[KV Log] Listing keys (prefix: "${prefix}", limit: ${limit}, cursor: "${cursor}")...`);
+    console.log(
+      `[KV Log] Listing keys (prefix: "${prefix}", limit: ${limit}, cursor: "${cursor}")...`,
+    );
 
     if (typeof window !== "undefined") {
-      const query = new URLSearchParams({ prefix, limit: String(limit), cursor }).toString();
+      const query = new URLSearchParams({
+        prefix,
+        limit: String(limit),
+        cursor,
+      }).toString();
       const res = await fetch(`/api/edgeone-kv/list?${query}`);
       if (res.ok) {
         const data = await res.json();
         return {
           complete: data.complete ?? true,
           cursor: data.cursor ?? null,
-          keys: data.keys || []
+          keys: data.keys || [],
         };
       }
     }

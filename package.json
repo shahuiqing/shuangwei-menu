@@ -16,6 +16,13 @@
     "test": "vitest run --passWithNoTests",
     "prepare": "husky"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css}": "prettier --write"
+  },
   "dependencies": {
     "@edgeone/pages-blob": "^0.0.14",
     "@google/genai": "^2.8.0",
@@ -38,7 +45,6 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/bcryptjs": "^2.4.6",
@@ -52,6 +58,8 @@
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.5",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "lint-staged": "^17.4.1",
@@ -60,6 +68,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
   }
 }

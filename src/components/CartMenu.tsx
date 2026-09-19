@@ -1,8 +1,21 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Minus, ShoppingBag, Trash2, Loader2, Clock, ChefHat, CheckCircle2, Star, PlusCircle } from "lucide-react";
+import {
+  X,
+  Plus,
+  Minus,
+  ShoppingBag,
+  Trash2,
+  Loader2,
+  Clock,
+  ChefHat,
+  CheckCircle2,
+  Star,
+  PlusCircle,
+} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { getLoc, Language } from "../utils/loc";
-import { api, isOrderOlderThan2Hours } from "../api";
+import { api } from "../api";
+import type { MenuCategory, ReceiptSettings } from "../types/menu";
 
 interface CartMenuProps {
   isOpen: boolean;
@@ -10,13 +23,13 @@ interface CartMenuProps {
   cart: Record<string, number>;
   updateCart: (id: string, delta: number) => void;
   clearCart: () => void;
-  categories: any[];
+  categories: MenuCategory[];
   language: Language;
   isAdminAuthed?: boolean;
   devicePasswords?: { name: string; password: string }[];
   scanSession?: any;
-  receiptSettings?: any;
-  onUpdateCategories?: (newCategories: any[]) => void;
+  receiptSettings?: ReceiptSettings;
+  onUpdateCategories?: (newCategories: MenuCategory[]) => void;
 }
 
 export default function CartMenu({
@@ -76,7 +89,11 @@ export default function CartMenu({
     deviceName: string;
   } | null>(null);
 
-  const executeFinalSubmit = async (customerName: string, deviceName: string, targetOrderIdToAppend?: string | null) => {
+  const executeFinalSubmit = async (
+    customerName: string,
+    deviceName: string,
+    targetOrderIdToAppend?: string | null,
+  ) => {
     await submitOrder(customerName, deviceName, targetOrderIdToAppend);
     setOrderSuccess(true);
     setTimeout(() => {
@@ -116,7 +133,7 @@ export default function CartMenu({
     setPendingAppendOrder(null);
     setIsSubmitting(true);
     try {
-      const targetOrderId = isAppend ? (activeOrder._id || activeOrder.id) : null;
+      const targetOrderId = isAppend ? activeOrder._id || activeOrder.id : null;
       await executeFinalSubmit(customerName, deviceName, targetOrderId);
     } catch (e: any) {
       console.error("Order submission error:", e);
@@ -125,10 +142,15 @@ export default function CartMenu({
     }
   };
 
-  const submitOrder = async (customerName: string, deviceName: string, targetOrderIdToAppend?: string | null) => {
+  const submitOrder = async (
+    customerName: string,
+    deviceName: string,
+    targetOrderIdToAppend?: string | null,
+  ) => {
     try {
       const orderData = {
         customerName: customerName,
+        // eslint-disable-next-line react-hooks/purity
         orderNumber: "ORD-" + Math.floor(Math.random() * 1000000),
         timestamp: new Date().toISOString(),
         deviceInfo: deviceName,
@@ -161,7 +183,9 @@ export default function CartMenu({
       let stockDeducted = false;
       const updatedCategories = categories.map((cat: any) => {
         const updatedItems = (cat.items || []).map((item: any) => {
-          const orderItem = orderData.items.find((oi: any) => oi.id === item.id);
+          const orderItem = orderData.items.find(
+            (oi: any) => oi.id === item.id,
+          );
           if (orderItem && item.stock !== undefined && item.stock !== null) {
             const currentStock = Number(item.stock);
             if (!isNaN(currentStock)) {
@@ -182,25 +206,25 @@ export default function CartMenu({
       if (stockDeducted && onUpdateCategories) {
         onUpdateCategories(updatedCategories);
       }
-      
+
       // Clear server-side cart for the table（EdgeOne：经 Supabase Realtime broadcast）
       const params = new URLSearchParams(window.location.search);
       const tableParam = scanSession?.tableNo || params.get("table");
       if (tableParam) {
         api.broadcastCartCleared(tableParam);
-        
+
         // Notify admin（Supabase Realtime broadcast，替代原 /api/notify-admin）
         api.notifyAdmin({
           table: tableParam,
-          notifyType: 'order_placed',
-          type: 'order_placed',
+          notifyType: "order_placed",
+          type: "order_placed",
           message: targetOrderIdToAppend
             ? `桌号 ${tableParam} 追加了加菜 (${orderData.items.length}项商品)`
             : `桌号 ${tableParam} 刚刚提交了新订单 (${orderData.items.length}项商品)`,
-          action: targetOrderIdToAppend ? 'Add Dish' : 'New Order'
+          action: targetOrderIdToAppend ? "Add Dish" : "New Order",
         });
       }
-      
+
       console.log("✅ 订单已成功同步到后台管理系统！");
     } catch (err) {
       console.error("❌ 网络错误或数据解析失败，无法连接到后台系统:", err);
@@ -214,7 +238,11 @@ export default function CartMenu({
     const savedToken = localStorage.getItem("deviceAuthToken");
     const expiry = localStorage.getItem("deviceAuthTokenExpiry");
 
-    if (savedToken && expiry && Date.now() < parseInt(expiry, 10)) {
+    if (
+      savedToken &&
+      expiry && // eslint-disable-next-line react-hooks/purity
+      Date.now() < parseInt(expiry, 10)
+    ) {
       const matchedDevice = devicePasswords.find(
         (d) => d.password === savedToken,
       );
@@ -312,27 +340,38 @@ export default function CartMenu({
             {activeOrder && (
               <div className="bg-zinc-900 border-b border-zinc-800 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-zinc-400">订单状态 (Order Status)</span>
-                  <span className="text-xs font-mono text-zinc-500">{activeOrder.orderNumber}</span>
+                  <span className="text-xs text-zinc-400">
+                    订单状态 (Order Status)
+                  </span>
+                  <span className="text-xs font-mono text-zinc-500">
+                    {activeOrder.orderNumber}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {(!activeOrder.status || activeOrder.status === "pending") && (
+                  {(!activeOrder.status ||
+                    activeOrder.status === "pending") && (
                     <div className="flex items-center gap-2 text-orange-500 bg-orange-500/10 px-3 py-1.5 rounded-lg w-full border border-orange-500/20">
                       <Clock size={16} className="animate-pulse" />
-                      <span className="font-bold text-sm">已下单，待接单 (Pending)</span>
+                      <span className="font-bold text-sm">
+                        已下单，待接单 (Pending)
+                      </span>
                     </div>
                   )}
                   {activeOrder.status === "preparing" && (
                     <div className="flex items-center gap-2 text-blue-400 bg-blue-500/10 px-3 py-1.5 rounded-lg w-full border border-blue-500/20">
                       <ChefHat size={16} className="animate-bounce" />
-                      <span className="font-bold text-sm">后厨制作中 (Preparing)</span>
+                      <span className="font-bold text-sm">
+                        后厨制作中 (Preparing)
+                      </span>
                     </div>
                   )}
                   {activeOrder.status === "served" && (
                     <div className="flex flex-col gap-3 w-full">
                       <div className="flex items-center gap-2 text-teal-400 bg-teal-500/10 px-3 py-1.5 rounded-lg w-full border border-teal-500/20">
                         <CheckCircle2 size={16} />
-                        <span className="font-bold text-sm">已上菜，请慢用 (Served)</span>
+                        <span className="font-bold text-sm">
+                          已上菜，请慢用 (Served)
+                        </span>
                       </div>
                       {receiptSettings?.googleMapsReviewLink && (
                         <a
@@ -342,7 +381,9 @@ export default function CartMenu({
                           className="flex items-center justify-center gap-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 px-3 py-2 rounded-lg w-full border border-orange-500/20 transition-colors"
                         >
                           <Star size={16} className="fill-orange-500" />
-                          <span className="font-bold text-sm">给我们在谷歌地图上留下好评！</span>
+                          <span className="font-bold text-sm">
+                            给我们在谷歌地图上留下好评！
+                          </span>
                         </a>
                       )}
                     </div>
@@ -381,7 +422,15 @@ export default function CartMenu({
                         </p>
                         {item.isSoldOut && (
                           <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">
-                            {language === "zh" ? "已售罄" : language === "en" ? "Sold Out" : language === "fr" ? "Épuisé" : language === "ar" || language === "ma" ? "مباع" : "Sold Out"}
+                            {language === "zh"
+                              ? "已售罄"
+                              : language === "en"
+                                ? "Sold Out"
+                                : language === "fr"
+                                  ? "Épuisé"
+                                  : language === "ar" || language === "ma"
+                                    ? "مباع"
+                                    : "Sold Out"}
                           </p>
                         )}
                       </div>
@@ -402,7 +451,7 @@ export default function CartMenu({
                             }
                           }}
                           disabled={item.isSoldOut}
-                          className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${item.isSoldOut ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-orange-600'}`}
+                          className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${item.isSoldOut ? "text-zinc-600 cursor-not-allowed" : "text-zinc-400 hover:text-white hover:bg-orange-600"}`}
                         >
                           <Plus size={14} />
                         </button>
@@ -492,7 +541,10 @@ export default function CartMenu({
                                     ? "管理员端 (Admin)"
                                     : "未知设备 (Unknown)");
 
-                                await startSubmitFlow(`桌号_${tableNumber}`, deviceName);
+                                await startSubmitFlow(
+                                  `桌号_${tableNumber}`,
+                                  deviceName,
+                                );
                               }}
                             >
                               {language === "zh" ? "确认下单" : "Confirm"}
@@ -509,11 +561,13 @@ export default function CartMenu({
                             <Trash2 size={24} />
                           </button>
                           <button
-                            className={`flex-1 ${isSubmitting ? 'bg-orange-500/50 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-500 cursor-pointer'} text-white font-bold py-3 px-6 rounded-xl transition-colors text-center flex justify-center items-center gap-2`}
+                            className={`flex-1 ${isSubmitting ? "bg-orange-500/50 cursor-not-allowed" : "bg-orange-600 hover:bg-orange-500 cursor-pointer"} text-white font-bold py-3 px-6 rounded-xl transition-colors text-center flex justify-center items-center gap-2`}
                             onClick={handleCheckoutClick}
                             disabled={isSubmitting}
                           >
-                            {isSubmitting && <Loader2 size={18} className="animate-spin" />}
+                            {isSubmitting && (
+                              <Loader2 size={18} className="animate-spin" />
+                            )}
                             {language === "zh"
                               ? "提交订单"
                               : language === "fr"
@@ -550,7 +604,9 @@ export default function CartMenu({
             </p>
 
             <p className="text-xs text-zinc-400 mb-5">
-              {language === "zh" ? "请选择本次提交方式：" : "Please select submission method:"}
+              {language === "zh"
+                ? "请选择本次提交方式："
+                : "Please select submission method:"}
             </p>
 
             <div className="flex flex-col gap-3">
@@ -559,14 +615,18 @@ export default function CartMenu({
                 className="w-full py-3 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-600/30 cursor-pointer"
               >
                 <PlusCircle size={18} />
-                {language === "zh" ? "追加加菜 (合并至当前订单)" : "Add Dish to Current Order"}
+                {language === "zh"
+                  ? "追加加菜 (合并至当前订单)"
+                  : "Add Dish to Current Order"}
               </button>
               <button
                 onClick={() => handleConfirmAppendChoice(false)}
                 className="w-full py-3 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
               >
                 <Plus size={18} />
-                {language === "zh" ? "开立独立新订单" : "Create New Separate Order"}
+                {language === "zh"
+                  ? "开立独立新订单"
+                  : "Create New Separate Order"}
               </button>
               <button
                 onClick={() => {

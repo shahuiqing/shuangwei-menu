@@ -1,16 +1,25 @@
-import { supabase, isSupabaseConfigured, isSupabaseHealthy, setSupabaseHealthy } from "./supabase";
-import { INITIAL_MENU_CATEGORIES, mergeAndOrderCategories } from "./initialData";
+import { supabase, isSupabaseConfigured, isSupabaseHealthy } from "./supabase";
+import {
+  INITIAL_MENU_CATEGORIES,
+  mergeAndOrderCategories,
+} from "./initialData";
 import { kvCache } from "./services/kvCache";
 import { blobStorage } from "./services/blobStorage";
+import { compressBase64Image } from "./utils/image";
+import type { Order } from "./types/order";
+import type { InventoryItem, RecipeBom } from "./types/inventory";
 
 const SETTINGS_DOC_ID = "global";
 
-const handleSupabaseReadError = (err: any, context: string) => {
+const handleSupabaseReadError = (err: unknown, context: string) => {
   console.warn(`Supabase read notice [${context}]:`, err);
 };
 
-const handleSupabaseWriteError = (err: any, context: string) => {
-  console.warn(`[Supabase Write Fallback] Notice in [${context}]:`, err?.message || err);
+const handleSupabaseWriteError = (err: unknown, context: string) => {
+  console.warn(
+    `[Supabase Write Fallback] Notice in [${context}]:`,
+    (err as Error)?.message || err,
+  );
 };
 
 const handleSupabaseError = handleSupabaseWriteError;
@@ -32,7 +41,7 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "layoutStyle",
     "receiptSettings",
     "deletedItemIds",
-    "theme"
+    "theme",
   ],
   orders: [
     "_id",
@@ -50,14 +59,9 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "unprintedNewOrder",
     "unprintedAdditions",
     "createdAt",
-    "created_at"
+    "created_at",
   ],
-  tables: [
-    "tableNo",
-    "key",
-    "active",
-    "createdAt"
-  ],
+  tables: ["tableNo", "key", "active", "createdAt"],
   inventory_items: [
     "id",
     "name",
@@ -66,21 +70,10 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "unit",
     "safety_stock",
     "price",
-    "updated_at"
+    "updated_at",
   ],
-  recipe_boms: [
-    "id",
-    "menu_item_name",
-    "inventory_item_id",
-    "dosage",
-    "unit"
-  ],
-  categories: [
-    "id",
-    "name",
-    "sort_order",
-    "created_at"
-  ],
+  recipe_boms: ["id", "menu_item_name", "inventory_item_id", "dosage", "unit"],
+  categories: ["id", "name", "sort_order", "created_at"],
   menu_items: [
     "id",
     "category_id",
@@ -89,7 +82,7 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "image_url",
     "description",
     "is_available",
-    "created_at"
+    "created_at",
   ],
   order_items: [
     "id",
@@ -98,8 +91,8 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "name",
     "quantity",
     "unit_price",
-    "subtotal"
-  ]
+    "subtotal",
+  ],
 };
 
 const tableColumnsCache: Record<string, string[] | null> = {};
@@ -110,7 +103,7 @@ async function getTableColumns(tableName: string): Promise<string[] | null> {
   }
   if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from(tableName)
         .select("*")
         .limit(1)
@@ -127,11 +120,15 @@ async function getTableColumns(tableName: string): Promise<string[] | null> {
   return null;
 }
 
-async function filterPayloadByTable(tableName: string, payload: any): Promise<any> {
-  const columns = await getTableColumns(tableName) || KNOWN_COLUMNS[tableName];
+async function filterPayloadByTable(
+  tableName: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const columns =
+    (await getTableColumns(tableName)) || KNOWN_COLUMNS[tableName];
   if (!columns) return payload;
 
-  const filtered: any = {};
+  const filtered: Record<string, unknown> = {};
   for (const key of Object.keys(payload)) {
     if (columns.includes(key)) {
       filtered[key] = payload[key];
@@ -146,22 +143,29 @@ export let isQuotaExceeded = false;
 export const setQuotaExceeded = (val: boolean) => {
   if (isQuotaExceeded !== val) {
     isQuotaExceeded = val;
-    quotaExceededListeners.forEach(cb => cb());
+    quotaExceededListeners.forEach((cb) => cb());
   }
 };
 
 export const onQuotaExceededChange = (cb: () => void) => {
   quotaExceededListeners.push(cb);
   return () => {
-    quotaExceededListeners = quotaExceededListeners.filter(listener => listener !== cb);
+    quotaExceededListeners = quotaExceededListeners.filter(
+      (listener) => listener !== cb,
+    );
   };
 };
 
-export const normalizeOrder = (o: any) => {
-  if (!o) return o;
+export const normalizeOrder = (o: any): Order => {
+  if (!o) return o as never;
   const normalizedId = String(o.id || o._id || o.orderNumber || Math.random());
   const custName = o.customerName || o.customer_name || "";
-  const totalVal = o.total !== undefined ? Number(o.total) : (o.total_amount !== undefined ? Number(o.total_amount) : 0);
+  const totalVal =
+    o.total !== undefined
+      ? Number(o.total)
+      : o.total_amount !== undefined
+        ? Number(o.total_amount)
+        : 0;
   const itemsList = Array.isArray(o.items) ? o.items : [];
   return {
     ...o,
@@ -174,14 +178,17 @@ export const normalizeOrder = (o: any) => {
     total_amount: totalVal,
     items: itemsList,
     status: o.status || "pending",
-    timestamp: o.timestamp || o.created_at || o.createdAt || new Date().toISOString(),
-    unprintedNewOrder: o.unprintedNewOrder !== undefined ? o.unprintedNewOrder : false,
-    unprintedAdditions: Array.isArray(o.unprintedAdditions) ? o.unprintedAdditions : []
-  };
+    timestamp:
+      o.timestamp || o.created_at || o.createdAt || new Date().toISOString(),
+    unprintedNewOrder:
+      o.unprintedNewOrder !== undefined ? o.unprintedNewOrder : false,
+    unprintedAdditions: Array.isArray(o.unprintedAdditions)
+      ? o.unprintedAdditions
+      : [],
+  } as Order;
 };
 
-
-export const normalizeTableString = (str: any): string => {
+export const normalizeTableString = (str: unknown): string => {
   if (!str) return "";
   return String(str)
     .replace(/^(桌号|table|号桌|桌)s*/i, "")
@@ -196,29 +203,27 @@ function escOrVal(v: string): string {
   return s;
 }
 
-export const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours
-
 export function checkAndTriggerMoroccoDailyClear() {
   // Automatic auto-clearing is disabled to prevent unexpected order loss.
   // Orders are preserved until explicitly cleared or managed by the administrator.
 }
 
-export const parseOrderTimestamp = (timeVal: any): number => {
+export const parseOrderTimestamp = (timeVal: unknown): number => {
   if (!timeVal) return 0;
-  if (typeof timeVal === 'number') return timeVal;
+  if (typeof timeVal === "number") return timeVal;
   let str = String(timeVal).trim();
   if (!str) return 0;
   if (/^\d+$/.test(str)) {
     return parseInt(str, 10);
   }
-  
+
   // Convert space to 'T' if present (e.g., "2026-08-10 07:00:00" -> "2026-08-10T07:00:00")
-  str = str.replace(' ', 'T');
+  str = str.replace(" ", "T");
 
   // If no timezone offset is present, treat as UTC ISO string ('Z')
   const hasTimeZone = /Z$/i.test(str) || /[+-]\d{2}(:?\d{2})?$/.test(str);
   if (!hasTimeZone) {
-    str += 'Z';
+    str += "Z";
   }
 
   const t = new Date(str).getTime();
@@ -226,41 +231,49 @@ export const parseOrderTimestamp = (timeVal: any): number => {
     return t;
   }
 
-  const fallback = new Date(timeVal).getTime();
+  const fallback = new Date(String(timeVal)).getTime();
   return isNaN(fallback) ? 0 : fallback;
 };
 
-export const isOrderOlderThan2Hours = (_order: any): boolean => {
-  return false;
-};
-
-export const isOrderActive = (o: any): boolean => {
+export const isOrderActive = (o: unknown): boolean => {
   if (!o) return false;
-  const status = String(o.status || "pending").toLowerCase();
+  const status = String(
+    (o as Record<string, unknown>).status || "pending",
+  ).toLowerCase();
   if (status === "completed" || status === "cancelled") return false;
   return true;
 };
 
-export const isOrderMatchingTable = (o: any, nameOrTable: string): boolean => {
+export const isOrderMatchingTable = (
+  o: unknown,
+  nameOrTable: string,
+): boolean => {
   if (!o || !nameOrTable) return false;
+  const rec = o as Record<string, unknown>;
   const targetNorm = normalizeTableString(nameOrTable);
   const rawTarget = String(nameOrTable).trim().toLowerCase();
   if (!targetNorm && !rawTarget) return false;
 
-  const orderCust = String(o.customerName || o.customer_name || "").trim().toLowerCase();
-  const orderTable = String(o.table_no || o.tableNo || "").trim().toLowerCase();
+  const orderCust = String(rec.customerName || rec.customer_name || "")
+    .trim()
+    .toLowerCase();
+  const orderTable = String(rec.table_no || rec.tableNo || "")
+    .trim()
+    .toLowerCase();
   const orderCustNorm = normalizeTableString(orderCust);
   const orderTableNorm = normalizeTableString(orderTable);
 
   return (
-    (rawTarget !== "" && (orderCust === rawTarget || orderTable === rawTarget)) ||
-    (targetNorm !== "" && (orderCustNorm === targetNorm || orderTableNorm === targetNorm))
+    (rawTarget !== "" &&
+      (orderCust === rawTarget || orderTable === rawTarget)) ||
+    (targetNorm !== "" &&
+      (orderCustNorm === targetNorm || orderTableNorm === targetNorm))
   );
 };
 
-let ordersListeners: ((orders: any[]) => void)[] = [];
-let settingsListeners: ((data: any) => void)[] = [];
-const broadcastOrdersMemoryCache = new Map<string, any>();
+let ordersListeners: ((orders: Order[]) => void)[] = [];
+let settingsListeners: ((data: Record<string, unknown>) => void)[] = [];
+const broadcastOrdersMemoryCache = new Map<string, Order>();
 
 const triggerLocalOrdersChange = async () => {
   if (ordersListeners.length === 0) {
@@ -269,9 +282,7 @@ const triggerLocalOrdersChange = async () => {
   let remoteOrders: any[] = [];
   try {
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*");
+      const { data, error } = await supabase.from("orders").select("*");
       if (error) handleSupabaseReadError(error, "triggerLocalOrdersChange");
       if (data) {
         remoteOrders = data.map(normalizeOrder);
@@ -280,20 +291,20 @@ const triggerLocalOrdersChange = async () => {
   } catch (e) {
     handleSupabaseReadError(e, "triggerLocalOrdersChange");
   }
-  
+
   const localOrdersStr = localStorage.getItem("local_orders");
   const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
-  
+
   const mergedMap = new Map<string, any>();
-  
+
   // 1. Remote DB orders
-  remoteOrders.forEach((ro: any) => {
+  remoteOrders.forEach((ro) => {
     const norm = normalizeOrder(ro);
     if (norm._id) mergedMap.set(String(norm._id), norm);
   });
-  
+
   // 2. Realtime broadcast orders held in memory
-  broadcastOrdersMemoryCache.forEach((bo: any) => {
+  broadcastOrdersMemoryCache.forEach((bo) => {
     const norm = normalizeOrder(bo);
     if (norm._id) {
       const existing = mergedMap.get(String(norm._id));
@@ -308,9 +319,9 @@ const triggerLocalOrdersChange = async () => {
       }
     }
   });
-  
+
   // 3. Local storage orders
-  localOrders.forEach((lo: any) => {
+  localOrders.forEach((lo: Record<string, unknown>) => {
     const norm = normalizeOrder(lo);
     if (norm._id) {
       const existing = mergedMap.get(String(norm._id));
@@ -325,12 +336,13 @@ const triggerLocalOrdersChange = async () => {
       }
     }
   });
-  
+
   const sorted = Array.from(mergedMap.values()).sort(
-    (a: any, b: any) => parseOrderTimestamp(a.timestamp) - parseOrderTimestamp(b.timestamp)
+    (a: Order, b: Order) =>
+      parseOrderTimestamp(a.timestamp) - parseOrderTimestamp(b.timestamp),
   );
-  
-  ordersListeners.forEach(cb => cb(sorted));
+
+  ordersListeners.forEach((cb) => cb(sorted));
 };
 
 let tablesListeners: ((tables: any[]) => void)[] = [];
@@ -342,9 +354,7 @@ const triggerLocalTablesChange = async () => {
   let remoteTables: any[] = [];
   try {
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-      const { data, error } = await supabase
-        .from("tables")
-        .select("*");
+      const { data, error } = await supabase.from("tables").select("*");
       if (error) throw error;
       if (data) {
         remoteTables = data;
@@ -353,29 +363,36 @@ const triggerLocalTablesChange = async () => {
   } catch (e) {
     handleSupabaseReadError(e, "triggerLocalTablesChange");
   }
-  
+
   const localTablesStr = localStorage.getItem("local_tables");
   const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
-  
+
   const merged = [...remoteTables];
   localTables.forEach((lt: any) => {
-    if (!merged.some(rt => rt.tableNo === lt.tableNo)) {
+    if (!merged.some((rt) => rt.tableNo === lt.tableNo)) {
       merged.push(lt);
     }
   });
-  
-  tablesListeners.forEach(cb => cb(merged));
+
+  tablesListeners.forEach((cb) => cb(merged));
 };
 
-let customerOrderListeners: { customerName: string; callback: (order: any) => void; fetchAndCallback: () => void }[] = [];
+let customerOrderListeners: {
+  customerName: string;
+  callback: (order: any) => void;
+  fetchAndCallback: () => void;
+}[] = [];
 let inventoryListeners: (() => void)[] = [];
 
 // EdgeOne 部署：购物车实时同步 + 管理员通知（Supabase Realtime broadcast，替代原 WebSocket cartHub）
-let cartListeners: { table: string; callback: (cart: Record<string, number>) => void }[] = [];
+let cartListeners: {
+  table: string;
+  callback: (cart: Record<string, number>) => void;
+}[] = [];
 let adminNotificationListeners: ((payload: any) => void)[] = [];
 
 export const triggerLocalInventoryChange = () => {
-  inventoryListeners.forEach(cb => cb());
+  inventoryListeners.forEach((cb) => cb());
 };
 
 let globalSyncChannel: any = null;
@@ -385,82 +402,124 @@ export const getIsRealtimeConnected = () => isRealtimeConnected;
 
 export const ensureSyncChannel = () => {
   if (supabase && isSupabaseConfigured && !globalSyncChannel) {
-    globalSyncChannel = supabase.channel('restaurant-sync', {
+    globalSyncChannel = supabase.channel("restaurant-sync", {
       config: {
-        broadcast: { self: true }
-      }
+        broadcast: { self: true },
+      },
     });
 
     globalSyncChannel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `id=eq.${SETTINGS_DOC_ID}` }, (payload: any) => {
-        if (payload.new) {
-          if (payload.new.categories && Array.isArray(payload.new.categories)) {
-            payload.new.categories = mergeAndOrderCategories(
-              payload.new.categories,
-              INITIAL_MENU_CATEGORIES,
-              payload.new.deletedItemIds || []
-            );
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "settings",
+          filter: `id=eq.${SETTINGS_DOC_ID}`,
+        },
+        (payload: any) => {
+          if (payload.new) {
+            if (
+              payload.new.categories &&
+              Array.isArray(payload.new.categories)
+            ) {
+              payload.new.categories = mergeAndOrderCategories(
+                payload.new.categories,
+                INITIAL_MENU_CATEGORIES,
+                payload.new.deletedItemIds || [],
+              );
+            }
+            kvCache.set("app_settings", payload.new, 600);
+            settingsListeners.forEach((cb) => cb(payload.new));
           }
-          kvCache.set("app_settings", payload.new, 600);
-          settingsListeners.forEach(cb => cb(payload.new));
-        }
-      })
-      .on('broadcast', { event: 'settings_changed' }, () => {
+        },
+      )
+      .on("broadcast", { event: "settings_changed" }, () => {
         kvCache.invalidate("app_settings");
-        api.getSettings().then(data => {
-          if (data) settingsListeners.forEach(cb => cb(data));
+        api.getSettings().then((data) => {
+          if (data) settingsListeners.forEach((cb) => cb(data));
         });
       })
-      .on('broadcast', { event: 'dish_deleted' }, (evtPayload: any) => {
+      .on("broadcast", { event: "dish_deleted" }, (evtPayload: any) => {
         const payload = evtPayload?.payload || evtPayload;
-        console.log("[Supabase Broadcast] Dish deleted event received:", payload);
+        console.log(
+          "[Supabase Broadcast] Dish deleted event received:",
+          payload,
+        );
         kvCache.invalidate("app_settings");
         if (payload?.deletedItemIds && Array.isArray(payload.deletedItemIds)) {
           const localDelStr = localStorage.getItem("menuDeletedItemIds");
-          let localDel = localDelStr ? JSON.parse(localDelStr) : [];
-          const mergedDel = Array.from(new Set([...localDel, ...payload.deletedItemIds]));
+          const localDel = localDelStr ? JSON.parse(localDelStr) : [];
+          const mergedDel = Array.from(
+            new Set([...localDel, ...payload.deletedItemIds]),
+          );
           localStorage.setItem("menuDeletedItemIds", JSON.stringify(mergedDel));
         }
-        api.getSettings().then(data => {
-          if (data) settingsListeners.forEach(cb => cb(data));
+        api.getSettings().then((data) => {
+          if (data) settingsListeners.forEach((cb) => cb(data));
         });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload: any) => {
-        if (payload.eventType === 'DELETE' && payload.old) {
-          const delId = String(payload.old._id || payload.old.id);
-          if (delId) {
-            broadcastOrdersMemoryCache.delete(delId);
-            const localOrdersStr = localStorage.getItem("local_orders");
-            if (localOrdersStr) {
-              let localOrders = JSON.parse(localOrdersStr);
-              localOrders = localOrders.filter((o: any) => String(o._id) !== delId && String(o.id) !== delId);
-              localStorage.setItem("local_orders", JSON.stringify(localOrders));
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        (payload: any) => {
+          if (payload.eventType === "DELETE" && payload.old) {
+            const delId = String(payload.old._id || payload.old.id);
+            if (delId) {
+              broadcastOrdersMemoryCache.delete(delId);
+              const localOrdersStr = localStorage.getItem("local_orders");
+              if (localOrdersStr) {
+                let localOrders = JSON.parse(localOrdersStr);
+                localOrders = localOrders.filter(
+                  (o: any) => String(o._id) !== delId && String(o.id) !== delId,
+                );
+                localStorage.setItem(
+                  "local_orders",
+                  JSON.stringify(localOrders),
+                );
+              }
             }
           }
-        }
-        if (ordersListeners.length > 0) {
-          triggerLocalOrdersChange();
-        }
-
-        if (payload.eventType === 'INSERT' && payload.new && payload.new.items) {
-          api.deductInventoryForOrderItems(payload.new.items);
-        }
-        
-        customerOrderListeners.forEach(listener => {
-          const newRecord = payload.new;
-          const oldRecord = payload.old;
-          const affectedCustomer = (newRecord && (newRecord.customerName || newRecord.customer_name || newRecord.table_no || newRecord.tableNo)) || 
-                                   (oldRecord && (oldRecord.customerName || oldRecord.customer_name || oldRecord.table_no || oldRecord.tableNo));
-          
-          if (!affectedCustomer || affectedCustomer === listener.customerName) {
-            listener.fetchAndCallback();
+          if (ordersListeners.length > 0) {
+            triggerLocalOrdersChange();
           }
-        });
-      })
-      .on('broadcast', { event: 'orders_changed' }, (evtPayload: any) => {
+
+          if (
+            payload.eventType === "INSERT" &&
+            payload.new &&
+            payload.new.items
+          ) {
+            api.deductInventoryForOrderItems(payload.new.items);
+          }
+
+          customerOrderListeners.forEach((listener) => {
+            const newRecord = payload.new;
+            const oldRecord = payload.old;
+            const affectedCustomer =
+              (newRecord &&
+                (newRecord.customerName ||
+                  newRecord.customer_name ||
+                  newRecord.table_no ||
+                  newRecord.tableNo)) ||
+              (oldRecord &&
+                (oldRecord.customerName ||
+                  oldRecord.customer_name ||
+                  oldRecord.table_no ||
+                  oldRecord.tableNo));
+
+            if (
+              !affectedCustomer ||
+              affectedCustomer === listener.customerName
+            ) {
+              listener.fetchAndCallback();
+            }
+          });
+        },
+      )
+      .on("broadcast", { event: "orders_changed" }, (evtPayload: any) => {
         const payload = evtPayload?.payload || evtPayload;
         if (payload) {
-          if (payload.action === 'delete' && payload.orderId) {
+          if (payload.action === "delete" && payload.orderId) {
             const delId = String(payload.orderId);
             broadcastOrdersMemoryCache.delete(delId);
             broadcastOrdersMemoryCache.forEach((v, k) => {
@@ -471,19 +530,27 @@ export const ensureSyncChannel = () => {
             const localOrdersStr = localStorage.getItem("local_orders");
             if (localOrdersStr) {
               let localOrders = JSON.parse(localOrdersStr);
-              localOrders = localOrders.filter((o: any) => String(o._id) !== delId && String(o.id) !== delId);
+              localOrders = localOrders.filter(
+                (o: any) => String(o._id) !== delId && String(o.id) !== delId,
+              );
               localStorage.setItem("local_orders", JSON.stringify(localOrders));
             }
-          } else if (payload.action === 'clear') {
+          } else if (payload.action === "clear") {
             if (payload.status) {
               broadcastOrdersMemoryCache.forEach((v, k) => {
-                if (v.status === payload.status) broadcastOrdersMemoryCache.delete(k);
+                if (v.status === payload.status)
+                  broadcastOrdersMemoryCache.delete(k);
               });
               const localOrdersStr = localStorage.getItem("local_orders");
               if (localOrdersStr) {
                 let localOrders = JSON.parse(localOrdersStr);
-                localOrders = localOrders.filter((o: any) => o.status !== payload.status);
-                localStorage.setItem("local_orders", JSON.stringify(localOrders));
+                localOrders = localOrders.filter(
+                  (o: any) => o.status !== payload.status,
+                );
+                localStorage.setItem(
+                  "local_orders",
+                  JSON.stringify(localOrders),
+                );
               }
             } else {
               broadcastOrdersMemoryCache.clear();
@@ -494,8 +561,14 @@ export const ensureSyncChannel = () => {
             if (norm && norm._id) {
               broadcastOrdersMemoryCache.set(String(norm._id), norm);
               const localOrdersStr = localStorage.getItem("local_orders");
-              let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
-              const idx = localOrders.findIndex((o: any) => String(o._id) === String(norm._id) || String(o.id) === String(norm._id));
+              const localOrders = localOrdersStr
+                ? JSON.parse(localOrdersStr)
+                : [];
+              const idx = localOrders.findIndex(
+                (o: any) =>
+                  String(o._id) === String(norm._id) ||
+                  String(o.id) === String(norm._id),
+              );
               if (idx !== -1) {
                 localOrders[idx] = norm;
               } else {
@@ -511,16 +584,26 @@ export const ensureSyncChannel = () => {
               if (localOrdersStr) {
                 try {
                   const localOrders = JSON.parse(localOrdersStr);
-                  prev = localOrders.find((o: any) => String(o._id) === sId || String(o.id) === sId);
-                } catch(e) {}
+                  prev = localOrders.find(
+                    (o: any) => String(o._id) === sId || String(o.id) === sId,
+                  );
+                } catch {}
               }
             }
             if (prev) {
-              const updated = normalizeOrder({ ...prev, ...payload, timestamp: payload.timestamp || new Date().toISOString() });
+              const updated = normalizeOrder({
+                ...prev,
+                ...payload,
+                timestamp: payload.timestamp || new Date().toISOString(),
+              });
               broadcastOrdersMemoryCache.set(sId, updated);
               const localOrdersStr = localStorage.getItem("local_orders");
-              let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
-              const idx = localOrders.findIndex((o: any) => String(o._id) === sId || String(o.id) === sId);
+              const localOrders = localOrdersStr
+                ? JSON.parse(localOrdersStr)
+                : [];
+              const idx = localOrders.findIndex(
+                (o: any) => String(o._id) === sId || String(o.id) === sId,
+              );
               if (idx !== -1) {
                 localOrders[idx] = updated;
               } else {
@@ -533,55 +616,75 @@ export const ensureSyncChannel = () => {
         if (ordersListeners.length > 0) {
           triggerLocalOrdersChange();
         }
-        customerOrderListeners.forEach(listener => {
+        customerOrderListeners.forEach((listener) => {
           listener.fetchAndCallback();
         });
       })
-      .on('broadcast', { event: 'tables_changed' }, () => {
+      .on("broadcast", { event: "tables_changed" }, () => {
         if (tablesListeners.length > 0) {
           triggerLocalTablesChange();
         }
       })
-      .on('broadcast', { event: 'inventory_changed' }, () => {
+      .on("broadcast", { event: "inventory_changed" }, () => {
         kvCache.invalidate("inventory_items");
         kvCache.invalidate("recipe_boms");
         triggerLocalInventoryChange();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => {
-        if (tablesListeners.length > 0) {
-          triggerLocalTablesChange();
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, () => {
-        kvCache.invalidate("inventory_items");
-        triggerLocalInventoryChange();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'recipe_boms' }, () => {
-        kvCache.invalidate("recipe_boms");
-        triggerLocalInventoryChange();
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tables" },
+        () => {
+          if (tablesListeners.length > 0) {
+            triggerLocalTablesChange();
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory_items" },
+        () => {
+          kvCache.invalidate("inventory_items");
+          triggerLocalInventoryChange();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "recipe_boms" },
+        () => {
+          kvCache.invalidate("recipe_boms");
+          triggerLocalInventoryChange();
+        },
+      )
       // ——— EdgeOne 部署：购物车实时同步（替代原 WebSocket cartHub） ———
-      .on('broadcast', { event: 'cart_changed' }, (evtPayload: any) => {
+      .on("broadcast", { event: "cart_changed" }, (evtPayload: any) => {
         const p = evtPayload?.payload || evtPayload;
         if (p?.table) {
-          cartListeners.forEach(l => { if (l.table === p.table) l.callback(p.cart || {}); });
+          cartListeners.forEach((l) => {
+            if (l.table === p.table) l.callback(p.cart || {});
+          });
         }
       })
-      .on('broadcast', { event: 'cart_cleared' }, (evtPayload: any) => {
+      .on("broadcast", { event: "cart_cleared" }, (evtPayload: any) => {
         const p = evtPayload?.payload || evtPayload;
         if (p?.table) {
-          cartListeners.forEach(l => { if (l.table === p.table) l.callback({}); });
+          cartListeners.forEach((l) => {
+            if (l.table === p.table) l.callback({});
+          });
         }
       })
-      .on('broadcast', { event: 'admin_notification' }, (evtPayload: any) => {
+      .on("broadcast", { event: "admin_notification" }, (evtPayload: any) => {
         const p = evtPayload?.payload || evtPayload;
-        adminNotificationListeners.forEach(l => l(p));
+        adminNotificationListeners.forEach((l) => l(p));
       })
       .subscribe((status: string) => {
         console.log(`Supabase unified sync channel status: ${status}`);
-        if (status === 'SUBSCRIBED') {
+        if (status === "SUBSCRIBED") {
           isRealtimeConnected = true;
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (
+          status === "CLOSED" ||
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
           isRealtimeConnected = false;
         }
       });
@@ -593,45 +696,59 @@ ensureSyncChannel();
 
 // 自动检测并补全 Supabase 生产环境数据库空表
 setTimeout(() => {
-  api.seedProductionDatabase(false).catch(err => {
+  api.seedProductionDatabase(false).catch((err) => {
     console.warn("[Auto-Seed] Startup check notice:", err);
   });
 }, 1000);
 
-export const triggerBroadcast = (event: string, payload: any = {}) => {
+export const triggerBroadcast = (
+  event: string,
+  payload: Record<string, unknown> = {},
+) => {
   ensureSyncChannel();
   if (globalSyncChannel) {
-    globalSyncChannel.send({
-      type: 'broadcast',
-      event,
-      payload
-    }).catch((err: any) => {
-      console.warn(`Failed to send broadcast for ${event}:`, err);
-    });
+    globalSyncChannel
+      .send({
+        type: "broadcast",
+        event,
+        payload,
+      })
+      .catch((err: any) => {
+        console.warn(`Failed to send broadcast for ${event}:`, err);
+      });
   }
 };
 
-async function ensureNoBase64Image(imageUrl: string | undefined, folder: string): Promise<string> {
+async function ensureNoBase64Image(
+  imageUrl: string | undefined,
+  folder: string,
+): Promise<string> {
   if (!imageUrl || typeof imageUrl !== "string") return "";
   // 已是外链直接返回，避免二次上传
   if (!imageUrl.startsWith("data:image/")) return imageUrl;
   // 校验体积：原始 base64 > 4MB 拒绝直接上传，强制压缩
   if (imageUrl.length > 4 * 1024 * 1024) {
-    console.warn(`[Upload] Image too large (${(imageUrl.length/1024/1024).toFixed(2)}MB) in ${folder}, compressing...`);
+    console.warn(
+      `[Upload] Image too large (${(imageUrl.length / 1024 / 1024).toFixed(2)}MB) in ${folder}, compressing...`,
+    );
   }
   try {
     const uploaded = await api.uploadBlob(imageUrl, folder);
     // 若 uploadBlob 回退仍是 base64，检查是否已压缩到 300KB 以内，否则丢弃防止 DB 膨胀
     if (uploaded.startsWith("data:image/") && uploaded.length > 500 * 1024) {
-      console.warn(`[Upload] Fallback base64 still too large (${(uploaded.length/1024).toFixed(1)}KB), discarding to protect DB`);
+      console.warn(
+        `[Upload] Fallback base64 still too large (${(uploaded.length / 1024).toFixed(1)}KB), discarding to protect DB`,
+      );
       return "";
     }
     return uploaded;
   } catch (e) {
-    console.warn(`[Supabase Storage] Failed to upload base64 image to ${folder}:`, e);
+    console.warn(
+      `[Supabase Storage] Failed to upload base64 image to ${folder}:`,
+      e,
+    );
     // 降级：尝试本地压缩到 400x400，再失败则丢弃
     try {
-      const { compressBase64Image } = await import("./utils/image");
       const tiny = await compressBase64Image(imageUrl, 400, 400, 0.6);
       if (tiny.length < 300 * 1024) return tiny;
     } catch {}
@@ -648,7 +765,7 @@ export const api = {
         cachedKvSettings.categories = mergeAndOrderCategories(
           cachedKvSettings.categories,
           INITIAL_MENU_CATEGORIES,
-          cachedKvSettings.deletedItemIds || []
+          cachedKvSettings.deletedItemIds || [],
         );
       }
       return cachedKvSettings;
@@ -669,7 +786,7 @@ export const api = {
             data.categories = mergeAndOrderCategories(
               data.categories,
               INITIAL_MENU_CATEGORIES,
-              data.deletedItemIds || []
+              data.deletedItemIds || [],
             );
           }
           // 写入 KV 缓存
@@ -698,11 +815,17 @@ export const api = {
     const cachedDeletedItemIds = localStorage.getItem("menuDeletedItemIds");
     const cachedThemeMode = localStorage.getItem("menuThemeMode");
 
-    const parsedDeletedIds = cachedDeletedItemIds ? JSON.parse(cachedDeletedItemIds) : [];
+    const parsedDeletedIds = cachedDeletedItemIds
+      ? JSON.parse(cachedDeletedItemIds)
+      : [];
 
     return {
       categories: cachedCategories
-        ? mergeAndOrderCategories(JSON.parse(cachedCategories), INITIAL_MENU_CATEGORIES, parsedDeletedIds)
+        ? mergeAndOrderCategories(
+            JSON.parse(cachedCategories),
+            INITIAL_MENU_CATEGORIES,
+            parsedDeletedIds,
+          )
         : INITIAL_MENU_CATEGORIES,
       promotions: cachedPromotions ? JSON.parse(cachedPromotions) : [],
       bgUrl: cachedBgUrl || "",
@@ -710,36 +833,45 @@ export const api = {
       welcomeMessage: cachedWelcomeMessage || "Premium Charcoal BBQ",
       logoUrl: cachedLogoUrl || "",
       adminPassword: cachedAdminPassword || "admin123",
-      devicePasswords: cachedDevicePasswords ? JSON.parse(cachedDevicePasswords) : [],
+      devicePasswords: cachedDevicePasswords
+        ? JSON.parse(cachedDevicePasswords)
+        : [],
       securityQuestion: cachedSecurityQuestion || "",
       securityAnswer: cachedSecurityAnswer || "",
       soundEnabled: cachedSoundEnabled ? cachedSoundEnabled === "true" : true,
       layoutStyle: cachedLayoutStyle || "grid",
-      receiptSettings: cachedReceiptSettings ? JSON.parse(cachedReceiptSettings) : {},
-      deletedItemIds: cachedDeletedItemIds ? JSON.parse(cachedDeletedItemIds) : [],
-      theme: (cachedThemeMode as "midnight" | "light") || "midnight"
+      receiptSettings: cachedReceiptSettings
+        ? JSON.parse(cachedReceiptSettings)
+        : {},
+      deletedItemIds: cachedDeletedItemIds
+        ? JSON.parse(cachedDeletedItemIds)
+        : [],
+      theme: (cachedThemeMode as "midnight" | "light") || "midnight",
     };
   },
 
-  subscribeToSettings: (callback: (data: any) => void) => {
+  subscribeToSettings: (callback: (data: Record<string, unknown>) => void) => {
     settingsListeners.push(callback);
-    
+
     let lastJson = "";
-    const handleData = (data: any) => {
+    const handleData = (data: Record<string, unknown>) => {
       if (!data) return;
       const currentJson = JSON.stringify(data);
       if (currentJson !== lastJson) {
         lastJson = currentJson;
         callback(data);
         // Sync to other local listeners
-        settingsListeners.forEach(cb => {
+        settingsListeners.forEach((cb) => {
           if (cb !== callback) cb(data);
         });
       }
     };
 
     // Immediately fetch
-    api.getSettings().then(handleData).catch(() => {});
+    api
+      .getSettings()
+      .then(handleData)
+      .catch(() => {});
 
     // Ensure the unified channel is running
     ensureSyncChannel();
@@ -748,7 +880,10 @@ export const api = {
     // Avoids polling the database if Supabase is connected and healthy
     const pollInterval = setInterval(() => {
       if (!isSupabaseConfigured || !isSupabaseHealthy) {
-        api.getSettings().then(handleData).catch(() => {});
+        api
+          .getSettings()
+          .then(handleData)
+          .catch(() => {});
       }
     }, 5000);
 
@@ -759,14 +894,17 @@ export const api = {
       if (now - lastFetchTime < 30000) return; // 30s throttle
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
         lastFetchTime = now;
-        api.getSettings().then(handleData).catch(() => {});
+        api
+          .getSettings()
+          .then(handleData)
+          .catch(() => {});
       }
     };
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleFocus);
 
     return () => {
-      settingsListeners = settingsListeners.filter(l => l !== callback);
+      settingsListeners = settingsListeners.filter((l) => l !== callback);
       clearInterval(pollInterval);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
@@ -778,32 +916,30 @@ export const api = {
     try {
       let remoteOrders: any[] = [];
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("*");
+        const { data, error } = await supabase.from("orders").select("*");
         if (error) throw error;
         if (data) {
           remoteOrders = data.map(normalizeOrder);
         }
       }
-      
+
       const localOrdersStr = localStorage.getItem("local_orders");
       let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
       let needsSave = false;
-      localOrders = localOrders.map((lo: any) => {
+      localOrders = localOrders.map((lo: Record<string, unknown>) => {
         if (!lo._id && !lo.id) needsSave = true;
         return normalizeOrder(lo);
       });
       if (needsSave) {
         localStorage.setItem("local_orders", JSON.stringify(localOrders));
       }
-      
-      const mergedMap = new Map<string, any>();
-      remoteOrders.forEach((ro: any) => {
+
+      const mergedMap = new Map<string, Order>();
+      remoteOrders.forEach((ro) => {
         const norm = normalizeOrder(ro);
         if (norm._id) mergedMap.set(String(norm._id), norm);
       });
-      localOrders.forEach((lo: any) => {
+      localOrders.forEach((lo: Record<string, unknown>) => {
         const norm = normalizeOrder(lo);
         if (norm._id) {
           const existing = mergedMap.get(String(norm._id));
@@ -818,17 +954,17 @@ export const api = {
           }
         }
       });
-      
+
       return Array.from(mergedMap.values()).sort(
-        (a: any, b: any) =>
+        (a: Order, b: Order) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
       );
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseReadError(e, "getOrders");
       const localOrdersStr = localStorage.getItem("local_orders");
       let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
       let needsSave = false;
-      localOrders = localOrders.map((lo: any) => {
+      localOrders = localOrders.map((lo: Record<string, unknown>) => {
         if (!lo._id && !lo.id) needsSave = true;
         return normalizeOrder(lo);
       });
@@ -836,15 +972,16 @@ export const api = {
         localStorage.setItem("local_orders", JSON.stringify(localOrders));
       }
       return localOrders.sort(
-        (a: any, b: any) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        (a: Record<string, unknown>, b: Record<string, unknown>) =>
+          new Date(a.timestamp as string).getTime() -
+          new Date(b.timestamp as string).getTime(),
       );
     }
   },
 
-  subscribeToOrders: (callback: (orders: any[]) => void) => {
+  subscribeToOrders: (callback: (orders: Order[]) => void) => {
     ordersListeners.push(callback);
-    
+
     let lastJson = "";
     const fetchAndTrigger = async () => {
       try {
@@ -853,7 +990,7 @@ export const api = {
         if (currentJson !== lastJson) {
           lastJson = currentJson;
           callback(currentOrders);
-          ordersListeners.forEach(cb => {
+          ordersListeners.forEach((cb) => {
             if (cb !== callback) cb(currentOrders);
           });
         }
@@ -896,20 +1033,24 @@ export const api = {
     document.addEventListener("visibilitychange", handleFocus);
 
     return () => {
-      ordersListeners = ordersListeners.filter(l => l !== callback);
+      ordersListeners = ordersListeners.filter((l) => l !== callback);
       clearInterval(pollInterval);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
     };
   },
 
-    verifyOrderValidity: async (customerNameOrTable: string): Promise<{ hasActiveOrder: boolean; activeOrder: any | null }> => {
+  verifyOrderValidity: async (
+    customerNameOrTable: string,
+  ): Promise<{ hasActiveOrder: boolean; activeOrder: Order | null }> => {
     const custName = customerNameOrTable || "A1";
 
     // 1. Check local storage
     const localOrdersStr = localStorage.getItem("local_orders");
     const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
-    const localActive = localOrders.map(normalizeOrder).find((o: any) => isOrderMatchingTable(o, custName) && isOrderActive(o));
+    const localActive = localOrders
+      .map(normalizeOrder)
+      .find((o: any) => isOrderMatchingTable(o, custName) && isOrderActive(o));
 
     // 2. Check memory cache
     const memActive = Array.from(broadcastOrdersMemoryCache.values())
@@ -917,19 +1058,37 @@ export const api = {
       .find((o: any) => isOrderMatchingTable(o, custName) && isOrderActive(o));
 
     // 3. Check DB
-    let dbActive: any = null;
+    let dbActive: Order | null = null;
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
-        let query = supabase.from("orders").select("*").neq("status", "completed").neq("status", "cancelled");
-        
-        const validMatchCols = ["table_no", "customer_name", "customerName", "tableNo"].filter(c => cols.includes(c));
-          const targetNorm = normalizeTableString(custName);
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        let query = supabase
+          .from("orders")
+          .select("*")
+          .neq("status", "completed")
+          .neq("status", "cancelled");
+
+        const validMatchCols = [
+          "table_no",
+          "customer_name",
+          "customerName",
+          "tableNo",
+        ].filter((c) => cols.includes(c));
+        const targetNorm = normalizeTableString(custName);
         if (validMatchCols.length > 0) {
-          const matchValues = Array.from(new Set([custName, targetNorm, `桌号 ${custName}`, `桌号 ${targetNorm}`, `${targetNorm}号桌`])).filter(Boolean) as string[];
+          const matchValues = Array.from(
+            new Set([
+              custName,
+              targetNorm,
+              `桌号 ${custName}`,
+              `桌号 ${targetNorm}`,
+              `${targetNorm}号桌`,
+            ]),
+          ).filter(Boolean) as string[];
           const conditions: string[] = [];
-          validMatchCols.forEach(col => {
-            matchValues.forEach(val => {
+          validMatchCols.forEach((col) => {
+            matchValues.forEach((val) => {
               conditions.push(`${col}.eq.${escOrVal(val)}`);
             });
           });
@@ -940,10 +1099,14 @@ export const api = {
 
         const { data, error } = await query;
         if (!error && data && data.length > 0) {
-          const sorted = data.map(normalizeOrder).sort((a: any, b: any) => 
-            parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp)
-          );
-          dbActive = sorted[0];
+          const sorted = data
+            .map(normalizeOrder)
+            .sort(
+              (a: any, b: any) =>
+                parseOrderTimestamp(b.timestamp) -
+                parseOrderTimestamp(a.timestamp),
+            );
+          dbActive = sorted[0] ?? null;
         }
       } catch (e) {
         console.warn("[verifyOrderValidity] server verification failed:", e);
@@ -952,8 +1115,9 @@ export const api = {
 
     const candidates = [localActive, memActive, dbActive].filter(Boolean);
     if (candidates.length > 0) {
-      candidates.sort((a, b) => 
-        parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp)
+      candidates.sort(
+        (a, b) =>
+          parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp),
       );
       return { hasActiveOrder: true, activeOrder: candidates[0] };
     }
@@ -961,27 +1125,34 @@ export const api = {
     return { hasActiveOrder: false, activeOrder: null };
   },
 
-  addOrder: async (order: any) => {
+  addOrder: async (order: Record<string, unknown>) => {
     const custName = order.customerName || order.customer_name || "A1";
     const tableNo = order.tableNo || order.table_no || custName || "A1";
 
-    const newId = order.id || order._id || "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+    const newId =
+      order.id ||
+      order._id ||
+      "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
     const sanitizedItems = [];
     if (order.items && Array.isArray(order.items)) {
       for (const item of order.items) {
-        const cleanImage = await ensureNoBase64Image(item.image, "order_dishes");
+        const cleanImage = await ensureNoBase64Image(
+          item.image,
+          "order_dishes",
+        );
         sanitizedItems.push({ ...item, image: cleanImage });
       }
     }
 
     const localOrdersStr = localStorage.getItem("local_orders");
-    let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
 
     // Always create a brand-new independent order so new orders are never mixed up with previous orders
     const fullOrder = normalizeOrder({
       id: newId,
       _id: newId,
-      orderNumber: order.orderNumber || ("ORD-" + Math.floor(Math.random() * 1000000)),
+      orderNumber:
+        order.orderNumber || "ORD-" + Math.floor(Math.random() * 1000000),
       customerName: custName,
       customer_name: custName,
       table_no: tableNo,
@@ -995,7 +1166,7 @@ export const api = {
       createdAt: order.timestamp || new Date().toISOString(),
       notes: order.notes || "",
       unprintedNewOrder: true,
-      unprintedAdditions: order.unprintedAdditions || []
+      unprintedAdditions: order.unprintedAdditions || [],
     });
 
     localOrders.push(fullOrder);
@@ -1004,33 +1175,50 @@ export const api = {
 
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
-        const dbPayload = await filterPayloadByTable("orders", fullOrder);
-        const { error: insertError } = await supabase.from("orders").insert(dbPayload);
-        if (insertError) console.warn("[addOrder] Supabase insert error:", insertError);
+        const dbPayload = await filterPayloadByTable(
+          "orders",
+          fullOrder as unknown as Record<string, unknown>,
+        );
+        const { error: insertError } = await supabase
+          .from("orders")
+          .insert(dbPayload);
+        if (insertError)
+          console.warn("[addOrder] Supabase insert error:", insertError);
       } catch (dbErr) {
         console.warn("[addOrder] Supabase insert sync failed:", dbErr);
       }
     }
 
     triggerLocalOrdersChange();
-    triggerBroadcast('orders_changed', { action: 'upsert', order: fullOrder });
-    api.deductInventoryForOrderItems(order.items);
+    triggerBroadcast("orders_changed", { action: "upsert", order: fullOrder });
+    api.deductInventoryForOrderItems(order.items as Record<string, unknown>[]);
     return fullOrder;
   },
 
-  appendDishesToOrder: async (targetOrderId: string, orderData: any) => {
+  appendDishesToOrder: async (
+    targetOrderId: string,
+    orderData: Record<string, unknown>,
+  ) => {
     const sId = String(targetOrderId);
-    
+
     // Find base order
     const localOrdersStr = localStorage.getItem("local_orders");
-    let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
-    let baseOrder = broadcastOrdersMemoryCache.get(sId) || localOrders.map(normalizeOrder).find((o: any) => String(o._id) === sId || String(o.id) === sId);
+    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    let baseOrder =
+      broadcastOrdersMemoryCache.get(sId) ||
+      localOrders
+        .map(normalizeOrder)
+        .find((o: any) => String(o._id) === sId || String(o.id) === sId);
 
     if (!baseOrder && supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
         const matchCol = cols.includes("_id") ? "_id" : "id";
-        const { data } = await supabase.from("orders").select("*").eq(matchCol, sId);
+        const { data } = await supabase
+          .from("orders")
+          .select("*")
+          .eq(matchCol, sId);
         if (data && data.length > 0) baseOrder = normalizeOrder(data[0]);
       } catch (e) {
         console.warn("[appendDishesToOrder] DB fetch error:", e);
@@ -1044,7 +1232,10 @@ export const api = {
     const sanitizedItems = [];
     if (orderData.items && Array.isArray(orderData.items)) {
       for (const item of orderData.items) {
-        const cleanImage = await ensureNoBase64Image(item.image, "order_dishes");
+        const cleanImage = await ensureNoBase64Image(
+          item.image,
+          "order_dishes",
+        );
         sanitizedItems.push({ ...item, image: cleanImage, isAdded: true });
       }
     }
@@ -1052,40 +1243,56 @@ export const api = {
     const existingItems = baseOrder.items || [];
     const updatedItems = [...existingItems, ...sanitizedItems];
     const currentUnprinted = baseOrder.unprintedAdditions || [];
-    const updatedUnprinted = [...currentUnprinted, { items: sanitizedItems, timestamp: new Date().toISOString() }];
+    const updatedUnprinted = [
+      ...currentUnprinted,
+      { items: sanitizedItems, timestamp: new Date().toISOString() },
+    ];
     const addedTotal = Number(orderData.total || 0);
-    const updatedTotal = Number((Number(baseOrder.total || baseOrder.total_amount || 0) + addedTotal).toFixed(2));
+    const updatedTotal = Number(
+      (
+        Number(baseOrder.total || baseOrder.total_amount || 0) + addedTotal
+      ).toFixed(2),
+    );
 
     const updatePayload = {
       items: updatedItems,
       unprintedAdditions: updatedUnprinted,
       total: updatedTotal,
       total_amount: updatedTotal,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     const fullOrder = normalizeOrder({
       ...baseOrder,
-      ...updatePayload
+      ...updatePayload,
     });
 
     await api.updateOrder(sId, updatePayload, fullOrder);
-    api.deductInventoryForOrderItems(orderData.items);
+    api.deductInventoryForOrderItems(
+      orderData.items as Record<string, unknown>[],
+    );
 
     return fullOrder;
   },
 
-  updateOrder: async (orderId: string, updatePayload: any, fullOrderOverride?: any) => {
+  updateOrder: async (
+    orderId: string,
+    updatePayload: Record<string, unknown>,
+    fullOrderOverride?: Order,
+  ) => {
     const sId = String(orderId);
-    
-    let prev: any = fullOrderOverride || broadcastOrdersMemoryCache.get(sId);
+
+    let prev: Order | undefined =
+      fullOrderOverride || broadcastOrdersMemoryCache.get(sId);
     if (!prev) {
       const localOrdersStr = localStorage.getItem("local_orders");
       if (localOrdersStr) {
         try {
           const localOrders = JSON.parse(localOrdersStr);
-          prev = localOrders.find((o: any) => String(o._id) === sId || String(o.id) === sId);
-        } catch(e) {}
+          prev = localOrders.find(
+            (o: any) => String(o._id) === sId || String(o.id) === sId,
+          );
+        } catch {}
       }
     }
 
@@ -1094,14 +1301,15 @@ export const api = {
       ...updatePayload,
       _id: sId,
       id: sId,
-      timestamp: updatePayload.timestamp || new Date().toISOString()
+      timestamp: updatePayload.timestamp || new Date().toISOString(),
     });
 
     broadcastOrdersMemoryCache.set(sId, updatedOrder);
 
     try {
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
         const dbPayload = await filterPayloadByTable("orders", updatePayload);
         let queryBuilder = supabase.from("orders").update(dbPayload);
         if (cols.includes("_id")) {
@@ -1112,13 +1320,15 @@ export const api = {
         const { error } = await queryBuilder;
         if (error) handleSupabaseError(error, "updateOrder");
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "updateOrder");
     }
 
     const localOrdersStr = localStorage.getItem("local_orders");
-    let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
-    const idx = localOrders.findIndex((o: any) => String(o._id) === sId || String(o.id) === sId);
+    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    const idx = localOrders.findIndex(
+      (o: any) => String(o._id) === sId || String(o.id) === sId,
+    );
     if (idx !== -1) {
       localOrders[idx] = updatedOrder;
     } else {
@@ -1127,7 +1337,12 @@ export const api = {
     localStorage.setItem("local_orders", JSON.stringify(localOrders));
 
     triggerLocalOrdersChange();
-    triggerBroadcast('orders_changed', { action: 'upsert', order: updatedOrder, orderId: sId, ...updatePayload });
+    triggerBroadcast("orders_changed", {
+      action: "upsert",
+      order: updatedOrder,
+      orderId: sId,
+      ...updatePayload,
+    });
   },
 
   clearOrders: async (status?: string) => {
@@ -1141,7 +1356,8 @@ export const api = {
 
     try {
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
         let queryBuilder = supabase.from("orders").delete();
         if (status) {
           queryBuilder = queryBuilder.eq("status", status);
@@ -1155,7 +1371,7 @@ export const api = {
         const { error } = await queryBuilder;
         if (error) handleSupabaseError(error, "clearOrders");
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "clearOrders");
     }
 
@@ -1170,7 +1386,7 @@ export const api = {
       localStorage.setItem("local_orders", JSON.stringify(localOrders));
     }
     triggerLocalOrdersChange();
-    triggerBroadcast('orders_changed', { action: 'clear', status });
+    triggerBroadcast("orders_changed", { action: "clear", status });
   },
 
   // 自动归档清理：删除超过 N 天的已完成订单，控制 DB 存储（Supabase 免费层配额保护）
@@ -1179,20 +1395,31 @@ export const api = {
     let removed = 0;
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
-        const tsCol = cols.includes("timestamp") ? "timestamp" : cols.includes("created_at") ? "created_at" : null;
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        const tsCol = cols.includes("timestamp")
+          ? "timestamp"
+          : cols.includes("created_at")
+            ? "created_at"
+            : null;
         let q = supabase.from("orders").delete().eq("status", "completed");
         if (tsCol) {
           q = q.lt(tsCol, new Date(cutoff).toISOString());
         } else {
           // 无时间列：拉到内存过滤（仅在极端旧表时触发）
-          const { data } = await supabase.from("orders").select("id,_id,timestamp,created_at,status").eq("status", "completed");
+          const { data } = await supabase
+            .from("orders")
+            .select("id,_id,timestamp,created_at,status")
+            .eq("status", "completed");
           if (data) {
-            const ids = data.filter((o: any) => {
-              const ts = o.timestamp || o.created_at;
-              return ts && new Date(ts).getTime() < cutoff;
-            }).map((o: any) => o.id || o._id);
-            if (ids.length) await supabase.from("orders").delete().in("id", ids);
+            const ids = data
+              .filter((o: any) => {
+                const ts = o.timestamp || o.created_at;
+                return ts && new Date(ts).getTime() < cutoff;
+              })
+              .map((o: any) => o.id || o._id);
+            if (ids.length)
+              await supabase.from("orders").delete().in("id", ids);
             removed = ids.length;
           }
         }
@@ -1201,7 +1428,7 @@ export const api = {
           if (error) handleSupabaseError(error, "cleanupOldOrders");
           removed = count ?? 0;
         }
-      } catch (e: any) {
+      } catch (e) {
         handleSupabaseError(e, "cleanupOldOrders");
       }
     }
@@ -1222,7 +1449,10 @@ export const api = {
         }
       } catch {}
     }
-    triggerBroadcast('orders_changed', { action: 'clear', status: 'completed' });
+    triggerBroadcast("orders_changed", {
+      action: "clear",
+      status: "completed",
+    });
     return removed;
   },
 
@@ -1237,7 +1467,8 @@ export const api = {
 
     try {
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
         let queryBuilder = supabase.from("orders").delete();
         if (cols.includes("_id")) {
           queryBuilder = queryBuilder.eq("_id", orderId);
@@ -1247,36 +1478,48 @@ export const api = {
         const { error } = await queryBuilder;
         if (error) handleSupabaseError(error, "deleteOrder");
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "deleteOrder");
     }
 
     const localOrdersStr = localStorage.getItem("local_orders");
     if (localOrdersStr) {
       let localOrders = JSON.parse(localOrdersStr);
-      localOrders = localOrders.filter((o: any) => String(o._id) !== sId && String(o.id) !== sId);
+      localOrders = localOrders.filter(
+        (o: any) => String(o._id) !== sId && String(o.id) !== sId,
+      );
       localStorage.setItem("local_orders", JSON.stringify(localOrders));
     }
     triggerLocalOrdersChange();
-    triggerBroadcast('orders_changed', { action: 'delete', orderId });
+    triggerBroadcast("orders_changed", { action: "delete", orderId });
   },
 
-    subscribeToCustomerOrder: (customerName: string, callback: (order: any) => void) => {
+  subscribeToCustomerOrder: (
+    customerName: string,
+    callback: (order: Order | null) => void,
+  ) => {
     let isCancelled = false;
 
     const getLatestActiveLocalOrMem = () => {
       const memOrders = Array.from(broadcastOrdersMemoryCache.values())
         .map(normalizeOrder)
-        .filter((o) => isOrderMatchingTable(o, customerName) && isOrderActive(o));
+        .filter(
+          (o) => isOrderMatchingTable(o, customerName) && isOrderActive(o),
+        );
       const localOrdersStr = localStorage.getItem("local_orders");
       const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
       const localActive = localOrders
         .map(normalizeOrder)
-        .filter((o: any) => isOrderMatchingTable(o, customerName) && isOrderActive(o));
-      
+        .filter(
+          (o: any) => isOrderMatchingTable(o, customerName) && isOrderActive(o),
+        );
+
       const all = [...memOrders, ...localActive];
       if (all.length === 0) return null;
-      all.sort((a, b) => parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp));
+      all.sort(
+        (a, b) =>
+          parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp),
+      );
       return all[0];
     };
 
@@ -1284,16 +1527,34 @@ export const api = {
       try {
         let dbOrder = null;
         if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-          const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
-          let query = supabase.from("orders").select("*").neq("status", "completed").neq("status", "cancelled");
+          const cols =
+            (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+          let query = supabase
+            .from("orders")
+            .select("*")
+            .neq("status", "completed")
+            .neq("status", "cancelled");
 
-          const validMatchCols = ["table_no", "customer_name", "customerName", "tableNo"].filter(c => cols.includes(c));
+          const validMatchCols = [
+            "table_no",
+            "customer_name",
+            "customerName",
+            "tableNo",
+          ].filter((c) => cols.includes(c));
           const targetNorm = normalizeTableString(customerName);
           if (validMatchCols.length > 0) {
-            const matchValues = Array.from(new Set([customerName, targetNorm, `桌号 ${customerName}`, `桌号 ${targetNorm}`, `${targetNorm}号桌`])).filter(Boolean) as string[];
+            const matchValues = Array.from(
+              new Set([
+                customerName,
+                targetNorm,
+                `桌号 ${customerName}`,
+                `桌号 ${targetNorm}`,
+                `${targetNorm}号桌`,
+              ]),
+            ).filter(Boolean) as string[];
             const conditions: string[] = [];
-            validMatchCols.forEach(col => {
-              matchValues.forEach(val => {
+            validMatchCols.forEach((col) => {
+              matchValues.forEach((val) => {
                 conditions.push(`${col}.eq.${escOrVal(val)}`);
               });
             });
@@ -1347,33 +1608,63 @@ export const api = {
 
     return () => {
       isCancelled = true;
-      customerOrderListeners = customerOrderListeners.filter(l => l !== listenerObj);
+      customerOrderListeners = customerOrderListeners.filter(
+        (l) => l !== listenerObj,
+      );
     };
   },
 
   updateOrderStatus: async (orderId: string, status: string) => {
     const sId = String(orderId);
     // 高风险4修复：状态机校验
-    const prevAny = broadcastOrdersMemoryCache.get(sId) || (()=>{ try{ const arr=JSON.parse(localStorage.getItem('local_orders')||'[]'); return arr.find((o:any)=>String(o._id)===sId||String(o.id)===sId); } catch{ return null; } })();
-    const from = String(prevAny?.status || 'pending');
-    const allowed: Record<string,string[]> = { pending:['cooking','cancelled'], cooking:['served','cancelled'], served:['completed','cancelled'], completed:[], cancelled:[] };
-    if(from!==String(status).toLowerCase() && !(allowed[from.toLowerCase()]||[]).includes(String(status).toLowerCase())){
-      const err=new Error(`非法状态流转 ${from} -> ${status}`);
-      console.error('[orders] status blocked', err); throw err;
+    const prevAny =
+      broadcastOrdersMemoryCache.get(sId) ||
+      (() => {
+        try {
+          const arr = JSON.parse(localStorage.getItem("local_orders") || "[]");
+          return arr.find(
+            (o: any) => String(o._id) === sId || String(o.id) === sId,
+          );
+        } catch {
+          return null;
+        }
+      })();
+    const from = String(prevAny?.status || "pending");
+    const allowed: Record<string, string[]> = {
+      pending: ["cooking", "cancelled"],
+      cooking: ["served", "cancelled"],
+      served: ["completed", "cancelled"],
+      completed: [],
+      cancelled: [],
+    };
+    if (
+      from !== String(status).toLowerCase() &&
+      !(allowed[from.toLowerCase()] || []).includes(
+        String(status).toLowerCase(),
+      )
+    ) {
+      const err = new Error(`非法状态流转 ${from} -> ${status}`);
+      console.error("[orders] status blocked", err);
+      throw err;
     }
     if (broadcastOrdersMemoryCache.has(sId)) {
       const prev = broadcastOrdersMemoryCache.get(sId);
-      const updated = normalizeOrder({ ...prev, status, timestamp: new Date().toISOString() });
+      const updated = normalizeOrder({
+        ...prev,
+        status,
+        timestamp: new Date().toISOString(),
+      });
       broadcastOrdersMemoryCache.set(sId, updated);
     }
 
     try {
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const cols = (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
+        const cols =
+          (await getTableColumns("orders")) || KNOWN_COLUMNS["orders"] || [];
         let queryBuilder = supabase.from("orders").update({
           status,
           timestamp: new Date().toISOString(),
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         });
         if (cols.includes("_id")) {
           queryBuilder = queryBuilder.eq("_id", orderId);
@@ -1383,30 +1674,38 @@ export const api = {
         const { error } = await queryBuilder;
         if (error) handleSupabaseError(error, "updateOrderStatus");
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "updateOrderStatus");
     }
 
     const localOrdersStr = localStorage.getItem("local_orders");
     if (localOrdersStr) {
-      let localOrders = JSON.parse(localOrdersStr);
-      const idx = localOrders.findIndex((o: any) => String(o._id) === sId || String(o.id) === sId);
+      const localOrders = JSON.parse(localOrdersStr);
+      const idx = localOrders.findIndex(
+        (o: any) => String(o._id) === sId || String(o.id) === sId,
+      );
       if (idx !== -1) {
         localOrders[idx] = normalizeOrder({
           ...localOrders[idx],
           status,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
         localStorage.setItem("local_orders", JSON.stringify(localOrders));
       }
     }
     triggerLocalOrdersChange();
-    triggerBroadcast('orders_changed', { action: 'upsert', orderId, status });
+    triggerBroadcast("orders_changed", { action: "upsert", orderId, status });
   },
 
-  updateSettings: async (payload: any, onProgress?: (msg: string) => void) => {
+  updateSettings: async (
+    payload: Record<string, unknown>,
+    onProgress?: (msg: string) => void,
+  ) => {
     try {
-      if (onProgress) onProgress("正在优化图文并保存到云端... (Optimizing & saving to cloud...)");
+      if (onProgress)
+        onProgress(
+          "正在优化图文并保存到云端... (Optimizing & saving to cloud...)",
+        );
 
       const cleanPayload = JSON.parse(JSON.stringify(payload));
 
@@ -1427,58 +1726,84 @@ export const api = {
         if (cleanPayload.promotions && Array.isArray(cleanPayload.promotions)) {
           for (const promo of cleanPayload.promotions) {
             if (promo.image) {
-              promo.image = await ensureNoBase64Image(promo.image, "promotions");
+              promo.image = await ensureNoBase64Image(
+                promo.image,
+                "promotions",
+              );
             }
           }
         }
 
         if (cleanPayload.bgUrl) {
-          cleanPayload.bgUrl = await ensureNoBase64Image(cleanPayload.bgUrl, "backgrounds");
+          cleanPayload.bgUrl = await ensureNoBase64Image(
+            cleanPayload.bgUrl,
+            "backgrounds",
+          );
         }
 
         if (cleanPayload.logoUrl) {
-          cleanPayload.logoUrl = await ensureNoBase64Image(cleanPayload.logoUrl, "logos");
+          cleanPayload.logoUrl = await ensureNoBase64Image(
+            cleanPayload.logoUrl,
+            "logos",
+          );
         }
 
         const dbPayload = await filterPayloadByTable("settings", cleanPayload);
 
-        const { error } = await supabase
-          .from("settings")
-          .upsert({
-            id: SETTINGS_DOC_ID,
-            ...dbPayload
-          });
+        const { error } = await supabase.from("settings").upsert({
+          id: SETTINGS_DOC_ID,
+          ...dbPayload,
+        });
 
         if (error) throw error;
         // 更新 KV 高速缓存（仅在 DB 成功后）
         await kvCache.set("app_settings", cleanPayload, 600);
-        triggerBroadcast('settings_changed');
+        triggerBroadcast("settings_changed");
 
         // 自动将分类与菜品同步至 Supabase 关系表 (categories / menu_items)
         if (cleanPayload.categories && Array.isArray(cleanPayload.categories)) {
-          api.syncCategoriesAndMenuItemsToSupabase(cleanPayload.categories).catch(err => {
-            console.warn("[Auto-Sync] Failed to sync menu items to relational tables:", err);
-          });
+          api
+            .syncCategoriesAndMenuItemsToSupabase(cleanPayload.categories)
+            .catch((err) => {
+              console.warn(
+                "[Auto-Sync] Failed to sync menu items to relational tables:",
+                err,
+              );
+            });
         }
 
         if (onProgress) onProgress("");
-        settingsListeners.forEach(cb => cb(cleanPayload));
+        settingsListeners.forEach((cb) => cb(cleanPayload));
         return cleanPayload;
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "updateSettings");
       // 区分配额/网络错误：若 Supabase 已配置但写入失败，抛给调用方以便提示用户，而非静默当作成功
-      const msg = String(e?.message || e);
-      if (msg.includes("quota") || msg.includes("exceeded") || msg.includes("503") || msg.includes("429")) {
+      const msg = String((e as Error)?.message || e);
+      if (
+        msg.includes("quota") ||
+        msg.includes("exceeded") ||
+        msg.includes("503") ||
+        msg.includes("429")
+      ) {
         setQuotaExceeded(true);
       }
       // 仍做本地备份以防丢失，但需让调用方知道云端失败
-      const isSupabaseWriteFailure = supabase && isSupabaseConfigured && isSupabaseHealthy;
+      const isSupabaseWriteFailure =
+        supabase && isSupabaseConfigured && isSupabaseHealthy;
       if (isSupabaseWriteFailure) {
         // 保存本地备份
         try {
-          if (payload.categories) localStorage.setItem("menuCategories", JSON.stringify(payload.categories));
-          if (payload.deletedItemIds !== undefined) localStorage.setItem("menuDeletedItemIds", JSON.stringify(payload.deletedItemIds));
+          if (payload.categories)
+            localStorage.setItem(
+              "menuCategories",
+              JSON.stringify(payload.categories),
+            );
+          if (payload.deletedItemIds !== undefined)
+            localStorage.setItem(
+              "menuDeletedItemIds",
+              JSON.stringify(payload.deletedItemIds),
+            );
           await kvCache.set("app_settings", payload, 600);
         } catch {}
         throw e; // 抛出让 UI 弹出“本地已保存，云端失败”提示
@@ -1487,25 +1812,67 @@ export const api = {
 
     // Local fallback（仅当 Supabase 未配置或未连接时走到这里）
     if (onProgress) onProgress("");
-    if (payload.categories) localStorage.setItem("menuCategories", JSON.stringify(payload.categories));
-    if (payload.promotions) localStorage.setItem("menuPromotions", JSON.stringify(payload.promotions));
-    if (payload.bgUrl !== undefined) localStorage.setItem("menuBgUrl", payload.bgUrl);
-    if (payload.restaurantName !== undefined) localStorage.setItem("menuRestaurantName", payload.restaurantName);
-    if (payload.welcomeMessage !== undefined) localStorage.setItem("menuWelcomeMessage", payload.welcomeMessage);
-    if (payload.logoUrl !== undefined) localStorage.setItem("menuLogoUrl", payload.logoUrl);
-    if (payload.adminPassword !== undefined) localStorage.setItem("menuAdminPassword", payload.adminPassword);
-    if (payload.devicePasswords !== undefined) localStorage.setItem("menuDevicePasswords", JSON.stringify(payload.devicePasswords));
-    if (payload.securityQuestion !== undefined) localStorage.setItem("menuSecurityQuestion", payload.securityQuestion);
-    if (payload.securityAnswer !== undefined) localStorage.setItem("menuSecurityAnswer", payload.securityAnswer);
-    if (payload.soundEnabled !== undefined) localStorage.setItem("menuSoundEnabled", String(payload.soundEnabled));
-    if (payload.layoutStyle !== undefined) localStorage.setItem("menuLayoutStyle", payload.layoutStyle);
-    if (payload.receiptSettings !== undefined) localStorage.setItem("menuReceiptSettings", JSON.stringify(payload.receiptSettings));
-    if (payload.deletedItemIds !== undefined) localStorage.setItem("menuDeletedItemIds", JSON.stringify(payload.deletedItemIds));
-    if (payload.theme !== undefined) localStorage.setItem("menuThemeMode", payload.theme);
-    
+    if (payload.categories)
+      localStorage.setItem(
+        "menuCategories",
+        JSON.stringify(payload.categories),
+      );
+    if (payload.promotions)
+      localStorage.setItem(
+        "menuPromotions",
+        JSON.stringify(payload.promotions),
+      );
+    if (payload.bgUrl !== undefined)
+      localStorage.setItem("menuBgUrl", String(payload.bgUrl));
+    if (payload.restaurantName !== undefined)
+      localStorage.setItem(
+        "menuRestaurantName",
+        String(payload.restaurantName),
+      );
+    if (payload.welcomeMessage !== undefined)
+      localStorage.setItem(
+        "menuWelcomeMessage",
+        String(payload.welcomeMessage),
+      );
+    if (payload.logoUrl !== undefined)
+      localStorage.setItem("menuLogoUrl", String(payload.logoUrl));
+    if (payload.adminPassword !== undefined)
+      localStorage.setItem("menuAdminPassword", String(payload.adminPassword));
+    if (payload.devicePasswords !== undefined)
+      localStorage.setItem(
+        "menuDevicePasswords",
+        JSON.stringify(payload.devicePasswords),
+      );
+    if (payload.securityQuestion !== undefined)
+      localStorage.setItem(
+        "menuSecurityQuestion",
+        String(payload.securityQuestion),
+      );
+    if (payload.securityAnswer !== undefined)
+      localStorage.setItem(
+        "menuSecurityAnswer",
+        String(payload.securityAnswer),
+      );
+    if (payload.soundEnabled !== undefined)
+      localStorage.setItem("menuSoundEnabled", String(payload.soundEnabled));
+    if (payload.layoutStyle !== undefined)
+      localStorage.setItem("menuLayoutStyle", String(payload.layoutStyle));
+    if (payload.receiptSettings !== undefined)
+      localStorage.setItem(
+        "menuReceiptSettings",
+        JSON.stringify(payload.receiptSettings),
+      );
+    if (payload.deletedItemIds !== undefined)
+      localStorage.setItem(
+        "menuDeletedItemIds",
+        JSON.stringify(payload.deletedItemIds),
+      );
+    if (payload.theme !== undefined)
+      localStorage.setItem("menuThemeMode", String(payload.theme));
+
     await kvCache.set("app_settings", payload, 600);
-    settingsListeners.forEach(cb => cb(payload));
-    triggerBroadcast('settings_changed');
+    settingsListeners.forEach((cb) => cb(payload));
+    triggerBroadcast("settings_changed");
     return payload;
   },
 
@@ -1513,39 +1880,61 @@ export const api = {
     // 1. 先压缩到 800x800 0.72，作为上传源
     let compressedBase64 = base64;
     try {
-      const { compressBase64Image } = await import("./utils/image");
       compressedBase64 = await compressBase64Image(base64, 800, 800, 0.72);
       // 若压缩后仍 > 400KB，再二次压缩
       if (compressedBase64.length > 400 * 1024) {
-        compressedBase64 = await compressBase64Image(compressedBase64, 600, 600, 0.65);
+        compressedBase64 = await compressBase64Image(
+          compressedBase64,
+          600,
+          600,
+          0.65,
+        );
       }
-    } catch (e: any) {
+    } catch (e) {
       console.warn("Image compress failed, using original", e);
     }
 
     // 2. 尝试上传到 Storage，成功则返回 URL
     try {
-      const publicUrl = await blobStorage.uploadImage(compressedBase64, basePath);
+      const publicUrl = await blobStorage.uploadImage(
+        compressedBase64,
+        basePath,
+      );
       // 只有返回 http/https 才算成功上传，避免把 base64 当 URL 存入 DB
-      if (publicUrl && (publicUrl.startsWith("http://") || publicUrl.startsWith("https://"))) {
+      if (
+        publicUrl &&
+        (publicUrl.startsWith("http://") || publicUrl.startsWith("https://"))
+      ) {
         return publicUrl;
       }
       // 若返回的仍是 base64，说明上传未成功，继续走压缩兜底
       if (publicUrl && publicUrl.startsWith("data:image/")) {
         compressedBase64 = publicUrl;
       }
-    } catch (e: any) {
-      console.warn("Blob Storage upload failed, falling back to compressed base64", e);
+    } catch (e) {
+      console.warn(
+        "Blob Storage upload failed, falling back to compressed base64",
+        e,
+      );
     }
 
     // 3. 兜底：确保最终存入 DB 的 base64 不超过 500KB，否则丢弃
-    if (compressedBase64.startsWith("data:image/") && compressedBase64.length > 500 * 1024) {
+    if (
+      compressedBase64.startsWith("data:image/") &&
+      compressedBase64.length > 500 * 1024
+    ) {
       try {
-        const { compressBase64Image } = await import("./utils/image");
-        compressedBase64 = await compressBase64Image(compressedBase64, 500, 500, 0.6);
+        compressedBase64 = await compressBase64Image(
+          compressedBase64,
+          500,
+          500,
+          0.6,
+        );
       } catch {}
       if (compressedBase64.length > 500 * 1024) {
-        console.warn(`[uploadBlob] Compressed image still >500KB (${(compressedBase64.length/1024).toFixed(1)}KB), discarding`);
+        console.warn(
+          `[uploadBlob] Compressed image still >500KB (${(compressedBase64.length / 1024).toFixed(1)}KB), discarding`,
+        );
         return "";
       }
     }
@@ -1555,13 +1944,27 @@ export const api = {
   getStorageDiagnostics: async () => {
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
-        const folders = ["dishes", "backgrounds", "bg", "logo", "promotions", "categories"];
+        const folders = [
+          "dishes",
+          "backgrounds",
+          "bg",
+          "logo",
+          "promotions",
+          "categories",
+        ];
         let totalSizeBytes = 0;
-        const allFiles: Array<{ name: string; path: string; size: number; createdAt: string }> = [];
+        const allFiles: Array<{
+          name: string;
+          path: string;
+          size: number;
+          createdAt: string;
+        }> = [];
 
         // Add root files and discover additional folders
         try {
-          const { data: rootItems, error: rootError } = await supabase.storage.from("menu-assets").list("");
+          const { data: rootItems, error: rootError } = await supabase.storage
+            .from("menu-assets")
+            .list("");
           if (!rootError && rootItems) {
             for (const item of rootItems) {
               if (item.name === ".emptyFolderPlaceholder") continue;
@@ -1572,9 +1975,12 @@ export const api = {
                   name: item.name,
                   path: item.name,
                   size: size,
-                  createdAt: item.created_at || ""
+                  createdAt: item.created_at || "",
                 });
-              } else if (!folders.includes(item.name) && item.name.indexOf('.') === -1) {
+              } else if (
+                !folders.includes(item.name) &&
+                item.name.indexOf(".") === -1
+              ) {
                 folders.push(item.name);
               }
             }
@@ -1586,9 +1992,14 @@ export const api = {
         // List files in all folders
         for (const folder of folders) {
           try {
-            const { data, error } = await supabase.storage.from("menu-assets").list(folder);
+            const { data, error } = await supabase.storage
+              .from("menu-assets")
+              .list(folder);
             if (error) {
-              console.warn(`Failed to list folder ${folder} in diagnostics:`, error);
+              console.warn(
+                `Failed to list folder ${folder} in diagnostics:`,
+                error,
+              );
               continue;
             }
             if (data) {
@@ -1600,7 +2011,7 @@ export const api = {
                   name: file.name,
                   path: `${folder}/${file.name}`,
                   size: size,
-                  createdAt: file.created_at || ""
+                  createdAt: file.created_at || "",
                 });
               }
             }
@@ -1617,25 +2028,35 @@ export const api = {
           totalUsedBytes: totalSizeBytes,
           bucketLimitBytes: 1024 * 1024 * 1024, // 1 GB free limit
           files: allFiles,
-          configured: true
+          configured: true,
         };
-      } catch (err: any) {
+      } catch (err) {
         console.error("Storage diagnostics failed:", err);
-        return { success: false, error: err.message, configured: true };
+        return {
+          success: false,
+          error: (err as Error)?.message,
+          configured: true,
+        };
       }
     }
-    return { success: false, error: "Supabase not configured or unhealthy", configured: false };
+    return {
+      success: false,
+      error: "Supabase not configured or unhealthy",
+      configured: false,
+    };
   },
 
   deleteStorageFile: async (filePath: string) => {
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
-        const { data, error } = await supabase.storage.from("menu-assets").remove([filePath]);
+        const { data, error } = await supabase.storage
+          .from("menu-assets")
+          .remove([filePath]);
         if (error) throw error;
         return { success: true, data };
-      } catch (err: any) {
+      } catch (err) {
         console.error("Failed to delete storage file:", err);
-        return { success: false, error: err.message };
+        return { success: false, error: (err as Error)?.message };
       }
     }
     return { success: false, error: "Supabase not configured or unhealthy" };
@@ -1670,17 +2091,19 @@ export const api = {
           .insert(tableData);
 
         if (insertError) throw insertError;
-        triggerBroadcast('tables_changed');
+        triggerBroadcast("tables_changed");
         return tableData;
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "createTableQr");
     }
 
     // Local Fallback
     const localTablesStr = localStorage.getItem("local_tables");
-    let localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
-    const existingIdx = localTables.findIndex((t: any) => t.tableNo === tableNo);
+    const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
+    const existingIdx = localTables.findIndex(
+      (t: any) => t.tableNo === tableNo,
+    );
     const tableData = {
       tableNo,
       key: Math.random().toString(36).substring(2, 10),
@@ -1694,7 +2117,7 @@ export const api = {
       localTables.push(tableData);
       localStorage.setItem("local_tables", JSON.stringify(localTables));
       triggerLocalTablesChange();
-      triggerBroadcast('tables_changed');
+      triggerBroadcast("tables_changed");
       return tableData;
     }
   },
@@ -1712,7 +2135,7 @@ export const api = {
           return data;
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseReadError(e, "getTableQr");
     }
 
@@ -1729,22 +2152,22 @@ export const api = {
           .update({ active })
           .eq("tableNo", tableNo);
         if (error) throw error;
-        triggerBroadcast('tables_changed');
+        triggerBroadcast("tables_changed");
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "updateTableStatus");
     }
 
     // Local
     const localTablesStr = localStorage.getItem("local_tables");
     if (localTablesStr) {
-      let localTables = JSON.parse(localTablesStr);
+      const localTables = JSON.parse(localTablesStr);
       const idx = localTables.findIndex((t: any) => t.tableNo === tableNo);
       if (idx !== -1) {
         localTables[idx] = { ...localTables[idx], active };
         localStorage.setItem("local_tables", JSON.stringify(localTables));
         triggerLocalTablesChange();
-        triggerBroadcast('tables_changed');
+        triggerBroadcast("tables_changed");
       }
     }
   },
@@ -1757,9 +2180,9 @@ export const api = {
           .delete()
           .eq("tableNo", tableNo);
         if (error) throw error;
-        triggerBroadcast('tables_changed');
+        triggerBroadcast("tables_changed");
       }
-    } catch (e: any) {
+    } catch (e) {
       handleSupabaseError(e, "deleteTableQr");
     }
 
@@ -1770,21 +2193,21 @@ export const api = {
       localTables = localTables.filter((t: any) => t.tableNo !== tableNo);
       localStorage.setItem("local_tables", JSON.stringify(localTables));
       triggerLocalTablesChange();
-      triggerBroadcast('tables_changed');
+      triggerBroadcast("tables_changed");
     }
   },
 
-  subscribeToTables: (callback: (tables: any[]) => void) => {
+  subscribeToTables: (
+    callback: (tables: Record<string, unknown>[]) => void,
+  ) => {
     tablesListeners.push(callback);
-    
+
     let lastJson = "";
     const fetchAndTrigger = async () => {
-      let remoteTables: any[] = [];
+      let remoteTables: Record<string, unknown>[] = [];
       try {
         if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-          const { data, error } = await supabase
-            .from("tables")
-            .select("*");
+          const { data, error } = await supabase.from("tables").select("*");
           if (error) throw error;
           if (data) {
             remoteTables = data;
@@ -1793,13 +2216,13 @@ export const api = {
       } catch (e) {
         handleSupabaseReadError(e, "subscribeToTables fetchAndTrigger");
       }
-      
+
       const localTablesStr = localStorage.getItem("local_tables");
       const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
-      
+
       const merged = [...remoteTables];
       localTables.forEach((lt: any) => {
-        if (!merged.some(rt => rt.tableNo === lt.tableNo)) {
+        if (!merged.some((rt) => rt.tableNo === lt.tableNo)) {
           merged.push(lt);
         }
       });
@@ -1808,7 +2231,7 @@ export const api = {
       if (currentJson !== lastJson) {
         lastJson = currentJson;
         callback(merged);
-        tablesListeners.forEach(cb => {
+        tablesListeners.forEach((cb) => {
           if (cb !== callback) cb(merged);
         });
       }
@@ -1842,7 +2265,7 @@ export const api = {
     document.addEventListener("visibilitychange", handleFocus);
 
     return () => {
-      tablesListeners = tablesListeners.filter(l => l !== callback);
+      tablesListeners = tablesListeners.filter((l) => l !== callback);
       clearInterval(pollInterval);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
@@ -1852,7 +2275,7 @@ export const api = {
   // ==========================================
   // 库存物料 & BOM配方 API 接口
   // ==========================================
-  getInventoryItems: async (): Promise<any[]> => {
+  getInventoryItems: async (): Promise<InventoryItem[]> => {
     // 尝试从 KV 读取
     const cachedKv = await kvCache.get<any[]>("inventory_items");
     if (cachedKv) return cachedKv;
@@ -1877,14 +2300,19 @@ export const api = {
     if (localStr) {
       return JSON.parse(localStr);
     }
-    localStorage.setItem("local_inventory_items", JSON.stringify(DEFAULT_INVENTORY_ITEMS));
+    localStorage.setItem(
+      "local_inventory_items",
+      JSON.stringify(DEFAULT_INVENTORY_ITEMS),
+    );
     return DEFAULT_INVENTORY_ITEMS;
   },
 
-  saveInventoryItem: async (item: any) => {
+  saveInventoryItem: async (
+    item: Partial<InventoryItem> & Pick<InventoryItem, "id" | "name">,
+  ) => {
     const payload = await filterPayloadByTable("inventory_items", {
       ...item,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     });
 
     try {
@@ -1900,12 +2328,14 @@ export const api = {
     }
 
     const localStr = localStorage.getItem("local_inventory_items");
-    let localItems: any[] = localStr ? JSON.parse(localStr) : [...DEFAULT_INVENTORY_ITEMS];
-    const idx = localItems.findIndex((i: any) => i.id === item.id);
+    const localItems: InventoryItem[] = localStr
+      ? JSON.parse(localStr)
+      : [...DEFAULT_INVENTORY_ITEMS];
+    const idx = localItems.findIndex((i: InventoryItem) => i.id === item.id);
     if (idx !== -1) {
-      localItems[idx] = { ...localItems[idx], ...payload };
+      localItems[idx] = { ...localItems[idx], ...payload } as InventoryItem;
     } else {
-      localItems.push(payload);
+      localItems.push(payload as unknown as InventoryItem);
     }
     localStorage.setItem("local_inventory_items", JSON.stringify(localItems));
     kvCache.invalidate("inventory_items");
@@ -1930,24 +2360,22 @@ export const api = {
     kvCache.invalidate("inventory_items");
     const localStr = localStorage.getItem("local_inventory_items");
     if (localStr) {
-      let localItems: any[] = JSON.parse(localStr);
-      localItems = localItems.filter((i: any) => i.id !== id);
+      let localItems: InventoryItem[] = JSON.parse(localStr);
+      localItems = localItems.filter((i: InventoryItem) => i.id !== id);
       localStorage.setItem("local_inventory_items", JSON.stringify(localItems));
       triggerLocalInventoryChange();
       triggerBroadcast("inventory_changed");
     }
   },
 
-  getRecipeBoms: async (): Promise<any[]> => {
+  getRecipeBoms: async (): Promise<RecipeBom[]> => {
     // 尝试从 KV 缓存中快速读取 BOM 配方
     const cachedBoms = await kvCache.get<any[]>("recipe_boms");
     if (cachedBoms) return cachedBoms;
 
     try {
       if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { data, error } = await supabase
-          .from("recipe_boms")
-          .select("*");
+        const { data, error } = await supabase.from("recipe_boms").select("*");
         if (error) throw error;
         if (data && data.length > 0) {
           kvCache.set("recipe_boms", data, 300);
@@ -1962,14 +2390,17 @@ export const api = {
     if (localStr) {
       return JSON.parse(localStr);
     }
-    localStorage.setItem("local_recipe_boms", JSON.stringify(DEFAULT_RECIPE_BOMS));
+    localStorage.setItem(
+      "local_recipe_boms",
+      JSON.stringify(DEFAULT_RECIPE_BOMS),
+    );
     return DEFAULT_RECIPE_BOMS;
   },
 
-  saveRecipeBom: async (bom: any) => {
+  saveRecipeBom: async (bom: RecipeBom) => {
     const payload = await filterPayloadByTable("recipe_boms", {
       ...bom,
-      id: bom.id || "BOM-" + Math.random().toString(36).substring(2, 9)
+      id: bom.id || "BOM-" + Math.random().toString(36).substring(2, 9),
     });
 
     try {
@@ -1986,12 +2417,14 @@ export const api = {
 
     kvCache.invalidate("recipe_boms");
     const localStr = localStorage.getItem("local_recipe_boms");
-    let localBoms: any[] = localStr ? JSON.parse(localStr) : [...DEFAULT_RECIPE_BOMS];
-    const idx = localBoms.findIndex((b: any) => b.id === payload.id);
+    const localBoms: RecipeBom[] = localStr
+      ? JSON.parse(localStr)
+      : [...DEFAULT_RECIPE_BOMS];
+    const idx = localBoms.findIndex((b: RecipeBom) => b.id === payload.id);
     if (idx !== -1) {
-      localBoms[idx] = { ...localBoms[idx], ...payload };
+      localBoms[idx] = { ...localBoms[idx], ...payload } as RecipeBom;
     } else {
-      localBoms.push(payload);
+      localBoms.push(payload as unknown as RecipeBom);
     }
     localStorage.setItem("local_recipe_boms", JSON.stringify(localBoms));
     triggerLocalInventoryChange();
@@ -2015,8 +2448,8 @@ export const api = {
     kvCache.invalidate("recipe_boms");
     const localStr = localStorage.getItem("local_recipe_boms");
     if (localStr) {
-      let localBoms: any[] = JSON.parse(localStr);
-      localBoms = localBoms.filter((b: any) => b.id !== id);
+      let localBoms: RecipeBom[] = JSON.parse(localStr);
+      localBoms = localBoms.filter((b: RecipeBom) => b.id !== id);
       localStorage.setItem("local_recipe_boms", JSON.stringify(localBoms));
       triggerLocalInventoryChange();
       triggerBroadcast("inventory_changed");
@@ -2027,11 +2460,11 @@ export const api = {
     inventoryListeners.push(callback);
     ensureSyncChannel();
     return () => {
-      inventoryListeners = inventoryListeners.filter(l => l !== callback);
+      inventoryListeners = inventoryListeners.filter((l) => l !== callback);
     };
   },
 
-  deductInventoryForOrderItems: async (items: any[]) => {
+  deductInventoryForOrderItems: async (items: Record<string, unknown>[]) => {
     if (!items || !Array.isArray(items) || items.length === 0) return;
 
     try {
@@ -2040,8 +2473,8 @@ export const api = {
 
       if (!inventory.length || !boms.length) return;
 
-      const updatedMap = new Map<string, any>();
-      inventory.forEach(item => updatedMap.set(item.id, { ...item }));
+      const updatedMap = new Map<string, InventoryItem>();
+      inventory.forEach((item) => updatedMap.set(item.id, { ...item }));
 
       let inventoryChanged = false;
 
@@ -2052,7 +2485,10 @@ export const api = {
 
         // Match BOMs by menu item name
         const matchingBoms = boms.filter(
-          (b: any) => b.menu_item_name && b.menu_item_name.trim().toLowerCase() === itemName.trim().toLowerCase()
+          (b: RecipeBom) =>
+            b.menu_item_name &&
+            String(b.menu_item_name).trim().toLowerCase() ===
+              String(itemName).trim().toLowerCase(),
         );
 
         for (const bom of matchingBoms) {
@@ -2060,7 +2496,10 @@ export const api = {
           if (targetInv) {
             const deduction = Number(bom.dosage) * qty;
             const currentStock = Number(targetInv.stock || 0);
-            const newStock = Math.max(0, Number((currentStock - deduction).toFixed(2)));
+            const newStock = Math.max(
+              0,
+              Number((currentStock - deduction).toFixed(2)),
+            );
             targetInv.stock = newStock;
             targetInv.updated_at = new Date().toISOString();
             updatedMap.set(bom.inventory_item_id, targetInv);
@@ -2079,26 +2518,43 @@ export const api = {
     }
   },
 
-  syncCategoriesAndMenuItemsToSupabase: async (categories: any[]) => {
+  syncCategoriesAndMenuItemsToSupabase: async (
+    categories: Record<string, unknown>[],
+  ) => {
     if (!categories || !Array.isArray(categories)) return;
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
       try {
         // 获取当前的 deletedItemIds 以便在关系表中也清理已删除的默认菜品
         let deletedIds: string[] = [];
         try {
-          const { data: settingsRow } = await supabase.from("settings").select("deletedItemIds").eq("id", SETTINGS_DOC_ID).maybeSingle();
-          if (settingsRow?.deletedItemIds && Array.isArray(settingsRow.deletedItemIds)) deletedIds = settingsRow.deletedItemIds.map(String);
+          const { data: settingsRow } = await supabase
+            .from("settings")
+            .select("deletedItemIds")
+            .eq("id", SETTINGS_DOC_ID)
+            .maybeSingle();
+          if (
+            settingsRow?.deletedItemIds &&
+            Array.isArray(settingsRow.deletedItemIds)
+          )
+            deletedIds = settingsRow.deletedItemIds.map(String);
         } catch {}
 
-        const activeCatNames = categories.map((c) => c.name || c.title || "").filter(Boolean);
+        const activeCatNames = categories
+          .map((c) => c.name || c.title || "")
+          .filter(Boolean);
 
         // Clean up deleted categories and their items in relational DB
         if (activeCatNames.length > 0) {
-          const { data: dbCats } = await supabase.from("categories").select("id, name");
+          const { data: dbCats } = await supabase
+            .from("categories")
+            .select("id, name");
           if (dbCats && Array.isArray(dbCats)) {
             for (const dbCat of dbCats) {
               if (!activeCatNames.includes(dbCat.name)) {
-                await supabase.from("menu_items").delete().eq("category_id", dbCat.id);
+                await supabase
+                  .from("menu_items")
+                  .delete()
+                  .eq("category_id", dbCat.id);
                 await supabase.from("categories").delete().eq("id", dbCat.id);
               }
             }
@@ -2107,7 +2563,8 @@ export const api = {
 
         for (let i = 0; i < categories.length; i++) {
           const cat = categories[i];
-          const catName = cat.name || cat.title || "未命名分类";
+          if (!cat) continue;
+          const catName = String(cat.name || cat.title || "未命名分类");
 
           const { data: existingCat } = await supabase
             .from("categories")
@@ -2131,7 +2588,9 @@ export const api = {
           }
 
           if (catId && cat.items && Array.isArray(cat.items)) {
-            const activeItemTitles = cat.items.map((it: any) => it.title || it.name).filter(Boolean);
+            const activeItemTitles = cat.items
+              .map((it: Record<string, unknown>) => it.title || it.name)
+              .filter(Boolean);
 
             // Clean up dishes from menu_items that were removed from this category
             // 同时清理在 deletedItemIds 中标记为已删除的默认菜品（防止通过改名绕过删除）
@@ -2142,9 +2601,14 @@ export const api = {
 
             if (dbItems && Array.isArray(dbItems)) {
               for (const dbItem of dbItems) {
-                const isDeleted = deletedIds.includes(String(dbItem.name)) || deletedIds.includes(String(dbItem.id));
+                const isDeleted =
+                  deletedIds.includes(String(dbItem.name)) ||
+                  deletedIds.includes(String(dbItem.id));
                 if (!activeItemTitles.includes(dbItem.name) || isDeleted) {
-                  await supabase.from("menu_items").delete().eq("id", dbItem.id);
+                  await supabase
+                    .from("menu_items")
+                    .delete()
+                    .eq("id", dbItem.id);
                 }
               }
             }
@@ -2153,7 +2617,9 @@ export const api = {
               const item = cat.items[j];
               const itemTitle = item.title || item.name;
               if (!itemTitle) continue;
-              const numericPrice = parseFloat(String(item.price || "0").replace(/[^\d.]/g, "")) || 0;
+              const numericPrice =
+                parseFloat(String(item.price || "0").replace(/[^\d.]/g, "")) ||
+                0;
 
               const { data: existingDish } = await supabase
                 .from("menu_items")
@@ -2168,7 +2634,7 @@ export const api = {
                 image_url: item.image || "",
                 description: item.description || "",
                 is_available: !item.isSoldOut,
-                sort_order: j
+                sort_order: j,
               };
 
               if (existingDish?.id) {
@@ -2177,15 +2643,16 @@ export const api = {
                   .update(itemPayload)
                   .eq("id", existingDish.id);
               } else {
-                await supabase
-                  .from("menu_items")
-                  .insert(itemPayload);
+                await supabase.from("menu_items").insert(itemPayload);
               }
             }
           }
         }
       } catch (e) {
-        console.warn("Failed to sync menu items to relational Supabase tables:", e);
+        console.warn(
+          "Failed to sync menu items to relational Supabase tables:",
+          e,
+        );
       }
     }
   },
@@ -2194,11 +2661,21 @@ export const api = {
     if (!supabase || !isSupabaseConfigured || !isSupabaseHealthy) {
       return { connected: false, tables: {} };
     }
-    const tableList = ["settings", "categories", "menu_items", "inventory_items", "recipe_boms", "tables", "orders"];
+    const tableList = [
+      "settings",
+      "categories",
+      "menu_items",
+      "inventory_items",
+      "recipe_boms",
+      "tables",
+      "orders",
+    ];
     const stats: Record<string, number> = {};
     for (const tableName of tableList) {
       try {
-        const { count, error } = await supabase.from(tableName).select("*", { count: "exact", head: true });
+        const { count, error } = await supabase
+          .from(tableName)
+          .select("*", { count: "exact", head: true });
         stats[tableName] = error ? -1 : (count ?? 0);
       } catch {
         stats[tableName] = -1;
@@ -2216,17 +2693,27 @@ export const api = {
 
     try {
       // 1. settings 表全局数据初始化
-      const { data: existingSettings } = await supabase.from("settings").select("*").eq("id", SETTINGS_DOC_ID).maybeSingle();
+      const { data: existingSettings } = await supabase
+        .from("settings")
+        .select("*")
+        .eq("id", SETTINGS_DOC_ID)
+        .maybeSingle();
       let categoriesToSync = INITIAL_MENU_CATEGORIES;
 
-      if (!existingSettings || !existingSettings.categories || existingSettings.categories.length === 0 || force) {
+      if (
+        !existingSettings ||
+        !existingSettings.categories ||
+        existingSettings.categories.length === 0 ||
+        force
+      ) {
         const defaultSettingsPayload = {
           id: SETTINGS_DOC_ID,
           categories: INITIAL_MENU_CATEGORIES,
           promotions: existingSettings?.promotions || [],
           bgUrl: existingSettings?.bgUrl || "",
           restaurantName: existingSettings?.restaurantName || "炙·双味居",
-          welcomeMessage: existingSettings?.welcomeMessage || "Premium Charcoal BBQ",
+          welcomeMessage:
+            existingSettings?.welcomeMessage || "Premium Charcoal BBQ",
           logoUrl: existingSettings?.logoUrl || "",
           adminPassword: existingSettings?.adminPassword || "admin123",
           devicePasswords: existingSettings?.devicePasswords || [],
@@ -2236,7 +2723,7 @@ export const api = {
           layoutStyle: existingSettings?.layoutStyle || "grid",
           receiptSettings: existingSettings?.receiptSettings || {},
           deletedItemIds: existingSettings?.deletedItemIds || [],
-          theme: existingSettings?.theme || "midnight"
+          theme: existingSettings?.theme || "midnight",
         };
         await supabase.from("settings").upsert(defaultSettingsPayload);
         logs.push("✅ settings 表全局设置数据已成功初始化");
@@ -2244,10 +2731,16 @@ export const api = {
         categoriesToSync = mergeAndOrderCategories(
           existingSettings.categories,
           INITIAL_MENU_CATEGORIES,
-          existingSettings.deletedItemIds || []
+          existingSettings.deletedItemIds || [],
         );
-        if (JSON.stringify(categoriesToSync) !== JSON.stringify(existingSettings.categories)) {
-          await supabase.from("settings").update({ categories: categoriesToSync }).eq("id", SETTINGS_DOC_ID);
+        if (
+          JSON.stringify(categoriesToSync) !==
+          JSON.stringify(existingSettings.categories)
+        ) {
+          await supabase
+            .from("settings")
+            .update({ categories: categoriesToSync })
+            .eq("id", SETTINGS_DOC_ID);
           logs.push("✅ settings 表已同步更新最新的菜单分类与新菜品排序");
         } else {
           logs.push("ℹ️ settings 表已包含最新设置数据");
@@ -2257,49 +2750,90 @@ export const api = {
       // 2. 同步 categories 和 menu_items 关系表
       try {
         await api.syncCategoriesAndMenuItemsToSupabase(categoriesToSync);
-        logs.push(`✅ 已成功同步 ${categoriesToSync.length} 个分类及相关菜品至 categories / menu_items 表`);
-      } catch (e: any) {
-        logs.push(`⚠️ categories / menu_items 同步通知: ${e.message || e}`);
+        logs.push(
+          `✅ 已成功同步 ${categoriesToSync.length} 个分类及相关菜品至 categories / menu_items 表`,
+        );
+      } catch (e) {
+        logs.push(
+          `⚠️ categories / menu_items 同步通知: ${(e as Error)?.message || e}`,
+        );
       }
 
       // 3. inventory_items 原材料库存表初始化
-      const { count: invCount } = await supabase.from("inventory_items").select("*", { count: "exact", head: true });
-      if ((invCount === 0 || invCount === null || force) && DEFAULT_INVENTORY_ITEMS.length > 0) {
+      const { count: invCount } = await supabase
+        .from("inventory_items")
+        .select("*", { count: "exact", head: true });
+      if (
+        (invCount === 0 || invCount === null || force) &&
+        DEFAULT_INVENTORY_ITEMS.length > 0
+      ) {
         for (const item of DEFAULT_INVENTORY_ITEMS) {
-          await supabase.from("inventory_items").upsert({
-            ...item,
-            updated_at: new Date().toISOString()
-          }, { onConflict: "id" });
+          await supabase.from("inventory_items").upsert(
+            {
+              ...item,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" },
+          );
         }
-        logs.push(`✅ inventory_items 库存表已成功初始化 (${DEFAULT_INVENTORY_ITEMS.length} 种物料)`);
+        logs.push(
+          `✅ inventory_items 库存表已成功初始化 (${DEFAULT_INVENTORY_ITEMS.length} 种物料)`,
+        );
       } else {
         logs.push(`ℹ️ inventory_items 表当前包含 ${invCount ?? 0} 条物料记录`);
       }
 
       // 4. recipe_boms BOM配方表初始化
-      const { count: bomCount } = await supabase.from("recipe_boms").select("*", { count: "exact", head: true });
-      if ((bomCount === 0 || bomCount === null || force) && DEFAULT_RECIPE_BOMS.length > 0) {
+      const { count: bomCount } = await supabase
+        .from("recipe_boms")
+        .select("*", { count: "exact", head: true });
+      if (
+        (bomCount === 0 || bomCount === null || force) &&
+        DEFAULT_RECIPE_BOMS.length > 0
+      ) {
         for (const bom of DEFAULT_RECIPE_BOMS) {
           await supabase.from("recipe_boms").upsert(bom, { onConflict: "id" });
         }
-        logs.push(`✅ recipe_boms 配方表已成功初始化 (${DEFAULT_RECIPE_BOMS.length} 条 BOM 配方)`);
+        logs.push(
+          `✅ recipe_boms 配方表已成功初始化 (${DEFAULT_RECIPE_BOMS.length} 条 BOM 配方)`,
+        );
       } else {
         logs.push(`ℹ️ recipe_boms 表当前包含 ${bomCount ?? 0} 条配方记录`);
       }
 
       // 5. tables 二维码餐桌表初始化
-      const { count: tableCount } = await supabase.from("tables").select("*", { count: "exact", head: true });
+      const { count: tableCount } = await supabase
+        .from("tables")
+        .select("*", { count: "exact", head: true });
       if (tableCount === 0 || tableCount === null || force) {
-        const defaultTables = ["A1", "A2", "A3", "A4", "A5", "A6", "B1", "B2", "B3", "B4", "C1", "C2"];
+        const defaultTables = [
+          "A1",
+          "A2",
+          "A3",
+          "A4",
+          "A5",
+          "A6",
+          "B1",
+          "B2",
+          "B3",
+          "B4",
+          "C1",
+          "C2",
+        ];
         for (const tNo of defaultTables) {
-          await supabase.from("tables").upsert({
-            tableNo: tNo,
-            key: Math.random().toString(36).substring(2, 10),
-            active: true,
-            createdAt: new Date().toISOString()
-          }, { onConflict: "tableNo" });
+          await supabase.from("tables").upsert(
+            {
+              tableNo: tNo,
+              key: Math.random().toString(36).substring(2, 10),
+              active: true,
+              createdAt: new Date().toISOString(),
+            },
+            { onConflict: "tableNo" },
+          );
         }
-        logs.push(`✅ tables 餐桌表已成功初始化 (${defaultTables.length} 个基础餐桌)`);
+        logs.push(
+          `✅ tables 餐桌表已成功初始化 (${defaultTables.length} 个基础餐桌)`,
+        );
       } else {
         logs.push(`ℹ️ tables 餐桌表当前包含 ${tableCount ?? 0} 条餐桌记录`);
       }
@@ -2309,63 +2843,200 @@ export const api = {
       kvCache.invalidate("inventory_items");
       kvCache.invalidate("recipe_boms");
 
-      triggerBroadcast('settings_changed');
-      triggerBroadcast('inventory_changed');
-      triggerBroadcast('tables_changed');
+      triggerBroadcast("settings_changed");
+      triggerBroadcast("inventory_changed");
+      triggerBroadcast("tables_changed");
 
       return { success: true, logs };
-    } catch (err: any) {
-      logs.push(`❌ 初始化数据发生错误: ${err.message || err}`);
+    } catch (err) {
+      logs.push(`❌ 初始化数据发生错误: ${(err as Error)?.message || err}`);
       return { success: false, logs };
     }
   },
-  triggerBroadcast: (event: string, payload: any = {}) => {
+  triggerBroadcast: (event: string, payload: Record<string, unknown> = {}) => {
     triggerBroadcast(event, payload);
   },
 
   // ——— EdgeOne 部署：购物车实时同步 + 管理员通知（替代原 WebSocket cartHub） ———
   broadcastCart: (table: string, cart: Record<string, number>) => {
-    triggerBroadcast('cart_changed', { table, cart });
+    triggerBroadcast("cart_changed", { table, cart });
   },
   broadcastCartCleared: (table: string) => {
-    triggerBroadcast('cart_cleared', { table });
+    triggerBroadcast("cart_cleared", { table });
   },
-  notifyAdmin: (payload: any) => {
-    triggerBroadcast('admin_notification', payload);
+  notifyAdmin: (payload: Record<string, unknown>) => {
+    triggerBroadcast("admin_notification", payload);
   },
-  subscribeCart: (table: string, callback: (cart: Record<string, number>) => void): (() => void) => {
+  subscribeCart: (
+    table: string,
+    callback: (cart: Record<string, number>) => void,
+  ): (() => void) => {
     const l = { table, callback };
     cartListeners.push(l);
     ensureSyncChannel();
-    return () => { cartListeners = cartListeners.filter(x => x !== l); };
+    return () => {
+      cartListeners = cartListeners.filter((x) => x !== l);
+    };
   },
-  subscribeAdminNotifications: (callback: (payload: any) => void): (() => void) => {
+  subscribeAdminNotifications: (
+    callback: (payload: Record<string, unknown>) => void,
+  ): (() => void) => {
     adminNotificationListeners.push(callback);
     ensureSyncChannel();
-    return () => { adminNotificationListeners = adminNotificationListeners.filter(x => x !== callback); };
-  }
+    return () => {
+      adminNotificationListeners = adminNotificationListeners.filter(
+        (x) => x !== callback,
+      );
+    };
+  },
 };
 
 export const DEFAULT_INVENTORY_ITEMS = [
-  { id: "INV-101", name: "特级雪花牛肉", category: "肉类与海鲜", stock: 50.0, unit: "kg", safety_stock: 5.0, price: 80.0, updated_at: new Date().toISOString() },
-  { id: "INV-102", name: "精选清真牛肉馅", category: "肉类与海鲜", stock: 40.0, unit: "kg", safety_stock: 4.0, price: 40.0, updated_at: new Date().toISOString() },
-  { id: "INV-103", name: "农家鲜土鸡", category: "肉类与海鲜", stock: 30.0, unit: "kg", safety_stock: 3.0, price: 35.0, updated_at: new Date().toISOString() },
-  { id: "INV-104", name: "饺子皮面粉", category: "粮油面粉", stock: 80.0, unit: "kg", safety_stock: 8.0, price: 8.0, updated_at: new Date().toISOString() },
-  { id: "INV-105", name: "重庆特级朝天椒", category: "调料香料", stock: 15.0, unit: "kg", safety_stock: 2.0, price: 25.0, updated_at: new Date().toISOString() },
-  { id: "INV-106", name: "香浓高汤原汁", category: "汤底底料", stock: 60.0, unit: "L", safety_stock: 10.0, price: 12.0, updated_at: new Date().toISOString() },
+  {
+    id: "INV-101",
+    name: "特级雪花牛肉",
+    category: "肉类与海鲜",
+    stock: 50.0,
+    unit: "kg",
+    safety_stock: 5.0,
+    price: 80.0,
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "INV-102",
+    name: "精选清真牛肉馅",
+    category: "肉类与海鲜",
+    stock: 40.0,
+    unit: "kg",
+    safety_stock: 4.0,
+    price: 40.0,
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "INV-103",
+    name: "农家鲜土鸡",
+    category: "肉类与海鲜",
+    stock: 30.0,
+    unit: "kg",
+    safety_stock: 3.0,
+    price: 35.0,
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "INV-104",
+    name: "饺子皮面粉",
+    category: "粮油面粉",
+    stock: 80.0,
+    unit: "kg",
+    safety_stock: 8.0,
+    price: 8.0,
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "INV-105",
+    name: "重庆特级朝天椒",
+    category: "调料香料",
+    stock: 15.0,
+    unit: "kg",
+    safety_stock: 2.0,
+    price: 25.0,
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "INV-106",
+    name: "香浓高汤原汁",
+    category: "汤底底料",
+    stock: 60.0,
+    unit: "L",
+    safety_stock: 10.0,
+    price: 12.0,
+    updated_at: new Date().toISOString(),
+  },
 ];
 
 export const DEFAULT_RECIPE_BOMS = [
-  { id: "BOM-101", menu_item_name: "清汤锅底", inventory_item_id: "INV-103", dosage: 0.3, unit: "kg" },
-  { id: "BOM-102", menu_item_name: "清汤锅底", inventory_item_id: "INV-106", dosage: 1.5, unit: "L" },
-  { id: "BOM-103", menu_item_name: "干饺 (大份)", inventory_item_id: "INV-102", dosage: 0.25, unit: "kg" },
-  { id: "BOM-104", menu_item_name: "干饺 (大份)", inventory_item_id: "INV-104", dosage: 0.15, unit: "kg" },
-  { id: "BOM-105", menu_item_name: "干饺 (大份)", inventory_item_id: "INV-106", dosage: 0.5, unit: "L" },
-  { id: "BOM-106", menu_item_name: "干饺 (小份)", inventory_item_id: "INV-102", dosage: 0.18, unit: "kg" },
-  { id: "BOM-107", menu_item_name: "干饺 (小份)", inventory_item_id: "INV-104", dosage: 0.10, unit: "kg" },
-  { id: "BOM-108", menu_item_name: "干饺 (小份)", inventory_item_id: "INV-106", dosage: 0.35, unit: "L" },
-  { id: "BOM-109", menu_item_name: "煎饺 (大份)", inventory_item_id: "INV-102", dosage: 0.25, unit: "kg" },
-  { id: "BOM-110", menu_item_name: "煎饺 (大份)", inventory_item_id: "INV-104", dosage: 0.15, unit: "kg" },
-  { id: "BOM-111", menu_item_name: "煎饺 (小份)", inventory_item_id: "INV-102", dosage: 0.18, unit: "kg" },
-  { id: "BOM-112", menu_item_name: "煎饺 (小份)", inventory_item_id: "INV-104", dosage: 0.10, unit: "kg" },
+  {
+    id: "BOM-101",
+    menu_item_name: "清汤锅底",
+    inventory_item_id: "INV-103",
+    dosage: 0.3,
+    unit: "kg",
+  },
+  {
+    id: "BOM-102",
+    menu_item_name: "清汤锅底",
+    inventory_item_id: "INV-106",
+    dosage: 1.5,
+    unit: "L",
+  },
+  {
+    id: "BOM-103",
+    menu_item_name: "干饺 (大份)",
+    inventory_item_id: "INV-102",
+    dosage: 0.25,
+    unit: "kg",
+  },
+  {
+    id: "BOM-104",
+    menu_item_name: "干饺 (大份)",
+    inventory_item_id: "INV-104",
+    dosage: 0.15,
+    unit: "kg",
+  },
+  {
+    id: "BOM-105",
+    menu_item_name: "干饺 (大份)",
+    inventory_item_id: "INV-106",
+    dosage: 0.5,
+    unit: "L",
+  },
+  {
+    id: "BOM-106",
+    menu_item_name: "干饺 (小份)",
+    inventory_item_id: "INV-102",
+    dosage: 0.18,
+    unit: "kg",
+  },
+  {
+    id: "BOM-107",
+    menu_item_name: "干饺 (小份)",
+    inventory_item_id: "INV-104",
+    dosage: 0.1,
+    unit: "kg",
+  },
+  {
+    id: "BOM-108",
+    menu_item_name: "干饺 (小份)",
+    inventory_item_id: "INV-106",
+    dosage: 0.35,
+    unit: "L",
+  },
+  {
+    id: "BOM-109",
+    menu_item_name: "煎饺 (大份)",
+    inventory_item_id: "INV-102",
+    dosage: 0.25,
+    unit: "kg",
+  },
+  {
+    id: "BOM-110",
+    menu_item_name: "煎饺 (大份)",
+    inventory_item_id: "INV-104",
+    dosage: 0.15,
+    unit: "kg",
+  },
+  {
+    id: "BOM-111",
+    menu_item_name: "煎饺 (小份)",
+    inventory_item_id: "INV-102",
+    dosage: 0.18,
+    unit: "kg",
+  },
+  {
+    id: "BOM-112",
+    menu_item_name: "煎饺 (小份)",
+    inventory_item_id: "INV-104",
+    dosage: 0.1,
+    unit: "kg",
+  },
 ];

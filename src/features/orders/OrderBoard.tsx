@@ -1,13 +1,23 @@
 import { useState } from "react";
 import { api } from "../../api";
-import { PlusCircle, X, Search, Minus, Plus, Loader2, GitMerge, Flame } from "lucide-react";
+import {
+  PlusCircle,
+  X,
+  Search,
+  Minus,
+  Plus,
+  Loader2,
+  GitMerge,
+  Flame,
+} from "lucide-react";
+import type { MenuCategory, ReceiptSettings } from "../../types/menu";
 
 interface OrderBoardProps {
   orders: any[];
-  categories: any[];
-  setCategories: (c: any[]) => void;
+  categories: MenuCategory[];
+  setCategories: (c: MenuCategory[]) => void;
   currency: string;
-  receiptSettings: any;
+  receiptSettings: ReceiptSettings;
   onSaveToCloud?: (overrides?: any) => void;
   onConfirmDialog: (d: any) => void;
   addDishTargetOrder: any;
@@ -39,7 +49,9 @@ export function OrderBoard({
 
   const handleExecuteMergeOrders = async () => {
     if (!mergeSourceOrder || !mergeTargetOrderId) return;
-    const targetOrder = orders.find((o) => (o._id || o.id) === mergeTargetOrderId);
+    const targetOrder = orders.find(
+      (o) => (o._id || o.id) === mergeTargetOrderId,
+    );
     if (!targetOrder) {
       alert("未找到目标订单！");
       return;
@@ -55,12 +67,19 @@ export function OrderBoard({
 
       const existingTargetItems = targetOrder.items || [];
       const newItems = [...existingTargetItems, ...sanitizedSourceItems];
-      const sourceTotal = Number(mergeSourceOrder.total || mergeSourceOrder.total_amount || 0);
-      const targetTotal = Number(targetOrder.total || targetOrder.total_amount || 0);
+      const sourceTotal = Number(
+        mergeSourceOrder.total || mergeSourceOrder.total_amount || 0,
+      );
+      const targetTotal = Number(
+        targetOrder.total || targetOrder.total_amount || 0,
+      );
       const newTotal = Number((targetTotal + sourceTotal).toFixed(2));
 
       const currentUnprinted = targetOrder.unprintedAdditions || [];
-      const newUnprinted = [...currentUnprinted, { items: sanitizedSourceItems, timestamp: new Date().toISOString() }];
+      const newUnprinted = [
+        ...currentUnprinted,
+        { items: sanitizedSourceItems, timestamp: new Date().toISOString() },
+      ];
 
       const updatePayload = {
         items: newItems,
@@ -72,11 +91,16 @@ export function OrderBoard({
       await api.updateOrder(targetOrder._id || targetOrder.id, updatePayload);
       await api.deleteOrder(mergeSourceOrder._id || mergeSourceOrder.id);
 
-      api.triggerBroadcast("orders_changed", { action: "upsert", orderId: targetOrder._id || targetOrder.id });
+      api.triggerBroadcast("orders_changed", {
+        action: "upsert",
+        orderId: targetOrder._id || targetOrder.id,
+      });
 
       const sourceName = mergeSourceOrder.customerName || "未知桌号";
       const targetName = targetOrder.customerName || "未知桌号";
-      alert(`成功将【${sourceName}】的订单合并并入【${targetName}】！\n合并后订单金额: ¥${newTotal.toFixed(2)}`);
+      alert(
+        `成功将【${sourceName}】的订单合并并入【${targetName}】！\n合并后订单金额: ¥${newTotal.toFixed(2)}`,
+      );
 
       setMergeSourceOrder(null);
       setMergeTargetOrderId("");
@@ -90,7 +114,9 @@ export function OrderBoard({
 
   const handleConfirmAddDishes = async () => {
     if (!addDishTargetOrder) return;
-    const selectedEntries = Object.entries(addDishCart).filter(([_, qty]) => Number(qty) > 0);
+    const selectedEntries = Object.entries(addDishCart).filter(
+      ([_, qty]) => Number(qty) > 0,
+    );
     if (selectedEntries.length === 0) return;
 
     try {
@@ -116,11 +142,19 @@ export function OrderBoard({
 
       const existingItems = addDishTargetOrder.items || [];
       const newItems = [...existingItems, ...addedItems];
-      const additionTotal = addedItems.reduce((sum: number, i: any) => sum + Number(i.price) * Number(i.quantity), 0);
-      const newTotal = Number(((Number(addDishTargetOrder.total) || 0) + additionTotal).toFixed(2));
+      const additionTotal = addedItems.reduce(
+        (sum: number, i: any) => sum + Number(i.price) * Number(i.quantity),
+        0,
+      );
+      const newTotal = Number(
+        ((Number(addDishTargetOrder.total) || 0) + additionTotal).toFixed(2),
+      );
 
       const currentUnprinted = addDishTargetOrder.unprintedAdditions || [];
-      const newUnprinted = [...currentUnprinted, { items: addedItems, timestamp: new Date().toISOString() }];
+      const newUnprinted = [
+        ...currentUnprinted,
+        { items: addedItems, timestamp: new Date().toISOString() },
+      ];
 
       const updatePayload = {
         items: newItems,
@@ -129,7 +163,10 @@ export function OrderBoard({
         unprintedAdditions: newUnprinted,
       };
 
-      await api.updateOrder(addDishTargetOrder._id || addDishTargetOrder.id, updatePayload);
+      await api.updateOrder(
+        addDishTargetOrder._id || addDishTargetOrder.id,
+        updatePayload,
+      );
 
       let stockUpdated = false;
       const updatedCategories = categories.map((cat: any) => {
@@ -138,9 +175,16 @@ export function OrderBoard({
           if (added && item.stock !== undefined && item.stock !== null) {
             const currentStock = Number(item.stock);
             if (!isNaN(currentStock)) {
-              const newStock = Math.max(0, currentStock - Number(added.quantity));
+              const newStock = Math.max(
+                0,
+                currentStock - Number(added.quantity),
+              );
               stockUpdated = true;
-              return { ...item, stock: newStock, isSoldOut: newStock === 0 ? true : item.isSoldOut };
+              return {
+                ...item,
+                stock: newStock,
+                isSoldOut: newStock === 0 ? true : item.isSoldOut,
+              };
             }
           }
           return item;
@@ -155,10 +199,16 @@ export function OrderBoard({
         }
       }
 
-      api.triggerBroadcast('orders_changed', { action: 'upsert', orderId: addDishTargetOrder._id || addDishTargetOrder.id });
+      api.triggerBroadcast("orders_changed", {
+        action: "upsert",
+        orderId: addDishTargetOrder._id || addDishTargetOrder.id,
+      });
 
       const targetCustomerName = addDishTargetOrder.customerName || "未知桌号";
-      const additionQty = addedItems.reduce((s: number, i: any) => s + Number(i.quantity), 0);
+      const additionQty = addedItems.reduce(
+        (s: number, i: any) => s + Number(i.quantity),
+        0,
+      );
 
       const additionsOrderObj = {
         ...addDishTargetOrder,
@@ -178,10 +228,17 @@ export function OrderBoard({
         subDetail: "提示: 点击下方按钮可直接为厨房后厨打印【加菜单】",
         confirmText: "🖨️ 打印加菜单",
         cancelText: "暂不打印",
-        confirmBtnClass: "px-4 py-2 text-sm font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-xl shadow-lg shadow-amber-600/30",
+        confirmBtnClass:
+          "px-4 py-2 text-sm font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-xl shadow-lg shadow-amber-600/30",
         onConfirm: () => {
           import("../../lib/print").then((m) => {
-            m.printReceipt(additionsOrderObj, currency, receiptSettings, false, "addition");
+            m.printReceipt(
+              additionsOrderObj,
+              currency,
+              receiptSettings,
+              false,
+              "addition",
+            );
           });
           onConfirmDialog(null);
         },
@@ -216,7 +273,9 @@ export function OrderBoard({
                   为【{addDishTargetOrder.customerName || "未知桌号"}】加菜
                 </h3>
                 <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                  单号: {addDishTargetOrder.orderNumber || addDishTargetOrder._id} | 当前已点: ¥{(addDishTargetOrder.total || 0).toFixed(2)}
+                  单号:{" "}
+                  {addDishTargetOrder.orderNumber || addDishTargetOrder._id} |
+                  当前已点: ¥{(addDishTargetOrder.total || 0).toFixed(2)}
                 </p>
               </div>
               <button
@@ -229,7 +288,9 @@ export function OrderBoard({
 
             {/* 并入目标未结账订单选择器 */}
             {(() => {
-              const unpaidOrders = orders.filter((o) => o.status !== "completed");
+              const unpaidOrders = orders.filter(
+                (o) => o.status !== "completed",
+              );
               if (unpaidOrders.length <= 1) return null;
               return (
                 <div className="px-3 py-2 bg-zinc-950/90 border-b border-zinc-800 flex items-center justify-between gap-2 text-xs">
@@ -239,17 +300,23 @@ export function OrderBoard({
                   <select
                     value={addDishTargetOrder._id || addDishTargetOrder.id}
                     onChange={(e) => {
-                      const selected = unpaidOrders.find((o) => (o._id || o.id) === e.target.value);
+                      const selected = unpaidOrders.find(
+                        (o) => (o._id || o.id) === e.target.value,
+                      );
                       if (selected) setAddDishTargetOrder(selected);
                     }}
                     className="w-full bg-zinc-900 border border-amber-500/30 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-semibold cursor-pointer truncate"
                   >
                     {unpaidOrders.map((o) => {
-                      const isSameTable = (o.customerName || "") === (addDishTargetOrder.customerName || "");
+                      const isSameTable =
+                        (o.customerName || "") ===
+                        (addDishTargetOrder.customerName || "");
                       const oId = o._id || o.id;
                       return (
                         <option key={oId} value={oId}>
-                          {isSameTable ? "★ [同桌] " : ""}{o.customerName || "未知桌号"} - 单号: #{o.orderNumber || oId} (¥{(o.total || 0).toFixed(2)})
+                          {isSameTable ? "★ [同桌] " : ""}
+                          {o.customerName || "未知桌号"} - 单号: #
+                          {o.orderNumber || oId} (¥{(o.total || 0).toFixed(2)})
                         </option>
                       );
                     })}
@@ -261,7 +328,10 @@ export function OrderBoard({
             {/* 搜索与分类导航 */}
             <div className="p-3 bg-zinc-900 border-b border-zinc-800/80 space-y-2">
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                />
                 <input
                   type="text"
                   placeholder="搜索菜品名称或简码..."
@@ -300,7 +370,7 @@ export function OrderBoard({
                         : "bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800"
                     }`}
                   >
-                    {cat.title || cat.name} ({cat.items?.length || 0})
+                    {cat.name || (cat as any).title} ({cat.items?.length || 0})
                   </button>
                 ))}
               </div>
@@ -310,15 +380,20 @@ export function OrderBoard({
             <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-zinc-950/40">
               {(() => {
                 const allDishes = categories.flatMap((c) => {
-                  if (addDishCategory !== "all" && c.id !== addDishCategory) return [];
+                  if (addDishCategory !== "all" && c.id !== addDishCategory)
+                    return [];
                   return c.items || [];
                 });
 
                 const filteredDishes = allDishes.filter((dish) => {
                   if (!addDishSearch) return true;
                   const q = addDishSearch.toLowerCase().trim();
-                  const nameMatch = (dish.title || dish.name || "").toLowerCase().includes(q);
-                  const enMatch = (dish.enTitle || "").toLowerCase().includes(q);
+                  const nameMatch = (dish.title || (dish as any).name || "")
+                    .toLowerCase()
+                    .includes(q);
+                  const enMatch = (dish.enTitle || "")
+                    .toLowerCase()
+                    .includes(q);
                   return nameMatch || enMatch;
                 });
 
@@ -432,22 +507,35 @@ export function OrderBoard({
             {/* 底部结算与提交悬浮栏 */}
             {(() => {
               const allDishes = categories.flatMap((c) => c.items || []);
-              const selectedEntries = Object.entries(addDishCart).filter(([_, q]) => Number(q) > 0);
-              const totalAddCount = selectedEntries.reduce((sum: number, [_, q]) => sum + Number(q), 0);
-              const totalAddPrice = selectedEntries.reduce((sum: number, [id, q]) => {
-                const d = allDishes.find((i) => i.id === id);
-                const priceStr = String(d?.price || "0");
-                const priceMatch = priceStr.match(/\d+(\.\d+)?/);
-                const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
-                return sum + priceNum * Number(q);
-              }, 0);
-              const projectedTotal = (Number(addDishTargetOrder.total) || 0) + totalAddPrice;
+              const selectedEntries = Object.entries(addDishCart).filter(
+                ([_, q]) => Number(q) > 0,
+              );
+              const totalAddCount = selectedEntries.reduce(
+                (sum: number, [_, q]) => sum + Number(q),
+                0,
+              );
+              const totalAddPrice = selectedEntries.reduce(
+                (sum: number, [id, q]) => {
+                  const d = allDishes.find((i) => i.id === id);
+                  const priceStr = String(d?.price || "0");
+                  const priceMatch = priceStr.match(/\d+(\.\d+)?/);
+                  const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
+                  return sum + priceNum * Number(q);
+                },
+                0,
+              );
+              const projectedTotal =
+                (Number(addDishTargetOrder.total) || 0) + totalAddPrice;
 
               return (
                 <div className="p-3.5 bg-zinc-950 border-t border-zinc-800/80 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <div className="text-zinc-400">
-                      已选 <span className="text-amber-400 font-bold font-mono">{totalAddCount}</span> 项加菜
+                      已选{" "}
+                      <span className="text-amber-400 font-bold font-mono">
+                        {totalAddCount}
+                      </span>{" "}
+                      项加菜
                       {totalAddCount > 0 && (
                         <button
                           onClick={() => setAddDishCart({})}
@@ -519,8 +607,12 @@ export function OrderBoard({
                   <GitMerge size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">合并并入订单</h3>
-                  <p className="text-xs text-zinc-400">将已有未结账订单合并入目标订单</p>
+                  <h3 className="text-base font-bold text-white">
+                    合并并入订单
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    将已有未结账订单合并入目标订单
+                  </p>
                 </div>
               </div>
               <button
@@ -532,12 +624,16 @@ export function OrderBoard({
             </div>
 
             <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-xs space-y-1">
-              <div className="text-zinc-400 font-medium">当前被并入的源订单 (Source Order):</div>
+              <div className="text-zinc-400 font-medium">
+                当前被并入的源订单 (Source Order):
+              </div>
               <div className="text-white font-bold text-sm">
-                {mergeSourceOrder.customerName || "未知桌号"} (单号: #{mergeSourceOrder.orderNumber || mergeSourceOrder._id})
+                {mergeSourceOrder.customerName || "未知桌号"} (单号: #
+                {mergeSourceOrder.orderNumber || mergeSourceOrder._id})
               </div>
               <div className="text-amber-400 font-mono font-bold">
-                包含 {mergeSourceOrder.items?.length || 0} 项菜品 | 总计: ¥{(mergeSourceOrder.total || 0).toFixed(2)}
+                包含 {mergeSourceOrder.items?.length || 0} 项菜品 | 总计: ¥
+                {(mergeSourceOrder.total || 0).toFixed(2)}
               </div>
             </div>
 
@@ -547,7 +643,10 @@ export function OrderBoard({
               </label>
               {(() => {
                 const candidates = orders.filter(
-                  (o) => (o._id || o.id) !== (mergeSourceOrder._id || mergeSourceOrder.id) && o.status !== "completed"
+                  (o) =>
+                    (o._id || o.id) !==
+                      (mergeSourceOrder._id || mergeSourceOrder.id) &&
+                    o.status !== "completed",
                 );
 
                 if (candidates.length === 0) {
@@ -561,12 +660,17 @@ export function OrderBoard({
                 return (
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                     {candidates.map((cand) => {
-                      const isSelected = mergeTargetOrderId === (cand._id || cand.id);
-                      const isSameTable = (cand.customerName || "") === (mergeSourceOrder.customerName || "");
+                      const isSelected =
+                        mergeTargetOrderId === (cand._id || cand.id);
+                      const isSameTable =
+                        (cand.customerName || "") ===
+                        (mergeSourceOrder.customerName || "");
                       return (
                         <div
                           key={cand._id || cand.id}
-                          onClick={() => setMergeTargetOrderId(cand._id || cand.id)}
+                          onClick={() =>
+                            setMergeTargetOrderId(cand._id || cand.id)
+                          }
                           className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
                             isSelected
                               ? "bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-600/20"
@@ -583,7 +687,8 @@ export function OrderBoard({
                               )}
                             </div>
                             <div className="text-zinc-400 text-[11px] font-mono mt-0.5">
-                              单号: #{cand.orderNumber || cand._id} | {cand.items?.length || 0} 项菜品
+                              单号: #{cand.orderNumber || cand._id} |{" "}
+                              {cand.items?.length || 0} 项菜品
                             </div>
                           </div>
                           <div className="text-right">

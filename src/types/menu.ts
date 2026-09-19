@@ -1,7 +1,5 @@
-import type { Language } from './common';
-
-export type LayoutStyle = 'grid' | 'list' | 'bento';
-export type ThemeMode = 'midnight' | 'light';
+export type LayoutStyle = "grid" | "list" | "bento";
+export type ThemeMode = "midnight" | "light";
 
 export interface MenuItem extends Record<string, unknown> {
   id: string;
@@ -32,8 +30,20 @@ export interface MenuCategory {
   items: MenuItem[];
 }
 
-export interface Promotion extends MenuItem {
+export interface Promotion extends Record<string, unknown> {
+  id: string;
   isActive: boolean;
+  title: string;
+  enTitle?: string;
+  frTitle?: string;
+  arTitle?: string;
+  maTitle?: string;
+  description?: string;
+  enDescription?: string;
+  frDescription?: string;
+  arDescription?: string;
+  maDescription?: string;
+  image: string;
 }
 
 export interface ReceiptSettings {
@@ -50,6 +60,8 @@ export interface ReceiptSettings {
   googleMapsReviewLink?: string;
   qrCodeFgColor?: string;
   qrCodeBgColor?: string;
+  qrCodeLevel?: string;
+  printLanguages?: string[];
 }
 
 export interface DevicePassword {
@@ -74,15 +86,4 @@ export interface AppSettings {
   receiptSettings: ReceiptSettings;
   deletedItemIds: string[];
   theme: ThemeMode;
-}
-
-export function getLocalizedTitle(item: MenuItem | MenuCategory, lang: Language): string {
-  if (lang === 'en' && 'enTitle' in item && item.enTitle) return item.enTitle as string;
-  if (lang === 'fr' && 'frTitle' in item && item.frTitle) return item.frTitle as string;
-  if (lang === 'ar' && 'arTitle' in item && item.arTitle) return item.arTitle as string;
-  if (lang === 'ma' && 'maTitle' in item && item.maTitle) return item.maTitle as string;
-  // MenuCategory uses enName/frName etc, MenuItem uses enTitle
-  if (lang === 'en' && 'enName' in item && (item as any).enName) return (item as any).enName;
-  if (lang === 'fr' && 'frName' in item && (item as any).frName) return (item as any).frName;
-  return (item as any).title || (item as any).name || '';
 }

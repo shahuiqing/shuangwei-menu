@@ -19,20 +19,34 @@ class KVCacheManager {
   getConfig(): KVCacheConfig {
     if (typeof window === "undefined") return {};
     return {
-      endpoint: localStorage.getItem("custom_tencent_kv_endpoint") || import.meta.env.VITE_TENCENT_KV_ENDPOINT || "",
-      namespace: localStorage.getItem("custom_tencent_kv_namespace") || import.meta.env.VITE_TENCENT_KV_NAMESPACE || "restaurant_kv",
-      apiToken: localStorage.getItem("custom_tencent_kv_token") || import.meta.env.VITE_TENCENT_KV_TOKEN || "",
-      ttlSeconds: Number(localStorage.getItem("custom_tencent_kv_ttl")) || DEFAULT_TTL
+      endpoint:
+        localStorage.getItem("custom_tencent_kv_endpoint") ||
+        import.meta.env.VITE_TENCENT_KV_ENDPOINT ||
+        "",
+      namespace:
+        localStorage.getItem("custom_tencent_kv_namespace") ||
+        import.meta.env.VITE_TENCENT_KV_NAMESPACE ||
+        "restaurant_kv",
+      apiToken:
+        localStorage.getItem("custom_tencent_kv_token") ||
+        import.meta.env.VITE_TENCENT_KV_TOKEN ||
+        "",
+      ttlSeconds:
+        Number(localStorage.getItem("custom_tencent_kv_ttl")) || DEFAULT_TTL,
     };
   }
 
   // 保存缓存配置
   saveConfig(config: KVCacheConfig) {
     if (typeof window === "undefined") return;
-    if (config.endpoint !== undefined) localStorage.setItem("custom_tencent_kv_endpoint", config.endpoint);
-    if (config.namespace !== undefined) localStorage.setItem("custom_tencent_kv_namespace", config.namespace);
-    if (config.apiToken !== undefined) localStorage.setItem("custom_tencent_kv_token", config.apiToken);
-    if (config.ttlSeconds !== undefined) localStorage.setItem("custom_tencent_kv_ttl", String(config.ttlSeconds));
+    if (config.endpoint !== undefined)
+      localStorage.setItem("custom_tencent_kv_endpoint", config.endpoint);
+    if (config.namespace !== undefined)
+      localStorage.setItem("custom_tencent_kv_namespace", config.namespace);
+    if (config.apiToken !== undefined)
+      localStorage.setItem("custom_tencent_kv_token", config.apiToken);
+    if (config.ttlSeconds !== undefined)
+      localStorage.setItem("custom_tencent_kv_ttl", String(config.ttlSeconds));
   }
 
   // 从 KV 缓存读取
@@ -49,16 +63,25 @@ class KVCacheManager {
     const config = this.getConfig();
     if (config.endpoint && config.apiToken) {
       try {
-        const response = await fetch(`${config.endpoint}/get?namespace=${config.namespace}&key=${encodeURIComponent(key)}`, {
-          headers: {
-            "Authorization": `Bearer ${config.apiToken}`
-          }
-        });
+        const response = await fetch(
+          `${config.endpoint}/get?namespace=${config.namespace}&key=${encodeURIComponent(key)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${config.apiToken}`,
+            },
+          },
+        );
         if (response.ok) {
           const data = await response.json();
           if (data && data.value !== undefined) {
-            const parsed = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
-            this.ariaMemoryCache.set(key, { value: parsed, expiresAt: now + (config.ttlSeconds || DEFAULT_TTL) * 1000 });
+            const parsed =
+              typeof data.value === "string"
+                ? JSON.parse(data.value)
+                : data.value;
+            this.ariaMemoryCache.set(key, {
+              value: parsed,
+              expiresAt: now + (config.ttlSeconds || DEFAULT_TTL) * 1000,
+            });
             return parsed as T;
           }
         }
@@ -73,7 +96,10 @@ class KVCacheManager {
       if (localStr) {
         const item = JSON.parse(localStr);
         if (item.expiresAt > now) {
-          this.ariaMemoryCache.set(key, { value: item.value, expiresAt: item.expiresAt });
+          this.ariaMemoryCache.set(key, {
+            value: item.value,
+            expiresAt: item.expiresAt,
+          });
           return item.value as T;
         } else {
           localStorage.removeItem(`kv_cache_${key}`);
@@ -97,8 +123,11 @@ class KVCacheManager {
 
     // 2. 写入本地 Local KV 缓存
     try {
-      localStorage.setItem(`kv_cache_${key}`, JSON.stringify({ value, expiresAt }));
-    } catch (e) {
+      localStorage.setItem(
+        `kv_cache_${key}`,
+        JSON.stringify({ value, expiresAt }),
+      );
+    } catch {
       console.warn(`[Local KV] Storage limit reached for ${key}`);
     }
 
@@ -109,14 +138,14 @@ class KVCacheManager {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${config.apiToken}`
+            Authorization: `Bearer ${config.apiToken}`,
           },
           body: JSON.stringify({
             namespace: config.namespace,
             key,
             value: typeof value === "object" ? JSON.stringify(value) : value,
-            ttl
-          })
+            ttl,
+          }),
         });
       } catch (err) {
         console.warn(`[Tencent KV] Remote set failed for ${key}:`, err);
@@ -129,7 +158,7 @@ class KVCacheManager {
     this.ariaMemoryCache.delete(key);
     try {
       localStorage.removeItem(`kv_cache_${key}`);
-    } catch (e) {}
+    } catch {}
 
     const config = this.getConfig();
     if (config.endpoint && config.apiToken) {
@@ -138,12 +167,12 @@ class KVCacheManager {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${config.apiToken}`
+            Authorization: `Bearer ${config.apiToken}`,
           },
           body: JSON.stringify({
             namespace: config.namespace,
-            key
-          })
+            key,
+          }),
         });
       } catch (err) {
         console.warn(`[Tencent KV] Remote delete failed for ${key}:`, err);

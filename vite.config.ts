@@ -1,14 +1,14 @@
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-import {defineConfig} from 'vite';
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import { defineConfig } from "vite";
 
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        "@": path.resolve(__dirname, "./src"),
       },
     },
     build: {
@@ -16,15 +16,14 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('src/components/AdminPanel')) return 'admin';
-            if (id.includes('src/features')) return 'features';
-            if (id.includes('node_modules')) {
-              if (id.includes('react')) return 'react';
-              if (id.includes('@supabase')) return 'supabase';
-              if (id.includes('firebase')) return 'firebase';
-              if (id.includes('motion')) return 'motion';
-              if (id.includes('qrcode')) return 'qrcode';
-              if (id.includes('@google/genai')) return 'genai';
+            if (id.includes("src/components/AdminPanel")) return "admin";
+            if (id.includes("src/features")) return "features";
+            if (id.includes("node_modules")) {
+              if (id.includes("react")) return "react";
+              if (id.includes("@supabase")) return "supabase";
+              if (id.includes("motion")) return "motion";
+              if (id.includes("qrcode")) return "qrcode";
+              if (id.includes("@google/genai")) return "genai";
             }
           },
         },
@@ -33,9 +32,9 @@ export default defineConfig(() => {
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: process.env.DISABLE_HMR !== "true",
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      watch: process.env.DISABLE_HMR === "true" ? null : {},
     },
   };
 });

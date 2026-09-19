@@ -1,7 +1,7 @@
-import { safeGetItem, safeSetItem } from "../utils/storage";
-import { useState, useMemo, useEffect } from "react";
+import { safeGetItem } from "../utils/storage";
+import { useState, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
-import { api, isOrderOlderThan2Hours, parseOrderTimestamp } from "../api";
+import { api, parseOrderTimestamp } from "../api";
 import { OrdersTab } from "../features/orders/OrdersTab";
 import { OrderBoard } from "../features/orders/OrderBoard";
 import { QrTab } from "../features/qrcode/QrTab";
@@ -10,17 +10,8 @@ import { FinanceReports } from "../features/inventory/FinanceReports";
 import { MenuTab } from "../features/menu/MenuTab";
 import {
   X,
-  Clock,
   Lock,
   Image as ImageIcon,
-  Plus,
-  PlusCircle,
-  GitMerge,
-  Search,
-  Minus,
-  ShoppingCart,
-  Utensils,
-  Languages,
   Key,
   Sparkles,
   Loader2,
@@ -29,7 +20,6 @@ import {
   Trash2,
   Archive,
   Printer,
-  QrCode,
   Maximize,
   CircleDollarSign,
   LayoutList,
@@ -44,17 +34,14 @@ import {
   Copy,
   Check,
   Save,
-  Settings,
   Sun,
   Moon,
   List,
   Flame,
-  Edit2,
   ShoppingBag,
   User,
   CheckCircle,
   Scan,
-  Download,
   HardDrive,
   Cloud,
   AlertTriangle,
@@ -63,21 +50,19 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  MoveUp,
-  MoveDown,
 } from "lucide-react";
-import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
-import { compressImage, compressBase64Image, drawBeautifulTableCard } from "../utils/image";
+import { compressImage } from "../utils/image";
 import { uploadBase64ToStorage } from "../utils/storage";
 import { SupabaseSetupModal } from "./SupabaseSetupModal";
+import type { MenuCategory, Promotion, ReceiptSettings } from "../types/menu";
 
 interface AdminPanelProps {
-  categories: any[];
-  setCategories: (categories: any[]) => void;
+  categories: MenuCategory[];
+  setCategories: (categories: MenuCategory[]) => void;
   deletedItemIds?: string[];
   setDeletedItemIds?: (ids: string[]) => void;
-  promotions?: any[];
-  setPromotions?: (promotions: any[]) => void;
+  promotions?: Promotion[];
+  setPromotions?: (promotions: Promotion[]) => void;
   restaurantName?: string;
   setRestaurantName?: (name: string) => void;
   welcomeMessage?: string;
@@ -108,8 +93,8 @@ interface AdminPanelProps {
   isSynced?: boolean;
   onSaveToCloud?: (overrides?: any) => void;
   onRestoreBackup?: (data: any) => Promise<void>;
-  receiptSettings?: any;
-  setReceiptSettings?: (settings: any) => void;
+  receiptSettings: ReceiptSettings;
+  setReceiptSettings?: (settings: ReceiptSettings) => void;
 }
 
 const PRESET_BACKGROUNDS = [
@@ -136,9 +121,7 @@ const PRESET_BACKGROUNDS = [
   },
 ];
 
-import { ALLERGEN_OPTIONS } from "../constants";
 import { useMenuManager } from "../features/menu/useMenuManager";
-
 
 export default function AdminPanel({
   categories,
@@ -178,7 +161,6 @@ export default function AdminPanel({
   receiptSettings,
   setReceiptSettings,
 }: AdminPanelProps) {
-
   const [currency, setCurrency] = useState("MAD");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -199,7 +181,9 @@ export default function AdminPanel({
 
   // Settings State
   const [apiKey, setApiKey] = useState(() => safeGetItem("geminiApiKey") || "");
-  const [isPrintServer, setIsPrintServer] = useState(() => safeGetItem("isPrintServer") === "true");
+  const [isPrintServer, setIsPrintServer] = useState(
+    () => safeGetItem("isPrintServer") === "true",
+  );
   const [newAdminPassword, setNewAdminPassword] = useState("");
   const [newSecurityQuestion, setNewSecurityQuestion] = useState(
     securityQuestion || "",
@@ -222,14 +206,19 @@ export default function AdminPanel({
   } | null>(null);
   const [checkoutOrder, setCheckoutOrder] = useState<any | null>(null);
   const [checkoutDiscountStr, setCheckoutDiscountStr] = useState<string>("0");
-  const [checkoutDiscountMode, setCheckoutDiscountMode] = useState<"amount" | "rate">("amount");
+  const [checkoutDiscountMode, setCheckoutDiscountMode] = useState<
+    "amount" | "rate"
+  >("amount");
   const [checkoutReceivedStr, setCheckoutReceivedStr] = useState<string>("0");
-  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<string>("微信支付");
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] =
+    useState<string>("微信支付");
   const [activeNumpadField, setActiveNumpadField] = useState<
     "discount" | "received"
   >("received");
 
-  const [addDishTargetOrder, setAddDishTargetOrder] = useState<any | null>(null);
+  const [addDishTargetOrder, setAddDishTargetOrder] = useState<any | null>(
+    null,
+  );
   const [mergeSourceOrder, setMergeSourceOrder] = useState<any | null>(null);
 
   const [showExportModal, setShowExportModal] = useState(false);
@@ -239,29 +228,67 @@ export default function AdminPanel({
   const [importProgress, setImportProgress] = useState("");
 
   const menuManager = useMenuManager({
-    categories, setCategories, deletedItemIds, setDeletedItemIds,
-    onSaveToCloud, setConfirmDialog, apiKey, setApiKey,
-    currency, setCurrency, restaurantName, welcomeMessage,
-    bgUrl, logoUrl, layoutStyle, theme, soundEnabled,
-    adminPassword, devicePasswords, securityQuestion, securityAnswer,
-    promotions, setPromotions, receiptSettings,
-    setExportedJsonStr, setShowExportModal,
+    categories,
+    setCategories,
+    deletedItemIds,
+    setDeletedItemIds,
+    onSaveToCloud,
+    setConfirmDialog,
+    apiKey,
+    setApiKey,
+    currency,
+    setCurrency,
+    restaurantName,
+    welcomeMessage,
+    bgUrl,
+    logoUrl,
+    layoutStyle,
+    theme,
+    soundEnabled,
+    adminPassword,
+    devicePasswords,
+    securityQuestion,
+    securityAnswer,
+    promotions,
+    setPromotions,
+    receiptSettings,
+    setExportedJsonStr,
+    setShowExportModal,
   });
   const {
-    selectedCategory, setSelectedCategory,
-    newCategory, setNewCategory, newDish, setNewDish,
-    uploadingItemId, setUploadingItemId,
-    isUploading, setIsUploading,
-    promptDialog, setPromptDialog, promptValue, setPromptValue,
-    isOptimizing, setIsOptimizing,
-    optimizationProgress, setOptimizationProgress,
-    sortingCategoryId, setSortingCategoryId,
-    isTranslating, setIsTranslating, isEnhancing, setIsEnhancing,
-    handleMoveCategory, handleMoveDish,
-    handleAddCategory, handleDeleteCategory, handleDeleteDish, handleAddDish,
-    handleAITranslate, handleAIEnhanceImage,
-    handleApiKeyChange, handleExportJson, handleExportCsv,
-    handleOptimizeImages, base64Count,
+    selectedCategory,
+    setSelectedCategory,
+    newCategory,
+    setNewCategory,
+    newDish,
+    setNewDish,
+    uploadingItemId,
+    setUploadingItemId,
+    isUploading,
+    setIsUploading,
+    promptDialog,
+    setPromptDialog,
+    promptValue,
+    setPromptValue,
+    isOptimizing,
+    optimizationProgress,
+    sortingCategoryId,
+    setSortingCategoryId,
+    isTranslating,
+    isEnhancing,
+    handleMoveCategory,
+    handleMoveDish,
+    handleAddCategory,
+    handleDeleteCategory,
+    handleDeleteDish,
+    handleAddDish,
+    handleAITranslate,
+    handleAIEnhanceImage,
+    handleApiKeyChange,
+    handleExportJson,
+    handleExportCsv,
+    handleOptimizeImages,
+    base64Count,
   } = menuManager;
 
   const [diagnosticData, setDiagnosticData] = useState<any>(null);
@@ -280,7 +307,7 @@ export default function AdminPanel({
       setArchiveCleanMsg(
         removed > 0
           ? `已清理 ${removed} 条 ${archiveRetentionDays} 天前的已完成订单`
-          : `没有超过 ${archiveRetentionDays} 天的已完成订单需要清理`
+          : `没有超过 ${archiveRetentionDays} 天的已完成订单需要清理`,
       );
     } catch (e: any) {
       setArchiveCleanMsg(`清理失败: ${e?.message || e}`);
@@ -289,7 +316,10 @@ export default function AdminPanel({
     }
   };
 
-  const [dbTableStats, setDbTableStats] = useState<{ connected: boolean; tables: Record<string, number> } | null>(null);
+  const [dbTableStats, setDbTableStats] = useState<{
+    connected: boolean;
+    tables: Record<string, number>;
+  } | null>(null);
   const [isSeedingDb, setIsSeedingDb] = useState(false);
   const [seedLogs, setSeedLogs] = useState<string[] | null>(null);
   const runDiagnostics = async () => {
@@ -298,7 +328,7 @@ export default function AdminPanel({
       setDiagnosticError(null);
       const [res, stats] = await Promise.all([
         api.getStorageDiagnostics(),
-        api.getProductionDatabaseStats()
+        api.getProductionDatabaseStats(),
       ]);
       if (res.success) {
         setDiagnosticData(res);
@@ -329,7 +359,11 @@ export default function AdminPanel({
   };
 
   const handleDeleteStorageFile = async (path: string) => {
-    if (!window.confirm(`确定要从云存储中彻底删除此文件吗？此操作无法撤销：\n${path}`)) {
+    if (
+      !window.confirm(
+        `确定要从云存储中彻底删除此文件吗？此操作无法撤销：\n${path}`,
+      )
+    ) {
       return;
     }
     try {
@@ -350,44 +384,57 @@ export default function AdminPanel({
 
   const [orders, setOrders] = useState<any[]>([]);
   const [tables, setTables] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<{id: string, message: string, time: Date}[]>([]);
+  const [notifications, setNotifications] = useState<
+    { id: string; message: string; time: Date }[]
+  >([]);
 
   useEffect(() => {
     // EdgeOne 部署：管理员通知经 Supabase Realtime broadcast（替代原 WebSocket）
     const unsubscribe = api.subscribeAdminNotifications((data: any) => {
-      setNotifications(prev => [{ id: Date.now().toString(), message: data?.message || "", time: new Date() }, ...prev].slice(0, 10));
+      setNotifications((prev) =>
+        [
+          {
+            id: Date.now().toString(),
+            message: data?.message || "",
+            time: new Date(),
+          },
+          ...prev,
+        ].slice(0, 10),
+      );
       // Auto-remove notification after 8 seconds
       setTimeout(() => {
-        setNotifications(prev => prev.filter(n => Date.now() - n.time.getTime() < 8000));
+        setNotifications((prev) =>
+          prev.filter((n) => Date.now() - n.time.getTime() < 8000),
+        );
       }, 8000);
-      
+
       // Play a sound for prominence
       try {
-         const audio = new Audio("data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq");
-         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-         const osc = ctx.createOscillator();
-         const gain = ctx.createGain();
-         osc.connect(gain);
-         gain.connect(ctx.destination);
-         osc.type = "sine";
-         osc.frequency.setValueAtTime(880, ctx.currentTime);
-         gain.gain.setValueAtTime(0.1, ctx.currentTime);
-         osc.start();
-         gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
-         osc.stop(ctx.currentTime + 1);
-      } catch(err){}
+        const ctx = new (
+          window.AudioContext || (window as any).webkitAudioContext
+        )();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
+        osc.stop(ctx.currentTime + 1);
+      } catch {}
     });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    unsubscribe = api.subscribeToOrders((data) => {
+    const unsubscribe = api.subscribeToOrders((data) => {
       if (Array.isArray(data)) {
-        data.forEach(order => {
+        data.forEach((order) => {
           if (isPrintServer) {
             let needsUpdate = false;
-            let updatePayload: any = {};
+            const updatePayload: any = {};
 
             if (order.unprintedNewOrder) {
               import("../lib/print").then((m) => {
@@ -397,11 +444,20 @@ export default function AdminPanel({
               updatePayload.unprintedNewOrder = false;
             }
 
-            if (order.unprintedAdditions && order.unprintedAdditions.length > 0) {
+            if (
+              order.unprintedAdditions &&
+              order.unprintedAdditions.length > 0
+            ) {
               import("../lib/print").then((m) => {
                 order.unprintedAdditions.forEach((addition: any) => {
                   const dummyOrder = { ...order, items: addition.items };
-                  m.printReceipt(dummyOrder, currency, receiptSettings, false, "addition");
+                  m.printReceipt(
+                    dummyOrder,
+                    currency,
+                    receiptSettings,
+                    false,
+                    "addition",
+                  );
                 });
               });
               needsUpdate = true;
@@ -457,8 +513,19 @@ export default function AdminPanel({
         orderNumber: "SW-" + Date.now(),
         customerName: "网站客户",
         items: [
-          { name: "测试商品A", enTitle: "Test Item A", frTitle: "Produit Test A", quantity: 2, price: 15.0 },
-          { name: "测试商品B", enTitle: "Test Item B", quantity: 1, price: 20.0 },
+          {
+            name: "测试商品A",
+            enTitle: "Test Item A",
+            frTitle: "Produit Test A",
+            quantity: 2,
+            price: 15.0,
+          },
+          {
+            name: "测试商品B",
+            enTitle: "Test Item B",
+            quantity: 1,
+            price: 20.0,
+          },
         ],
         total: 50.0,
         notes: "来自 shuangwei 网站的直连订单",
@@ -528,10 +595,14 @@ export default function AdminPanel({
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     // A3 修复：仅走后端哈希校验，已移除明文直判
-    try{
-      const r = await fetch('/api/auth/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password }) });
+    try {
+      const r = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
       const j = await r.json();
-      if(j?.ok){
+      if (j?.ok) {
         setIsAuthed(true);
         // 同步密码到本地缓存，使后续受保护 API（requireAdmin）使用同一密码
         localStorage.setItem("menuAdminPassword", password);
@@ -540,7 +611,7 @@ export default function AdminPanel({
       }
       setError("密码错误 / Incorrect Password");
       return;
-    } catch{
+    } catch {
       setError("验证服务不可用 / Service unavailable");
       return;
     }
@@ -607,7 +678,7 @@ export default function AdminPanel({
 
         if (totalImages > 0) {
           setImportProgress(`正在优化并上传备份中的图片 (0/${totalImages})...`);
-          
+
           for (let i = 0; i < obj.categories.length; i++) {
             const cat = obj.categories[i];
             if (cat.items && Array.isArray(cat.items)) {
@@ -616,7 +687,7 @@ export default function AdminPanel({
                 if (item.image && item.image.startsWith("data:image/")) {
                   uploadedCount++;
                   setImportProgress(
-                    `正在优化并托管图片 [${uploadedCount}/${totalImages}]: ${item.title || "菜品"}`
+                    `正在优化并托管图片 [${uploadedCount}/${totalImages}]: ${item.title || "菜品"}`,
                   );
                   try {
                     const publicUrl = await uploadBase64ToStorage(
@@ -673,25 +744,48 @@ export default function AdminPanel({
             await onSaveToCloud({
               categories: obj.categories,
               promotions: obj.promotions || promotions,
-              restaurantName: obj.restaurantName !== undefined ? obj.restaurantName : restaurantName,
-              welcomeMessage: obj.welcomeMessage !== undefined ? obj.welcomeMessage : welcomeMessage,
+              restaurantName:
+                obj.restaurantName !== undefined
+                  ? obj.restaurantName
+                  : restaurantName,
+              welcomeMessage:
+                obj.welcomeMessage !== undefined
+                  ? obj.welcomeMessage
+                  : welcomeMessage,
               bgUrl: obj.bgUrl !== undefined ? obj.bgUrl : bgUrl,
               logoUrl: obj.logoUrl !== undefined ? obj.logoUrl : logoUrl,
-              layoutStyle: obj.layoutStyle !== undefined ? obj.layoutStyle : layoutStyle,
+              layoutStyle:
+                obj.layoutStyle !== undefined ? obj.layoutStyle : layoutStyle,
               theme: obj.theme !== undefined ? obj.theme : theme,
-              soundEnabled: obj.soundEnabled !== undefined ? obj.soundEnabled : soundEnabled,
-              adminPassword: obj.adminPassword !== undefined ? obj.adminPassword : adminPassword,
-              devicePasswords: obj.devicePasswords !== undefined ? obj.devicePasswords : devicePasswords,
-              securityQuestion: obj.securityQuestion !== undefined ? obj.securityQuestion : securityQuestion,
-              securityAnswer: obj.securityAnswer !== undefined ? obj.securityAnswer : securityAnswer,
-              silent: true
+              soundEnabled:
+                obj.soundEnabled !== undefined
+                  ? obj.soundEnabled
+                  : soundEnabled,
+              adminPassword:
+                obj.adminPassword !== undefined
+                  ? obj.adminPassword
+                  : adminPassword,
+              devicePasswords:
+                obj.devicePasswords !== undefined
+                  ? obj.devicePasswords
+                  : devicePasswords,
+              securityQuestion:
+                obj.securityQuestion !== undefined
+                  ? obj.securityQuestion
+                  : securityQuestion,
+              securityAnswer:
+                obj.securityAnswer !== undefined
+                  ? obj.securityAnswer
+                  : securityAnswer,
+              silent: true,
             });
           }
         }
 
         setImportProgress("");
-        alert("🎉 恢复成功！数据已成功加载并同步到云端数据库。/ Restored and synced successfully!");
-
+        alert(
+          "🎉 恢复成功！数据已成功加载并同步到云端数据库。/ Restored and synced successfully!",
+        );
       } catch (err) {
         console.error("Error during JSON import:", err);
         setImportProgress("");
@@ -1084,9 +1178,13 @@ export default function AdminPanel({
       setNewAdminPassword("");
       if (onSaveToCloud) {
         onSaveToCloud({ adminPassword: newAdminPassword, silent: true });
-        alert("密码修改成功并已同步到云端！ / Password changed and synced to cloud!");
+        alert(
+          "密码修改成功并已同步到云端！ / Password changed and synced to cloud!",
+        );
       } else {
-        alert("密码修改成功！请别忘了保存到云端。 / Password changed successfully!");
+        alert(
+          "密码修改成功！请别忘了保存到云端。 / Password changed successfully!",
+        );
       }
     }
   };
@@ -1100,9 +1198,11 @@ export default function AdminPanel({
         onSaveToCloud({
           securityQuestion: newSecurityQuestion,
           securityAnswer: newSecurityAnswer,
-          silent: true
+          silent: true,
         });
-        alert("密保问题修改成功并已同步到云端！ / Security question changed and synced to cloud!");
+        alert(
+          "密保问题修改成功并已同步到云端！ / Security question changed and synced to cloud!",
+        );
       } else {
         alert("密保问题设置成功！/ Security question configured!");
       }
@@ -1187,25 +1287,6 @@ export default function AdminPanel({
     "C",
   ];
 
-  const downloadTableCard = (tableNo: string, storeName: string) => {
-    const qrCanvas = document.getElementById(`qr-${tableNo}`) as HTMLCanvasElement;
-    if (!qrCanvas) return;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 1000;
-    canvas.height = 1500;
-    
-    drawBeautifulTableCard(canvas, qrCanvas, tableNo, storeName);
-
-    const url = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Table-${tableNo}-Card.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4 font-sans">
       <div className="bg-zinc-900 border-zinc-800 sm:border rounded-none sm:rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col h-[100dvh] sm:h-[90vh]">
@@ -1213,9 +1294,14 @@ export default function AdminPanel({
         {notifications.length > 0 && (
           <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-3 pointer-events-none w-[90%] sm:w-[500px]">
             {notifications.map((notif) => (
-              <div key={notif.id} className="bg-orange-600/95 backdrop-blur-xl text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(249,115,22,0.6)] border-2 border-orange-400 flex items-center gap-4 font-bold animate-in slide-in-from-top-10 fade-in duration-300">
+              <div
+                key={notif.id}
+                className="bg-orange-600/95 backdrop-blur-xl text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(249,115,22,0.6)] border-2 border-orange-400 flex items-center gap-4 font-bold animate-in slide-in-from-top-10 fade-in duration-300"
+              >
                 <div className="w-3 h-3 rounded-full bg-white animate-pulse shadow-[0_0_10px_white]" />
-                <span className="text-base md:text-lg tracking-wide">{notif.message}</span>
+                <span className="text-base md:text-lg tracking-wide">
+                  {notif.message}
+                </span>
               </div>
             ))}
           </div>
@@ -1378,8 +1464,10 @@ export default function AdminPanel({
                 )}
               </div>
 
-              <div 
-                onWheel={(e) => { if (e.deltaY !== 0) e.currentTarget.scrollLeft += e.deltaY; }}
+              <div
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) e.currentTarget.scrollLeft += e.deltaY;
+                }}
                 className="flex overflow-x-auto space-x-2 border-b border-zinc-800 pb-2 custom-scrollbar pr-8 hide-scrollbar cursor-grab active:cursor-grabbing"
               >
                 <button
@@ -1465,65 +1553,83 @@ export default function AdminPanel({
             <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 pb-16">
               {activeTab === "orders" && (
                 <>
-                <OrdersTab
-                  orders={orders}
-                  orderView={orderView}
-                  setOrderView={setOrderView}
-                  currency={currency}
-                  receiptSettings={receiptSettings}
-                  onSimulateExternal={handleSimulateExternalOrder}
-                  onConfirmDialog={setConfirmDialog}
-                  onAddDish={(order) => { setAddDishTargetOrder(order); }}
-                  onMerge={(order) => { setMergeSourceOrder(order); }}
-                  onCheckout={(order) => { setCheckoutOrder(order); setCheckoutPaymentMethod(order?.paymentMethod || "微信支付"); setCheckoutDiscountStr("0"); setCheckoutDiscountMode("amount"); setCheckoutReceivedStr(String(order.total || 0)); setActiveNumpadField("received"); }}
-                />
-                {/* 订单自动归档清理（Supabase 免费层配额保护） */}
-                <div className="mb-6 p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50">
-                  <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                    <Archive size={20} className="text-orange-500" />{" "}
-                    历史订单自动归档清理 (Auto Archive)
-                  </h3>
-                  <p className="text-xs text-zinc-400 mb-4">
-                    自动删除超过设定天数的<strong>已完成订单</strong>，控制 Supabase 免费层数据库存储用量。可随时手动执行。
-                  </p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-2 text-xs text-zinc-300">
-                      保留最近
-                      <select
-                        value={archiveRetentionDays}
-                        onChange={(e) => setArchiveRetentionDays(Number(e.target.value))}
-                        className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-orange-500"
+                  <OrdersTab
+                    orders={orders}
+                    orderView={orderView}
+                    setOrderView={setOrderView}
+                    currency={currency}
+                    receiptSettings={receiptSettings}
+                    onSimulateExternal={handleSimulateExternalOrder}
+                    onConfirmDialog={setConfirmDialog}
+                    onAddDish={(order) => {
+                      setAddDishTargetOrder(order);
+                    }}
+                    onMerge={(order) => {
+                      setMergeSourceOrder(order);
+                    }}
+                    onCheckout={(order) => {
+                      setCheckoutOrder(order);
+                      setCheckoutPaymentMethod(
+                        order?.paymentMethod || "微信支付",
+                      );
+                      setCheckoutDiscountStr("0");
+                      setCheckoutDiscountMode("amount");
+                      setCheckoutReceivedStr(String(order.total || 0));
+                      setActiveNumpadField("received");
+                    }}
+                  />
+                  {/* 订单自动归档清理（Supabase 免费层配额保护） */}
+                  <div className="mb-6 p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50">
+                    <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                      <Archive size={20} className="text-orange-500" />{" "}
+                      历史订单自动归档清理 (Auto Archive)
+                    </h3>
+                    <p className="text-xs text-zinc-400 mb-4">
+                      自动删除超过设定天数的<strong>已完成订单</strong>，控制
+                      Supabase 免费层数据库存储用量。可随时手动执行。
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-2 text-xs text-zinc-300">
+                        保留最近
+                        <select
+                          value={archiveRetentionDays}
+                          onChange={(e) =>
+                            setArchiveRetentionDays(Number(e.target.value))
+                          }
+                          className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-orange-500"
+                        >
+                          <option value={7}>7 天</option>
+                          <option value={14}>14 天</option>
+                          <option value={30}>30 天</option>
+                          <option value={90}>90 天</option>
+                          <option value={180}>180 天</option>
+                        </select>
+                        的已完成订单
+                      </label>
+                      <button
+                        onClick={handleArchiveCleanup}
+                        disabled={isCleaningArchive}
+                        className="flex items-center gap-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white font-bold px-4 py-2 rounded-lg transition-all shadow-md shadow-orange-600/20 disabled:opacity-50"
                       >
-                        <option value={7}>7 天</option>
-                        <option value={14}>14 天</option>
-                        <option value={30}>30 天</option>
-                        <option value={90}>90 天</option>
-                        <option value={180}>180 天</option>
-                      </select>
-                      的已完成订单
-                    </label>
-                    <button
-                      onClick={handleArchiveCleanup}
-                      disabled={isCleaningArchive}
-                      className="flex items-center gap-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white font-bold px-4 py-2 rounded-lg transition-all shadow-md shadow-orange-600/20 disabled:opacity-50"
-                    >
-                      {isCleaningArchive ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          清理中...
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 size={14} />
-                          立即清理
-                        </>
-                      )}
-                    </button>
+                        {isCleaningArchive ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            清理中...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={14} />
+                            立即清理
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {archiveCleanMsg && (
+                      <p className="text-xs text-emerald-400 mt-3">
+                        {archiveCleanMsg}
+                      </p>
+                    )}
                   </div>
-                  {archiveCleanMsg && (
-                    <p className="text-xs text-emerald-400 mt-3">{archiveCleanMsg}</p>
-                  )}
-                </div>
                 </>
               )}
               {activeTab === "tools" && (
@@ -2116,37 +2222,79 @@ export default function AdminPanel({
                             <label className="block text-sm font-semibold text-zinc-300 mb-2">
                               二维码配色 (QR Code Colors)
                             </label>
-                            
+
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
                               {[
-                                { name: '经典黑白', fg: '#18181b', bg: '#ffffff' },
-                                { name: '暗夜鎏金', fg: '#fbbf24', bg: '#18181b' },
-                                { name: '品牌鲜橙', fg: '#ea580c', bg: '#ffffff' },
-                                { name: '极光碧绿', fg: '#064e3b', bg: '#ecfdf5' },
-                                { name: '深海湛蓝', fg: '#1e3a8a', bg: '#eff6ff' },
-                                { name: '勃艮第红', fg: '#831843', bg: '#fdf2f8' }
+                                {
+                                  name: "经典黑白",
+                                  fg: "#18181b",
+                                  bg: "#ffffff",
+                                },
+                                {
+                                  name: "暗夜鎏金",
+                                  fg: "#fbbf24",
+                                  bg: "#18181b",
+                                },
+                                {
+                                  name: "品牌鲜橙",
+                                  fg: "#ea580c",
+                                  bg: "#ffffff",
+                                },
+                                {
+                                  name: "极光碧绿",
+                                  fg: "#064e3b",
+                                  bg: "#ecfdf5",
+                                },
+                                {
+                                  name: "深海湛蓝",
+                                  fg: "#1e3a8a",
+                                  bg: "#eff6ff",
+                                },
+                                {
+                                  name: "勃艮第红",
+                                  fg: "#831843",
+                                  bg: "#fdf2f8",
+                                },
                               ].map((preset, idx) => (
                                 <button
                                   key={idx}
-                                  onClick={() => setReceiptSettings({ ...receiptSettings, qrCodeFgColor: preset.fg, qrCodeBgColor: preset.bg })}
+                                  onClick={() =>
+                                    setReceiptSettings({
+                                      ...receiptSettings,
+                                      qrCodeFgColor: preset.fg,
+                                      qrCodeBgColor: preset.bg,
+                                    })
+                                  }
                                   className="flex items-center gap-2 p-2 rounded-lg border border-zinc-700 bg-zinc-900 hover:border-orange-500 transition-colors text-left"
                                 >
                                   <div className="flex w-6 h-6 rounded-md overflow-hidden border border-zinc-600 shrink-0">
-                                    <div className="w-1/2 h-full" style={{ backgroundColor: preset.bg }}></div>
-                                    <div className="w-1/2 h-full" style={{ backgroundColor: preset.fg }}></div>
+                                    <div
+                                      className="w-1/2 h-full"
+                                      style={{ backgroundColor: preset.bg }}
+                                    ></div>
+                                    <div
+                                      className="w-1/2 h-full"
+                                      style={{ backgroundColor: preset.fg }}
+                                    ></div>
                                   </div>
-                                  <span className="text-xs text-zinc-300 truncate">{preset.name}</span>
+                                  <span className="text-xs text-zinc-300 truncate">
+                                    {preset.name}
+                                  </span>
                                 </button>
                               ))}
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-4">
                               <div className="flex-1">
-                                <label className="block text-xs text-zinc-500 mb-1">前景色 (Foreground)</label>
+                                <label className="block text-xs text-zinc-500 mb-1">
+                                  前景色 (Foreground)
+                                </label>
                                 <div className="flex gap-2">
                                   <input
                                     type="color"
-                                    value={receiptSettings.qrCodeFgColor || "#18181b"}
+                                    value={
+                                      receiptSettings.qrCodeFgColor || "#18181b"
+                                    }
                                     onChange={(e) =>
                                       setReceiptSettings({
                                         ...receiptSettings,
@@ -2157,7 +2305,9 @@ export default function AdminPanel({
                                   />
                                   <input
                                     type="text"
-                                    value={receiptSettings.qrCodeFgColor || "#18181b"}
+                                    value={
+                                      receiptSettings.qrCodeFgColor || "#18181b"
+                                    }
                                     onChange={(e) =>
                                       setReceiptSettings({
                                         ...receiptSettings,
@@ -2170,11 +2320,15 @@ export default function AdminPanel({
                                 </div>
                               </div>
                               <div className="flex-1">
-                                <label className="block text-xs text-zinc-500 mb-1">背景色 (Background)</label>
+                                <label className="block text-xs text-zinc-500 mb-1">
+                                  背景色 (Background)
+                                </label>
                                 <div className="flex gap-2">
                                   <input
                                     type="color"
-                                    value={receiptSettings.qrCodeBgColor || "#ffffff"}
+                                    value={
+                                      receiptSettings.qrCodeBgColor || "#ffffff"
+                                    }
                                     onChange={(e) =>
                                       setReceiptSettings({
                                         ...receiptSettings,
@@ -2185,7 +2339,9 @@ export default function AdminPanel({
                                   />
                                   <input
                                     type="text"
-                                    value={receiptSettings.qrCodeBgColor || "#ffffff"}
+                                    value={
+                                      receiptSettings.qrCodeBgColor || "#ffffff"
+                                    }
                                     onChange={(e) =>
                                       setReceiptSettings({
                                         ...receiptSettings,
@@ -2213,10 +2369,18 @@ export default function AdminPanel({
                               }
                               className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500 transition-colors text-sm"
                             >
-                              <option value="L">L (7%) - 适合简单二维码，线条较少</option>
-                              <option value="M">M (15%) - 适合无中心图标的常规情况</option>
-                              <option value="Q">Q (25%) - 适合中心有较小图标</option>
-                              <option value="H">H (30%) - 适合中心有较大图标 (推荐)</option>
+                              <option value="L">
+                                L (7%) - 适合简单二维码，线条较少
+                              </option>
+                              <option value="M">
+                                M (15%) - 适合无中心图标的常规情况
+                              </option>
+                              <option value="Q">
+                                Q (25%) - 适合中心有较小图标
+                              </option>
+                              <option value="H">
+                                H (30%) - 适合中心有较大图标 (推荐)
+                              </option>
                             </select>
                           </div>
                           <div>
@@ -2299,7 +2463,10 @@ export default function AdminPanel({
                                     const val = e.target.checked;
                                     setIsPrintServer(val);
                                     if (val) {
-                                      localStorage.setItem("isPrintServer", "true");
+                                      localStorage.setItem(
+                                        "isPrintServer",
+                                        "true",
+                                      );
                                     } else {
                                       localStorage.removeItem("isPrintServer");
                                     }
@@ -2308,10 +2475,14 @@ export default function AdminPanel({
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-sm font-semibold text-white">
-                                  将此设备设为打印服务器 (Set this device as Print Server)
+                                  将此设备设为打印服务器 (Set this device as
+                                  Print Server)
                                 </span>
                                 <span className="text-xs text-zinc-400 mt-1">
-                                  开启后，当有新订单或加菜单时，此设备将自动唤起打印机进行打印。(When enabled, this device will automatically trigger the printer for new orders and additions.)
+                                  开启后，当有新订单或加菜单时，此设备将自动唤起打印机进行打印。(When
+                                  enabled, this device will automatically
+                                  trigger the printer for new orders and
+                                  additions.)
                                 </span>
                               </div>
                             </label>
@@ -2729,30 +2900,61 @@ export default function AdminPanel({
               )}
               {activeTab === "menu" && (
                 <MenuTab
-                  categories={categories} setCategories={setCategories}
-                  newCategory={newCategory} setNewCategory={setNewCategory}
-                  newDish={newDish} setNewDish={setNewDish}
-                  handleAddCategory={handleAddCategory} handleAddDish={handleAddDish}
-                  handleDeleteCategory={handleDeleteCategory} handleDeleteDish={handleDeleteDish}
-                  handleMoveCategory={handleMoveCategory} handleMoveDish={handleMoveDish}
-                  handleExportJson={handleExportJson} handleExportCsv={handleExportCsv}
-                  handleAITranslate={handleAITranslate} handleAIEnhanceImage={handleAIEnhanceImage}
+                  categories={categories}
+                  setCategories={setCategories}
+                  newCategory={newCategory}
+                  setNewCategory={setNewCategory}
+                  newDish={newDish}
+                  setNewDish={setNewDish}
+                  handleAddCategory={handleAddCategory}
+                  handleAddDish={handleAddDish}
+                  handleDeleteCategory={handleDeleteCategory}
+                  handleDeleteDish={handleDeleteDish}
+                  handleMoveCategory={handleMoveCategory}
+                  handleMoveDish={handleMoveDish}
+                  handleExportJson={handleExportJson}
+                  handleExportCsv={handleExportCsv}
+                  handleAITranslate={handleAITranslate}
+                  handleAIEnhanceImage={handleAIEnhanceImage}
                   handleApiKeyChange={handleApiKeyChange}
-                  setCurrency={setCurrency} setIsUploading={setIsUploading} setUploadingItemId={setUploadingItemId}
-                  setPromptDialog={setPromptDialog} setPromptValue={setPromptValue}
-                  setSelectedCategory={setSelectedCategory} setSortingCategoryId={setSortingCategoryId}
-                  currency={currency} restaurantName={restaurantName} welcomeMessage={welcomeMessage}
-                  bgUrl={bgUrl} logoUrl={logoUrl} layoutStyle={layoutStyle} theme={theme} soundEnabled={soundEnabled}
-                  receiptSettings={receiptSettings} promotions={promotions} setPromotions={setPromotions}
-                  deletedItemIds={deletedItemIds} setDeletedItemIds={setDeletedItemIds}
-                  setRestaurantName={setRestaurantName} setWelcomeMessage={setWelcomeMessage}
-                  setBgUrl={setBgUrl} setLogoUrl={setLogoUrl} setLayoutStyle={setLayoutStyle} setTheme={setTheme}
+                  setCurrency={setCurrency}
+                  setIsUploading={setIsUploading}
+                  setUploadingItemId={setUploadingItemId}
+                  setPromptDialog={setPromptDialog}
+                  setPromptValue={setPromptValue}
+                  setSelectedCategory={setSelectedCategory}
+                  setSortingCategoryId={setSortingCategoryId}
+                  currency={currency}
+                  restaurantName={restaurantName}
+                  welcomeMessage={welcomeMessage}
+                  bgUrl={bgUrl}
+                  logoUrl={logoUrl}
+                  layoutStyle={layoutStyle}
+                  theme={theme}
+                  soundEnabled={soundEnabled}
+                  receiptSettings={receiptSettings}
+                  promotions={promotions}
+                  setPromotions={setPromotions}
+                  deletedItemIds={deletedItemIds}
+                  setDeletedItemIds={setDeletedItemIds}
+                  setRestaurantName={setRestaurantName}
+                  setWelcomeMessage={setWelcomeMessage}
+                  setBgUrl={setBgUrl}
+                  setLogoUrl={setLogoUrl}
+                  setLayoutStyle={setLayoutStyle}
+                  setTheme={setTheme}
                   setSoundEnabled={setSoundEnabled}
-                  isUploading={isUploading} promptValue={promptValue} promptDialog={promptDialog}
-                  uploadingItemId={uploadingItemId} selectedCategory={selectedCategory} sortingCategoryId={sortingCategoryId}
-                  isOptimizing={isOptimizing} optimizationProgress={optimizationProgress}
+                  isUploading={isUploading}
+                  promptValue={promptValue}
+                  promptDialog={promptDialog}
+                  uploadingItemId={uploadingItemId}
+                  selectedCategory={selectedCategory}
+                  sortingCategoryId={sortingCategoryId}
+                  isOptimizing={isOptimizing}
+                  optimizationProgress={optimizationProgress}
                   onSaveToCloud={onSaveToCloud}
-                  isTranslating={isTranslating} isEnhancing={isEnhancing}
+                  isTranslating={isTranslating}
+                  isEnhancing={isEnhancing}
                 />
               )}
               {activeTab === "promotions" && (
@@ -3117,7 +3319,8 @@ export default function AdminPanel({
                     </h3>
                     <p className="text-xs text-zinc-400 mb-4">
                       您可以将当前的所有分类、菜品、背景配置下载为 JSON
-                      格式备份到本地设备，或导出 Excel/CSV 菜品清单表格，也可以从本地恢复菜单。
+                      格式备份到本地设备，或导出 Excel/CSV
+                      菜品清单表格，也可以从本地恢复菜单。
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <button
@@ -3126,7 +3329,9 @@ export default function AdminPanel({
                       >
                         <DownloadCloud size={22} className="text-orange-400" />
                         <span>导出 JSON 备份</span>
-                        <span className="text-[10px] font-normal text-zinc-500">(Export JSON)</span>
+                        <span className="text-[10px] font-normal text-zinc-500">
+                          (Export JSON)
+                        </span>
                       </button>
                       <button
                         onClick={handleExportCsv}
@@ -3134,12 +3339,16 @@ export default function AdminPanel({
                       >
                         <FileSpreadsheet size={22} className="text-green-400" />
                         <span>导出 Excel / CSV</span>
-                        <span className="text-[10px] font-normal text-zinc-500">(Export Spreadsheet)</span>
+                        <span className="text-[10px] font-normal text-zinc-500">
+                          (Export Spreadsheet)
+                        </span>
                       </button>
                       <label className="bg-zinc-900 border border-zinc-800 hover:border-blue-500 text-zinc-300 hover:text-blue-500 px-4 py-3 rounded-xl transition-colors text-sm font-semibold flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-95">
                         <UploadCloud size={22} className="text-blue-400" />
                         <span>从本地恢复</span>
-                        <span className="text-[10px] font-normal text-zinc-500">(Import JSON)</span>
+                        <span className="text-[10px] font-normal text-zinc-500">
+                          (Import JSON)
+                        </span>
                         <input
                           type="file"
                           accept=".json"
@@ -3159,12 +3368,23 @@ export default function AdminPanel({
                     {base64Count > 0 ? (
                       <div>
                         <p className="text-xs text-zinc-300 mb-3">
-                          ⚠️ <strong>检测到您的菜单中含有本地 Base64 图片：</strong>
+                          ⚠️{" "}
+                          <strong>
+                            检测到您的菜单中含有本地 Base64 图片：
+                          </strong>
                           <br />
-                          当前有 <span className="text-orange-500 font-bold text-sm">{base64Count}</span> 个菜品的图片以 Base64 内嵌在 Supabase settings 设置文档中，会占用较大存储空间并拖慢同步速度。
+                          当前有{" "}
+                          <span className="text-orange-500 font-bold text-sm">
+                            {base64Count}
+                          </span>{" "}
+                          个菜品的图片以 Base64 内嵌在 Supabase settings
+                          设置文档中，会占用较大存储空间并拖慢同步速度。
                         </p>
                         <p className="text-xs text-zinc-400 mb-4">
-                          点击下方按钮，系统将自动把所有 Base64 格式的菜品图片上传至安全的 <strong>Supabase Storage 云存储空间</strong>，并在数据库中只保留轻量的图片网址，显著缩小设置体积。
+                          点击下方按钮，系统将自动把所有 Base64
+                          格式的菜品图片上传至安全的{" "}
+                          <strong>Supabase Storage 云存储空间</strong>
+                          ，并在数据库中只保留轻量的图片网址，显著缩小设置体积。
                         </p>
                         <button
                           onClick={handleOptimizeImages}
@@ -3179,20 +3399,26 @@ export default function AdminPanel({
                           ) : (
                             <>
                               <Sparkles size={18} />
-                              <span>一键优化图片存储 (迁移至 Supabase Storage)</span>
+                              <span>
+                                一键优化图片存储 (迁移至 Supabase Storage)
+                              </span>
                             </>
                           )}
                         </button>
                       </div>
                     ) : (
                       <div className="flex items-start gap-3 p-3 bg-green-500/5 border border-green-500/10 rounded-xl">
-                        <CheckCircle size={20} className="text-green-500 shrink-0 mt-0.5" />
+                        <CheckCircle
+                          size={20}
+                          className="text-green-500 shrink-0 mt-0.5"
+                        />
                         <div>
                           <p className="text-xs text-green-400 font-semibold mb-1">
                             图片存储状态优良 / All Images Optimized
                           </p>
                           <p className="text-[11px] text-zinc-400">
-                            您的所有菜品图片均已托管在 Supabase Storage 云存储或外链中，设置文档体积保持精简。
+                            您的所有菜品图片均已托管在 Supabase Storage
+                            云存储或外链中，设置文档体积保持精简。
                           </p>
                         </div>
                       </div>
@@ -3203,7 +3429,10 @@ export default function AdminPanel({
                   <div className="mb-6 p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50">
                     <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                       <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                        <Cloud size={20} className="text-orange-500 animate-pulse" />{" "}
+                        <Cloud
+                          size={20}
+                          className="text-orange-500 animate-pulse"
+                        />{" "}
                         Supabase 云数据库与存储空间联控
                       </h3>
                       <div className="flex items-center gap-2">
@@ -3220,21 +3449,34 @@ export default function AdminPanel({
                           disabled={isLoadingDiagnostics}
                           className="flex items-center gap-1 text-xs bg-zinc-900 border border-zinc-700 hover:border-orange-500 hover:text-orange-400 text-zinc-300 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                         >
-                          <RefreshCw size={12} className={isLoadingDiagnostics ? "animate-spin" : ""} />
-                          <span>{isLoadingDiagnostics ? "正在扫描..." : "刷新诊断"}</span>
+                          <RefreshCw
+                            size={12}
+                            className={
+                              isLoadingDiagnostics ? "animate-spin" : ""
+                            }
+                          />
+                          <span>
+                            {isLoadingDiagnostics ? "正在扫描..." : "刷新诊断"}
+                          </span>
                         </button>
                       </div>
                     </div>
 
                     {isLoadingDiagnostics && !diagnosticData ? (
                       <div className="flex flex-col items-center justify-center py-8 text-zinc-500 gap-2">
-                        <Loader2 className="animate-spin text-orange-500" size={24} />
-                        <span className="text-xs">正在深度扫描云端存储桶文件并计算空间占比...</span>
+                        <Loader2
+                          className="animate-spin text-orange-500"
+                          size={24}
+                        />
+                        <span className="text-xs">
+                          正在深度扫描云端存储桶文件并计算空间占比...
+                        </span>
                       </div>
                     ) : diagnosticError ? (
                       <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex flex-col gap-2">
                         <p className="flex items-center gap-1.5 font-semibold">
-                          <AlertTriangle size={14} /> 诊断异常: {diagnosticError}
+                          <AlertTriangle size={14} /> 诊断异常:{" "}
+                          {diagnosticError}
                         </p>
                         <button
                           onClick={runDiagnostics}
@@ -3249,36 +3491,64 @@ export default function AdminPanel({
                         <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80">
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-zinc-400 font-semibold flex items-center gap-1">
-                              <HardDrive size={13} className="text-orange-500" />
+                              <HardDrive
+                                size={13}
+                                className="text-orange-500"
+                              />
                               云端存储桶 (menu-assets) 容量状态
                             </span>
                             <span className="text-zinc-400 font-mono">
-                              {(diagnosticData.totalUsedBytes / (1024 * 1024)).toFixed(2)} MB / {(diagnosticData.bucketLimitBytes / (1024 * 1024)).toFixed(0)} MB
+                              {(
+                                diagnosticData.totalUsedBytes /
+                                (1024 * 1024)
+                              ).toFixed(2)}{" "}
+                              MB /{" "}
+                              {(
+                                diagnosticData.bucketLimitBytes /
+                                (1024 * 1024)
+                              ).toFixed(0)}{" "}
+                              MB
                             </span>
                           </div>
-                          
+
                           {/* Progress Bar */}
                           <div className="w-full h-2 bg-zinc-950 border border-zinc-800 rounded-full overflow-hidden mb-2">
                             <div
                               className={`h-full transition-all duration-500 ${
-                                (diagnosticData.totalUsedBytes / diagnosticData.bucketLimitBytes) > 0.8
+                                diagnosticData.totalUsedBytes /
+                                  diagnosticData.bucketLimitBytes >
+                                0.8
                                   ? "bg-red-500 animate-pulse"
-                                  : (diagnosticData.totalUsedBytes / diagnosticData.bucketLimitBytes) > 0.5
-                                  ? "bg-amber-500"
-                                  : "bg-emerald-500"
+                                  : diagnosticData.totalUsedBytes /
+                                        diagnosticData.bucketLimitBytes >
+                                      0.5
+                                    ? "bg-amber-500"
+                                    : "bg-emerald-500"
                               }`}
                               style={{
-                                width: `${Math.min(100, Math.max(0.5, (diagnosticData.totalUsedBytes / diagnosticData.bucketLimitBytes) * 100))}%`
+                                width: `${Math.min(100, Math.max(0.5, (diagnosticData.totalUsedBytes / diagnosticData.bucketLimitBytes) * 100))}%`,
                               }}
                             />
                           </div>
 
                           <div className="flex justify-between text-[10px] text-zinc-500">
                             <span>
-                              可用空间: {((diagnosticData.bucketLimitBytes - diagnosticData.totalUsedBytes) / (1024 * 1024)).toFixed(2)} MB
+                              可用空间:{" "}
+                              {(
+                                (diagnosticData.bucketLimitBytes -
+                                  diagnosticData.totalUsedBytes) /
+                                (1024 * 1024)
+                              ).toFixed(2)}{" "}
+                              MB
                             </span>
                             <span>
-                              已用占比: {((diagnosticData.totalUsedBytes / diagnosticData.bucketLimitBytes) * 100).toFixed(2)}%
+                              已用占比:{" "}
+                              {(
+                                (diagnosticData.totalUsedBytes /
+                                  diagnosticData.bucketLimitBytes) *
+                                100
+                              ).toFixed(2)}
+                              %
                             </span>
                           </div>
                         </div>
@@ -3287,8 +3557,12 @@ export default function AdminPanel({
                         <div className="p-3.5 bg-zinc-900/80 rounded-xl border border-zinc-800">
                           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                             <span className="text-zinc-200 font-semibold flex items-center gap-1.5 text-xs">
-                              <Database size={14} className="text-emerald-400" />
-                              生产环境数据库全表状态 (Production Database Tables)
+                              <Database
+                                size={14}
+                                className="text-emerald-400"
+                              />
+                              生产环境数据库全表状态 (Production Database
+                              Tables)
                             </span>
                             <div className="flex items-center gap-2">
                               <button
@@ -3297,13 +3571,21 @@ export default function AdminPanel({
                                 disabled={isSeedingDb}
                                 className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-2.5 py-1 rounded-lg transition-all text-[11px] shadow-sm shadow-emerald-600/20"
                               >
-                                {isSeedingDb ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                                {isSeedingDb ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  <RefreshCw size={12} />
+                                )}
                                 <span>一键自动补全空表</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm("确定要对 Supabase 生产环境数据库执行强制全量重置同步吗？这会刷新初始化数据。")) {
+                                  if (
+                                    window.confirm(
+                                      "确定要对 Supabase 生产环境数据库执行强制全量重置同步吗？这会刷新初始化数据。",
+                                    )
+                                  ) {
                                     handleSeedDatabase(true);
                                   }
                                 }}
@@ -3318,15 +3600,40 @@ export default function AdminPanel({
                           {dbTableStats?.tables ? (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                               {[
-                                { key: "settings", label: "全局设置", icon: "⚙️" },
-                                { key: "categories", label: "菜单分类", icon: "📁" },
-                                { key: "menu_items", label: "菜品数据", icon: "🍖" },
-                                { key: "inventory_items", label: "原材料库存", icon: "📦" },
-                                { key: "recipe_boms", label: "BOM配方", icon: "🧪" },
+                                {
+                                  key: "settings",
+                                  label: "全局设置",
+                                  icon: "⚙️",
+                                },
+                                {
+                                  key: "categories",
+                                  label: "菜单分类",
+                                  icon: "📁",
+                                },
+                                {
+                                  key: "menu_items",
+                                  label: "菜品数据",
+                                  icon: "🍖",
+                                },
+                                {
+                                  key: "inventory_items",
+                                  label: "原材料库存",
+                                  icon: "📦",
+                                },
+                                {
+                                  key: "recipe_boms",
+                                  label: "BOM配方",
+                                  icon: "🧪",
+                                },
                                 { key: "tables", label: "QR餐桌", icon: "🪑" },
-                                { key: "orders", label: "顾客订单", icon: "🧾" },
-                              ].map(item => {
-                                const count = dbTableStats.tables[item.key] ?? -1;
+                                {
+                                  key: "orders",
+                                  label: "顾客订单",
+                                  icon: "🧾",
+                                },
+                              ].map((item) => {
+                                const count =
+                                  dbTableStats.tables[item.key] ?? -1;
                                 const isEmpty = count === 0;
                                 const isError = count === -1;
                                 return (
@@ -3336,20 +3643,28 @@ export default function AdminPanel({
                                       isError
                                         ? "bg-red-500/5 border-red-500/20 text-red-400"
                                         : isEmpty
-                                        ? "bg-amber-500/5 border-amber-500/20 text-amber-300"
-                                        : "bg-zinc-950 border-zinc-800 text-zinc-300"
+                                          ? "bg-amber-500/5 border-amber-500/20 text-amber-300"
+                                          : "bg-zinc-950 border-zinc-800 text-zinc-300"
                                     }`}
                                   >
                                     <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                                      <span>{item.icon} {item.label}</span>
-                                      <span className="font-mono text-[10px] text-zinc-500">{item.key}</span>
+                                      <span>
+                                        {item.icon} {item.label}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-zinc-500">
+                                        {item.key}
+                                      </span>
                                     </div>
                                     <div className="mt-1 flex items-baseline justify-between">
                                       <span className="text-sm font-bold font-mono">
                                         {isError ? "未建表" : `${count} 条`}
                                       </span>
                                       <span className="text-[10px]">
-                                        {isError ? "⚠️" : isEmpty ? "需初始化" : "正常已同步"}
+                                        {isError
+                                          ? "⚠️"
+                                          : isEmpty
+                                            ? "需初始化"
+                                            : "正常已同步"}
                                       </span>
                                     </div>
                                   </div>
@@ -3358,7 +3673,10 @@ export default function AdminPanel({
                             </div>
                           ) : (
                             <div className="py-3 text-center text-zinc-500 text-[11px] flex items-center justify-center gap-1.5">
-                              <Loader2 size={13} className="animate-spin text-emerald-500" />
+                              <Loader2
+                                size={13}
+                                className="animate-spin text-emerald-500"
+                              />
                               正在获取生产数据库各表记录数...
                             </div>
                           )}
@@ -3369,7 +3687,10 @@ export default function AdminPanel({
                                 <Sparkles size={12} /> 同步/初始化结果日志:
                               </div>
                               {seedLogs.map((log, idx) => (
-                                <div key={idx} className="text-zinc-300 leading-snug">
+                                <div
+                                  key={idx}
+                                  className="text-zinc-300 leading-snug"
+                                >
                                   {log}
                                 </div>
                               ))}
@@ -3384,16 +3705,25 @@ export default function AdminPanel({
                             智能大图自动压缩已生效 (High-Res Smart Compression)
                           </p>
                           <p className="text-[10px] leading-relaxed">
-                            为了保障手机端极速加载，系统已应用 <strong>1200px 高清无损压缩算法</strong>。
-                            上传超过 1MB 的超大菜品图片或背景时，前端将在上传前自动将其压缩至 150KB-300KB 的黄金平衡尺寸，在保持高清的同时节省 85% 以上的云存储桶空间！
+                            为了保障手机端极速加载，系统已应用{" "}
+                            <strong>1200px 高清无损压缩算法</strong>。 上传超过
+                            1MB
+                            的超大菜品图片或背景时，前端将在上传前自动将其压缩至
+                            150KB-300KB 的黄金平衡尺寸，在保持高清的同时节省 85%
+                            以上的云存储桶空间！
                           </p>
                         </div>
 
                         {/* File list header */}
                         <div>
                           <div className="flex justify-between text-zinc-400 font-semibold mb-2 items-center px-1">
-                            <span>云端文件列表 ({diagnosticData.files.length} 个文件)</span>
-                            <span className="text-zinc-500 font-normal">点击垃圾桶可清理冗余/无用大图</span>
+                            <span>
+                              云端文件列表 ({diagnosticData.files.length}{" "}
+                              个文件)
+                            </span>
+                            <span className="text-zinc-500 font-normal">
+                              点击垃圾桶可清理冗余/无用大图
+                            </span>
                           </div>
 
                           {diagnosticData.files.length === 0 ? (
@@ -3402,48 +3732,59 @@ export default function AdminPanel({
                             </div>
                           ) : (
                             <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                              {diagnosticData.files.map((file: any, idx: number) => {
-                                const sizeInKB = file.size / 1024;
-                                const isLarge = sizeInKB > 500;
-                                const isHuge = sizeInKB > 1500;
-                                return (
-                                  <div
-                                    key={idx}
-                                    className="p-2.5 bg-zinc-900/40 border border-zinc-800/60 hover:bg-zinc-900/70 rounded-xl flex items-center justify-between gap-3 transition-colors"
-                                  >
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-mono text-[11px] text-zinc-300 truncate" title={file.path}>
-                                        {file.path}
-                                      </p>
-                                      <div className="flex items-center gap-1.5 mt-1 text-[10px] text-zinc-500">
-                                        <span>大小: </span>
-                                        <span className={`font-mono font-semibold ${isHuge ? "text-red-500" : isLarge ? "text-amber-500" : "text-zinc-400"}`}>
-                                          {sizeInKB > 1024 ? `${(sizeInKB / 1024).toFixed(2)} MB` : `${sizeInKB.toFixed(1)} KB`}
-                                        </span>
-                                        {isHuge && (
-                                          <span className="bg-red-500/10 text-red-400 px-1 rounded text-[9px] font-bold border border-red-500/20">
-                                            极大
-                                          </span>
-                                        )}
-                                        {!isHuge && isLarge && (
-                                          <span className="bg-amber-500/10 text-amber-400 px-1 rounded text-[9px] font-bold border border-amber-500/20">
-                                            较大
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteStorageFile(file.path)}
-                                      className="p-1.5 hover:bg-red-500/10 hover:text-red-400 text-zinc-500 rounded-lg transition-colors shrink-0"
-                                      title="从云存储彻底删除"
+                              {diagnosticData.files.map(
+                                (file: any, idx: number) => {
+                                  const sizeInKB = file.size / 1024;
+                                  const isLarge = sizeInKB > 500;
+                                  const isHuge = sizeInKB > 1500;
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="p-2.5 bg-zinc-900/40 border border-zinc-800/60 hover:bg-zinc-900/70 rounded-xl flex items-center justify-between gap-3 transition-colors"
                                     >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                );
-                              })}
+                                      <div className="min-w-0 flex-1">
+                                        <p
+                                          className="font-mono text-[11px] text-zinc-300 truncate"
+                                          title={file.path}
+                                        >
+                                          {file.path}
+                                        </p>
+                                        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-zinc-500">
+                                          <span>大小: </span>
+                                          <span
+                                            className={`font-mono font-semibold ${isHuge ? "text-red-500" : isLarge ? "text-amber-500" : "text-zinc-400"}`}
+                                          >
+                                            {sizeInKB > 1024
+                                              ? `${(sizeInKB / 1024).toFixed(2)} MB`
+                                              : `${sizeInKB.toFixed(1)} KB`}
+                                          </span>
+                                          {isHuge && (
+                                            <span className="bg-red-500/10 text-red-400 px-1 rounded text-[9px] font-bold border border-red-500/20">
+                                              极大
+                                            </span>
+                                          )}
+                                          {!isHuge && isLarge && (
+                                            <span className="bg-amber-500/10 text-amber-400 px-1 rounded text-[9px] font-bold border border-amber-500/20">
+                                              较大
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteStorageFile(file.path)
+                                        }
+                                        className="p-1.5 hover:bg-red-500/10 hover:text-red-400 text-zinc-500 rounded-lg transition-colors shrink-0"
+                                        title="从云存储彻底删除"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  );
+                                },
+                              )}
                             </div>
                           )}
                         </div>
@@ -3465,12 +3806,13 @@ export default function AdminPanel({
               )}
 
               {activeTab === "inventory" && (
-                <InventoryTab categories={categories} setCategories={setCategories} />
+                <InventoryTab
+                  categories={categories}
+                  setCategories={setCategories}
+                />
               )}
 
-              {activeTab === "finance" && (
-                <FinanceReports />
-              )}
+              {activeTab === "finance" && <FinanceReports />}
             </div>
           </div>
         )}
@@ -3592,7 +3934,11 @@ export default function AdminPanel({
                           setCheckoutDiscountStr(e.target.value);
                         }}
                         onFocus={() => setActiveNumpadField("discount")}
-                        placeholder={checkoutDiscountMode === "amount" ? "输入立减金额 (如 15)" : "输入折扣率 (如 8.8)"}
+                        placeholder={
+                          checkoutDiscountMode === "amount"
+                            ? "输入立减金额 (如 15)"
+                            : "输入折扣率 (如 8.8)"
+                        }
                         className="w-full bg-zinc-950 border border-zinc-700 focus:border-orange-500 rounded-xl pl-8 pr-3 py-2 text-lg font-bold text-white outline-none transition-colors"
                       />
                     </div>
@@ -3600,7 +3946,13 @@ export default function AdminPanel({
 
                   {checkoutDiscountMode === "rate" && (
                     <div className="text-xs text-orange-400 font-medium mb-2 bg-orange-500/10 px-2 py-1 rounded border border-orange-500/20">
-                      当前为 {rawDiscountNum > 0 ? (rawDiscountNum > 10 ? (rawDiscountNum / 10).toFixed(1) : rawDiscountNum) : 10} 折，优惠折算立减 {currency} {parsedDiscount.toFixed(2)}
+                      当前为{" "}
+                      {rawDiscountNum > 0
+                        ? rawDiscountNum > 10
+                          ? (rawDiscountNum / 10).toFixed(1)
+                          : rawDiscountNum
+                        : 10}{" "}
+                      折，优惠折算立减 {currency} {parsedDiscount.toFixed(2)}
                     </div>
                   )}
 
@@ -3610,7 +3962,11 @@ export default function AdminPanel({
                       { label: "8.5折", mode: "rate", val: "8.5" },
                       { label: "8折", mode: "rate", val: "8" },
                       { label: "半价(5折)", mode: "rate", val: "5" },
-                      { label: "免单", mode: "amount", val: String(checkoutOrder.total || 0) },
+                      {
+                        label: "免单",
+                        mode: "amount",
+                        val: String(checkoutOrder.total || 0),
+                      },
                     ].map((d) => (
                       <button
                         key={d.label}
@@ -3632,7 +3988,7 @@ export default function AdminPanel({
                         e.stopPropagation();
                         const val = prompt(
                           "请输入自定义打折额度：\n- 输入折扣率（如 8.8 表示 8.8折）\n- 或输入立减金额（如 20 表示减免 20 元）",
-                          checkoutDiscountStr || "8.5"
+                          checkoutDiscountStr || "8.5",
                         );
                         if (val !== null && val.trim() !== "") {
                           const trimmed = val.trim();
@@ -3724,21 +4080,24 @@ export default function AdminPanel({
                 <button
                   onClick={async () => {
                     try {
-                      const finalTotalVal = Math.max(0, (checkoutOrder.total || 0) - parsedDiscount);
-                      const changeVal = Math.max(0, parsedReceived - finalTotalVal);
-                      const targetId = checkoutOrder._id || checkoutOrder.id;
-                      await api.updateOrder(
-                        targetId,
-                        {
-                          status: "completed",
-                          paymentMethod: checkoutPaymentMethod || "微信支付",
-                          discountAmount: parsedDiscount,
-                          receivedAmount: parsedReceived,
-                          changeAmount: changeVal,
-                          finalTotal: finalTotalVal,
-                          completedAt: new Date().toISOString()
-                        }
+                      const finalTotalVal = Math.max(
+                        0,
+                        (checkoutOrder.total || 0) - parsedDiscount,
                       );
+                      const changeVal = Math.max(
+                        0,
+                        parsedReceived - finalTotalVal,
+                      );
+                      const targetId = checkoutOrder._id || checkoutOrder.id;
+                      await api.updateOrder(targetId, {
+                        status: "completed",
+                        paymentMethod: checkoutPaymentMethod || "微信支付",
+                        discountAmount: parsedDiscount,
+                        receivedAmount: parsedReceived,
+                        changeAmount: changeVal,
+                        finalTotal: finalTotalVal,
+                        completedAt: new Date().toISOString(),
+                      });
                       setCheckoutOrder(null);
                     } catch (e) {
                       console.error("Failed to complete order:", e);
@@ -3791,7 +4150,12 @@ export default function AdminPanel({
               </div>
             )}
             <h3 className="text-xl font-bold text-white mb-3 flex items-center justify-between">
-              <span>{confirmDialog.title || (confirmDialog.isAlert ? "提示 (Alert)" : "确认操作 (Confirm)")}</span>
+              <span>
+                {confirmDialog.title ||
+                  (confirmDialog.isAlert
+                    ? "提示 (Alert)"
+                    : "确认操作 (Confirm)")}
+              </span>
             </h3>
             <p className="text-sm font-medium text-zinc-200 mb-3 whitespace-pre-wrap leading-relaxed">
               {confirmDialog.message}
@@ -3885,7 +4249,9 @@ export default function AdminPanel({
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <CheckCircle className="text-green-500" size={24} />
-                <h3 className="text-lg font-bold text-white">菜单导出成功 (Export Success)</h3>
+                <h3 className="text-lg font-bold text-white">
+                  菜单导出成功 (Export Success)
+                </h3>
               </div>
               <button
                 onClick={() => setShowExportModal(false)}
@@ -3896,7 +4262,8 @@ export default function AdminPanel({
             </div>
 
             <p className="text-xs sm:text-sm text-zinc-300 mb-4 leading-relaxed">
-              系统已尝试触发文件下载。如果您的浏览器或设备拦截了自动下载，可以直接使用以下按钮再次下载、复制 JSON 备份，或导出 Excel/CSV 菜品列表。
+              系统已尝试触发文件下载。如果您的浏览器或设备拦截了自动下载，可以直接使用以下按钮再次下载、复制
+              JSON 备份，或导出 Excel/CSV 菜品列表。
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
@@ -3917,7 +4284,9 @@ export default function AdminPanel({
                 }`}
               >
                 {copiedSuccess ? <Check size={18} /> : <Copy size={18} />}
-                <span>{copiedSuccess ? "已成功复制 JSON!" : "复制 JSON 到剪贴板"}</span>
+                <span>
+                  {copiedSuccess ? "已成功复制 JSON!" : "复制 JSON 到剪贴板"}
+                </span>
               </button>
 
               <button
@@ -3972,7 +4341,14 @@ export default function AdminPanel({
                     调整菜品顺序 (Dish Sorting)
                   </h3>
                   <p className="text-xs text-zinc-400">
-                    分类: <span className="text-amber-400 font-semibold">{categories.find(c => c.id === sortingCategoryId)?.name}</span> (共 {categories.find(c => c.id === sortingCategoryId)?.items?.length || 0} 道菜)
+                    分类:{" "}
+                    <span className="text-amber-400 font-semibold">
+                      {categories.find((c) => c.id === sortingCategoryId)?.name}
+                    </span>{" "}
+                    (共{" "}
+                    {categories.find((c) => c.id === sortingCategoryId)?.items
+                      ?.length || 0}{" "}
+                    道菜)
                   </p>
                 </div>
               </div>
@@ -3987,13 +4363,17 @@ export default function AdminPanel({
 
             {/* Subtitle / Tip */}
             <div className="px-4 py-2 bg-amber-500/5 border-b border-amber-500/10 text-[11px] text-amber-300 flex items-center justify-between">
-              <span>💡 提示：点击 [置顶] 或 [↑/↓] 可调整菜品在手机点餐页的排列顺序</span>
+              <span>
+                💡 提示：点击 [置顶] 或 [↑/↓] 可调整菜品在手机点餐页的排列顺序
+              </span>
             </div>
 
             {/* Dish List */}
             <div className="p-3 sm:p-4 space-y-2 overflow-y-auto custom-scrollbar flex-1">
               {(() => {
-                const currentCat = categories.find((c) => c.id === sortingCategoryId);
+                const currentCat = categories.find(
+                  (c) => c.id === sortingCategoryId,
+                );
                 const items = currentCat?.items || [];
                 if (items.length === 0) {
                   return (
@@ -4040,7 +4420,9 @@ export default function AdminPanel({
                       <button
                         type="button"
                         disabled={idx === 0}
-                        onClick={() => handleMoveDish(sortingCategoryId, idx, "top")}
+                        onClick={() =>
+                          handleMoveDish(sortingCategoryId, idx, "top")
+                        }
                         className="px-2 py-1 text-[11px] font-medium bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500 hover:text-white disabled:opacity-20 rounded-lg transition-colors flex-shrink-0"
                         title="置顶 (Move to Top)"
                       >
@@ -4049,7 +4431,9 @@ export default function AdminPanel({
                       <button
                         type="button"
                         disabled={idx === 0}
-                        onClick={() => handleMoveDish(sortingCategoryId, idx, "up")}
+                        onClick={() =>
+                          handleMoveDish(sortingCategoryId, idx, "up")
+                        }
                         className="p-1.5 text-zinc-300 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:text-white disabled:opacity-20 rounded-lg transition-colors flex-shrink-0"
                         title="上移 (Move Up)"
                       >
@@ -4058,7 +4442,9 @@ export default function AdminPanel({
                       <button
                         type="button"
                         disabled={idx === items.length - 1}
-                        onClick={() => handleMoveDish(sortingCategoryId, idx, "down")}
+                        onClick={() =>
+                          handleMoveDish(sortingCategoryId, idx, "down")
+                        }
                         className="p-1.5 text-zinc-300 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:text-white disabled:opacity-20 rounded-lg transition-colors flex-shrink-0"
                         title="下移 (Move Down)"
                       >
@@ -4067,7 +4453,9 @@ export default function AdminPanel({
                       <button
                         type="button"
                         disabled={idx === items.length - 1}
-                        onClick={() => handleMoveDish(sortingCategoryId, idx, "bottom")}
+                        onClick={() =>
+                          handleMoveDish(sortingCategoryId, idx, "bottom")
+                        }
                         className="px-2 py-1 text-[11px] font-medium bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-20 rounded-lg transition-colors flex-shrink-0"
                         title="置底 (Move to Bottom)"
                       >
@@ -4100,8 +4488,12 @@ export default function AdminPanel({
         >
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl flex flex-col items-center text-center">
             <div className="w-12 h-12 rounded-full border-4 border-orange-500/20 border-t-orange-500 animate-spin mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">正在导入备份数据...</h3>
-            <p className="text-sm text-zinc-400 whitespace-pre-wrap leading-relaxed">{importProgress}</p>
+            <h3 className="text-lg font-bold text-white mb-2">
+              正在导入备份数据...
+            </h3>
+            <p className="text-sm text-zinc-400 whitespace-pre-wrap leading-relaxed">
+              {importProgress}
+            </p>
           </div>
         </div>
       )}

@@ -12,14 +12,10 @@ import {
   Check,
   Database,
   Search,
-  SlidersHorizontal,
   Flame,
-  ArrowDownRight,
   Sparkles,
-  FileCode,
   Zap,
-  ChevronRight,
-  Info
+  Info,
 } from "lucide-react";
 import { api, DEFAULT_INVENTORY_ITEMS, DEFAULT_RECIPE_BOMS } from "../../api";
 import { isSupabaseConfigured, isSupabaseHealthy } from "../../supabase";
@@ -51,15 +47,18 @@ interface InventoryManagerProps {
 
 export const InventoryManager: React.FC<InventoryManagerProps> = ({
   menuCategories,
-  onUpdateCategories
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<"items" | "boms" | "sync">("items");
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [activeSubTab, setActiveSubTab] = useState<"items" | "boms" | "sync">(
+    "items",
+  );
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] =
+    useState<boolean>(false);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [boms, setBoms] = useState<RecipeBom[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] =
+    useState<string>("ALL");
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [syncMessage, setSyncMessage] = useState<string>("");
@@ -74,7 +73,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     stock: "10",
     unit: "kg",
     safety_stock: "2",
-    price: "0"
+    price: "0",
   });
 
   const [isBomModalOpen, setIsBomModalOpen] = useState<boolean>(false);
@@ -84,11 +83,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     menu_item_name: "",
     inventory_item_id: "",
     dosage: "0.1",
-    unit: "kg"
+    unit: "kg",
   });
 
   // Stock Adjust Modal
-  const [stockModalItem, setStockModalItem] = useState<InventoryItem | null>(null);
+  const [stockModalItem, setStockModalItem] = useState<InventoryItem | null>(
+    null,
+  );
   const [stockDelta, setStockDelta] = useState<string>("");
 
   // Test Order Simulation state
@@ -150,20 +151,21 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCat =
-        selectedCategoryFilter === "ALL" || item.category === selectedCategoryFilter;
+        selectedCategoryFilter === "ALL" ||
+        item.category === selectedCategoryFilter;
       const matchesLowStock =
-        selectedCategoryFilter === "LOW_STOCK" ? item.stock <= item.safety_stock : true;
+        selectedCategoryFilter === "LOW_STOCK"
+          ? item.stock <= item.safety_stock
+          : true;
       return matchesSearch && matchesCat && matchesLowStock;
     });
   }, [inventory, searchQuery, selectedCategoryFilter]);
 
   // Summary Metrics
-  const lowStockCount = inventory.filter((i) => Number(i.stock) <= Number(i.safety_stock)).length;
+  const lowStockCount = inventory.filter(
+    (i) => Number(i.stock) <= Number(i.safety_stock),
+  ).length;
   const outOfStockCount = inventory.filter((i) => Number(i.stock) <= 0).length;
-  const totalValue = inventory.reduce(
-    (sum, i) => sum + Number(i.stock || 0) * Number(i.price || 0),
-    0
-  );
 
   const handleOpenItemModal = (item?: InventoryItem) => {
     if (item) {
@@ -175,7 +177,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         stock: String(item.stock),
         unit: item.unit || "kg",
         safety_stock: String(item.safety_stock),
-        price: String(item.price || 0)
+        price: String(item.price || 0),
       });
     } else {
       setEditingItem(null);
@@ -186,7 +188,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         stock: "10",
         unit: "kg",
         safety_stock: "2",
-        price: "0"
+        price: "0",
       });
     }
     setIsItemModalOpen(true);
@@ -204,7 +206,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       unit: itemForm.unit.trim() || "kg",
       safety_stock: parseFloat(itemForm.safety_stock) || 0,
       price: parseFloat(itemForm.price) || 0,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
 
     await api.saveInventoryItem(newItem);
@@ -226,10 +228,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   const handleAdjustStock = async (deltaValue: number) => {
     if (!stockModalItem) return;
-    const newStock = Math.max(0, Number((stockModalItem.stock + deltaValue).toFixed(2)));
+    const newStock = Math.max(
+      0,
+      Number((stockModalItem.stock + deltaValue).toFixed(2)),
+    );
     await api.saveInventoryItem({
       ...stockModalItem,
-      stock: newStock
+      stock: newStock,
     });
     setStockModalItem(null);
     loadData();
@@ -243,7 +248,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         menu_item_name: bom.menu_item_name,
         inventory_item_id: bom.inventory_item_id,
         dosage: String(bom.dosage),
-        unit: bom.unit || "kg"
+        unit: bom.unit || "kg",
       });
     } else {
       setEditingBom(null);
@@ -252,7 +257,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         menu_item_name: allDishes[0] || "干饺 (大份)",
         inventory_item_id: inventory[0]?.id || "INV-101",
         dosage: "0.2",
-        unit: inventory[0]?.unit || "kg"
+        unit: inventory[0]?.unit || "kg",
       });
     }
     setIsBomModalOpen(true);
@@ -262,14 +267,16 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     e.preventDefault();
     if (!bomForm.menu_item_name || !bomForm.inventory_item_id) return;
 
-    const selectedInv = inventory.find((i) => i.id === bomForm.inventory_item_id);
+    const selectedInv = inventory.find(
+      (i) => i.id === bomForm.inventory_item_id,
+    );
 
     const newBom: RecipeBom = {
       id: bomForm.id || `BOM-${Math.random().toString(36).substring(2, 8)}`,
       menu_item_name: bomForm.menu_item_name,
       inventory_item_id: bomForm.inventory_item_id,
       dosage: parseFloat(bomForm.dosage) || 0.1,
-      unit: bomForm.unit || selectedInv?.unit || "kg"
+      unit: bomForm.unit || selectedInv?.unit || "kg",
     };
 
     await api.saveRecipeBom(newBom);
@@ -290,9 +297,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       return;
     }
     setSimResult("正在模拟下单并扣减原材料库存...");
-    await api.deductInventoryForOrderItems([{ title: testDishName, quantity: testQty }]);
+    await api.deductInventoryForOrderItems([
+      { title: testDishName, quantity: testQty },
+    ]);
     await loadData();
-    setSimResult(`✅ 成功模拟下单【${testDishName}】${testQty} 份！BOM 原材料存量已自动完成扣减。`);
+    setSimResult(
+      `✅ 成功模拟下单【${testDishName}】${testQty} 份！BOM 原材料存量已自动完成扣减。`,
+    );
   };
 
   const handleOneClickSyncSupabase = async () => {
@@ -311,7 +322,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       }
 
       await loadData();
-      setSyncMessage("🎉 成功！菜单分类、菜品、原材料物料及 BOM 配方已全量同步至 Supabase！");
+      setSyncMessage(
+        "🎉 成功！菜单分类、菜品、原材料物料及 BOM 配方已全量同步至 Supabase！",
+      );
     } catch (err: any) {
       setSyncMessage(`❌ 同步出现错误: ${err.message || String(err)}`);
     } finally {
@@ -524,7 +537,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
         {/* Metrics Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
           <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5">
-            <span className="text-xs text-zinc-400 block mb-1">物料品种总量</span>
+            <span className="text-xs text-zinc-400 block mb-1">
+              物料品种总量
+            </span>
             <div className="text-xl sm:text-2xl font-bold text-white flex items-center justify-between">
               <span>{inventory.length}</span>
               <Package size={18} className="text-zinc-500" />
@@ -535,7 +550,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
             onClick={() => setSelectedCategoryFilter("LOW_STOCK")}
             className="bg-zinc-950/60 border border-amber-500/30 rounded-xl p-3.5 cursor-pointer hover:border-amber-500/60 transition-colors"
           >
-            <span className="text-xs text-amber-400 block mb-1">库存预警物料</span>
+            <span className="text-xs text-amber-400 block mb-1">
+              库存预警物料
+            </span>
             <div className="text-xl sm:text-2xl font-bold text-amber-400 flex items-center justify-between">
               <span>{lowStockCount}</span>
               <AlertTriangle size={18} className="text-amber-500" />
@@ -543,7 +560,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
           </div>
 
           <div className="bg-zinc-950/60 border border-red-500/30 rounded-xl p-3.5">
-            <span className="text-xs text-red-400 block mb-1">已用尽/估清物料</span>
+            <span className="text-xs text-red-400 block mb-1">
+              已用尽/估清物料
+            </span>
             <div className="text-xl sm:text-2xl font-bold text-red-400 flex items-center justify-between">
               <span>{outOfStockCount}</span>
               <Flame size={18} className="text-red-500" />
@@ -551,7 +570,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
           </div>
 
           <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5">
-            <span className="text-xs text-zinc-400 block mb-1">BOM 扣减配方</span>
+            <span className="text-xs text-zinc-400 block mb-1">
+              BOM 扣减配方
+            </span>
             <div className="text-xl sm:text-2xl font-bold text-orange-400 flex items-center justify-between">
               <span>{boms.length}</span>
               <Zap size={18} className="text-orange-500" />
@@ -639,7 +660,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
               className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-500 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors shrink-0"
             >
               <Plus size={16} />
-              添加新物料            </button>
+              添加新物料{" "}
+            </button>
           </div>
 
           {/* Inventory Table */}
@@ -660,13 +682,17 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                 <tbody className="divide-y divide-zinc-800/60">
                   {filteredInventory.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-zinc-500">
+                      <td
+                        colSpan={7}
+                        className="py-8 text-center text-zinc-500"
+                      >
                         暂无符合条件的物料记录。点击【添加新物料】开始创建！
                       </td>
                     </tr>
                   ) : (
                     filteredInventory.map((item) => {
-                      const isLow = Number(item.stock) <= Number(item.safety_stock);
+                      const isLow =
+                        Number(item.stock) <= Number(item.safety_stock);
                       const isOut = Number(item.stock) <= 0;
 
                       return (
@@ -695,8 +721,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                                 isOut
                                   ? "text-red-400"
                                   : isLow
-                                  ? "text-amber-400"
-                                  : "text-green-400"
+                                    ? "text-amber-400"
+                                    : "text-green-400"
                               }
                             >
                               {item.stock} {item.unit}
@@ -737,7 +763,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                                 className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-orange-400 rounded-lg text-xs font-semibold border border-zinc-700 transition-colors"
                                 title="增减库存"
                               >
-                                调库存                              </button>
+                                调库存{" "}
+                              </button>
 
                               <button
                                 onClick={() => handleOpenItemModal(item)}
@@ -748,7 +775,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                               </button>
 
                               <button
-                                onClick={() => handleDeleteItem(item.id, item.name)}
+                                onClick={() =>
+                                  handleDeleteItem(item.id, item.name)
+                                }
                                 className="p-1.5 bg-zinc-800 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors"
                                 title="删除物料"
                               >
@@ -774,9 +803,11 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Zap size={18} className="text-orange-500" />
-                菜品与原材料 BOM 扣减配方规则表              </h3>
+                菜品与原材料 BOM 扣减配方规则表{" "}
+              </h3>
               <p className="text-xs text-zinc-400 mt-0.5">
-                当顾客在前台或小程序购买某菜品时，系统自动按照本表格定义的消耗剂量自动扣减相应原材料物料库存。              </p>
+                当顾客在前台或小程序购买某菜品时，系统自动按照本表格定义的消耗剂量自动扣减相应原材料物料库存。{" "}
+              </p>
             </div>
 
             <button
@@ -784,69 +815,75 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
               className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors shrink-0"
             >
               <Plus size={16} />
-              绑定新配方            </button>
+              绑定新配方{" "}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.keys(bomsByDish).length === 0 ? (
               <div className="col-span-full py-12 text-center text-zinc-500 bg-zinc-900/40 rounded-2xl border border-zinc-800">
-                暂无配方数据，点击【绑定新配方】为菜品（如干饺 (大份)、煎饺 (大份)、火锅底料）绑定原料消耗公式！
+                暂无配方数据，点击【绑定新配方】为菜品（如干饺 (大份)、煎饺
+                (大份)、火锅底料）绑定原料消耗公式！
               </div>
             ) : (
-              (Object.entries(bomsByDish) as [string, RecipeBom[]][]).map(([dishName, dishBoms]) => (
-                <div
-                  key={dishName}
-                  className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 space-y-3 hover:border-zinc-700 transition-all shadow-md"
-                >
-                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
-                    <h4 className="font-bold text-white text-base flex items-center gap-2">
-                      <Flame size={16} className="text-orange-500" />
-                      {dishName}
-                    </h4>
-                    <span className="text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20 font-medium">
-                      含 {dishBoms.length} 项主配方
-                    </span>
-                  </div>
+              (Object.entries(bomsByDish) as [string, RecipeBom[]][]).map(
+                ([dishName, dishBoms]) => (
+                  <div
+                    key={dishName}
+                    className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 space-y-3 hover:border-zinc-700 transition-all shadow-md"
+                  >
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                      <h4 className="font-bold text-white text-base flex items-center gap-2">
+                        <Flame size={16} className="text-orange-500" />
+                        {dishName}
+                      </h4>
+                      <span className="text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/20 font-medium">
+                        含 {dishBoms.length} 项主配方
+                      </span>
+                    </div>
 
-                  <div className="space-y-2">
-                    {dishBoms.map((b) => {
-                      const inv = inventory.find((i) => i.id === b.inventory_item_id);
-                      return (
-                        <div
-                          key={b.id}
-                          className="flex items-center justify-between bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/80 text-xs"
-                        >
-                          <div>
-                            <span className="font-semibold text-zinc-200 block">
-                              {inv?.name || b.inventory_item_id}
-                            </span>
-                            <span className="text-zinc-500 font-mono">
-                              每份消耗: {b.dosage} {b.unit}
-                            </span>
-                          </div>
+                    <div className="space-y-2">
+                      {dishBoms.map((b) => {
+                        const inv = inventory.find(
+                          (i) => i.id === b.inventory_item_id,
+                        );
+                        return (
+                          <div
+                            key={b.id}
+                            className="flex items-center justify-between bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/80 text-xs"
+                          >
+                            <div>
+                              <span className="font-semibold text-zinc-200 block">
+                                {inv?.name || b.inventory_item_id}
+                              </span>
+                              <span className="text-zinc-500 font-mono">
+                                每份消耗: {b.dosage} {b.unit}
+                              </span>
+                            </div>
 
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => handleOpenBomModal(b)}
-                              className="p-1 text-zinc-400 hover:text-white"
-                              title="编辑剂量"
-                            >
-                              <Edit3 size={13} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBom(b.id)}
-                              className="p-1 text-zinc-400 hover:text-red-400"
-                              title="解绑原料"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleOpenBomModal(b)}
+                                className="p-1 text-zinc-400 hover:text-white"
+                                title="编辑剂量"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBom(b.id)}
+                                className="p-1 text-zinc-400 hover:text-red-400"
+                                title="解绑原料"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))
+                ),
+              )
             )}
           </div>
 
@@ -911,7 +948,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                   Supabase 数据库创建 SQL (supabase_schema.sql)
                 </h3>
                 <p className="text-xs text-zinc-400 mt-1">
-                  将下方的 SQL 脚本复制并在您的 Supabase 后台 SQL Editor 中运行，即可完成两端程序的统一建表！                </p>
+                  将下方的 SQL 脚本复制并在您的 Supabase 后台 SQL Editor
+                  中运行，即可完成两端程序的统一建表！{" "}
+                </p>
               </div>
 
               <button
@@ -1034,7 +1073,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
             <div className="pt-2 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="text-xs text-zinc-400 flex items-center gap-2">
                 <Info size={14} className="text-orange-400" />
-                点击下方按钮可自动将当前菜单及默认 BOM 原材料推送初始化到 Supabase 中：
+                点击下方按钮可自动将当前菜单及默认 BOM 原材料推送初始化到
+                Supabase 中：
               </div>
 
               <button
@@ -1042,7 +1082,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
                 disabled={syncing}
                 className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-colors shrink-0 disabled:opacity-50"
               >
-                <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+                <RefreshCw
+                  size={14}
+                  className={syncing ? "animate-spin" : ""}
+                />
                 一键推送与同步数据至 Supabase
               </button>
             </div>
@@ -1066,46 +1109,62 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
 
             <form onSubmit={handleSaveItem} className="space-y-3">
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">物料编号 (ID)</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  物料编号 (ID)
+                </label>
                 <input
                   type="text"
                   required
                   value={itemForm.id}
                   disabled={!!editingItem}
-                  onChange={(e) => setItemForm({ ...itemForm, id: e.target.value })}
+                  onChange={(e) =>
+                    setItemForm({ ...itemForm, id: e.target.value })
+                  }
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">物料名称</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  物料名称
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="如：牛肉馅、朝天椒、高汤"
                   value={itemForm.name}
-                  onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setItemForm({ ...itemForm, name: e.target.value })
+                  }
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">物料分类</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    物料分类
+                  </label>
                   <input
                     type="text"
                     value={itemForm.category}
-                    onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, category: e.target.value })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">计量单位</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    计量单位
+                  </label>
                   <input
                     type="text"
                     value={itemForm.unit}
-                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, unit: e.target.value })
+                    }
                     placeholder="kg, L, 份, 包"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                   />
@@ -1114,18 +1173,24 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">初始/可用存量</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    初始/可用存量
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={itemForm.stock}
-                    onChange={(e) => setItemForm({ ...itemForm, stock: e.target.value })}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, stock: e.target.value })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">预警存量阈值</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    预警存量阈值
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -1138,12 +1203,16 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
                 </div>
 
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">单价 (MAD)</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    单价 (MAD)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={itemForm.price}
-                    onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, price: e.target.value })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                   />
                 </div>
@@ -1179,10 +1248,14 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
 
             <form onSubmit={handleSaveBom} className="space-y-3">
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">选择对应菜品</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  选择对应菜品
+                </label>
                 <select
                   value={bomForm.menu_item_name}
-                  onChange={(e) => setBomForm({ ...bomForm, menu_item_name: e.target.value })}
+                  onChange={(e) =>
+                    setBomForm({ ...bomForm, menu_item_name: e.target.value })
+                  }
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                 >
                   {allDishes.map((d) => (
@@ -1194,15 +1267,19 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
               </div>
 
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">消耗的原材料物料</label>
+                <label className="text-xs text-zinc-400 block mb-1">
+                  消耗的原材料物料
+                </label>
                 <select
                   value={bomForm.inventory_item_id}
                   onChange={(e) => {
-                    const selected = inventory.find((i) => i.id === e.target.value);
+                    const selected = inventory.find(
+                      (i) => i.id === e.target.value,
+                    );
                     setBomForm({
                       ...bomForm,
                       inventory_item_id: e.target.value,
-                      unit: selected?.unit || bomForm.unit
+                      unit: selected?.unit || bomForm.unit,
                     });
                   }}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
@@ -1217,23 +1294,31 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">每份消耗剂量</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    每份消耗剂量
+                  </label>
                   <input
                     type="number"
                     step="0.001"
                     required
                     value={bomForm.dosage}
-                    onChange={(e) => setBomForm({ ...bomForm, dosage: e.target.value })}
+                    onChange={(e) =>
+                      setBomForm({ ...bomForm, dosage: e.target.value })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">单位</label>
+                  <label className="text-xs text-zinc-400 block mb-1">
+                    单位
+                  </label>
                   <input
                     type="text"
                     value={bomForm.unit}
-                    onChange={(e) => setBomForm({ ...bomForm, unit: e.target.value })}
+                    onChange={(e) =>
+                      setBomForm({ ...bomForm, unit: e.target.value })
+                    }
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                   />
                 </div>
@@ -1265,10 +1350,14 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Package size={18} className="text-orange-500" />
-              快捷调整【{stockModalItem.name}】存量            </h3>
+              快捷调整【{stockModalItem.name}】存量{" "}
+            </h3>
 
             <p className="text-xs text-zinc-400">
-              当前存量: <span className="font-bold text-white">{stockModalItem.stock} {stockModalItem.unit}</span>
+              当前存量:{" "}
+              <span className="font-bold text-white">
+                {stockModalItem.stock} {stockModalItem.unit}
+              </span>
             </p>
 
             <div className="grid grid-cols-3 gap-2">
@@ -1293,7 +1382,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
             </div>
 
             <div className="space-y-2 pt-2 border-t border-zinc-800">
-              <label className="text-xs text-zinc-400 block">自定义设为绝对存量值:</label>
+              <label className="text-xs text-zinc-400 block">
+                自定义设为绝对存量值:
+              </label>
               <div className="flex gap-2">
                 <input
                   type="number"
@@ -1309,7 +1400,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
                     if (!isNaN(num) && num >= 0) {
                       await api.saveInventoryItem({
                         ...stockModalItem,
-                        stock: num
+                        stock: num,
                       });
                       setStockModalItem(null);
                       loadData();
@@ -1317,7 +1408,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;`}
                   }}
                   className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-xl text-sm"
                 >
-                  一键同步                </button>
+                  一键同步{" "}
+                </button>
               </div>
             </div>
 
