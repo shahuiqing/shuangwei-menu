@@ -34,10 +34,10 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "restaurantName",
     "welcomeMessage",
     "logoUrl",
-    "adminPassword",
-    "devicePasswords",
+    "adminPasswordHash",
+    "devicePasswordsHash",
     "securityQuestion",
-    "securityAnswer",
+    "securityAnswerHash",
     "soundEnabled",
     "layoutStyle",
     "receiptSettings",
@@ -2720,7 +2720,11 @@ export const api = {
           deletedItemIds: existingSettings?.deletedItemIds || [],
           theme: existingSettings?.theme || "midnight",
         };
-        await supabase.from("settings").upsert(defaultSettingsPayload);
+        const filteredSettingsPayload = await filterPayloadByTable(
+          "settings",
+          defaultSettingsPayload,
+        );
+        await supabase.from("settings").upsert(filteredSettingsPayload);
         logs.push("✅ settings 表全局设置数据已成功初始化");
       } else {
         categoriesToSync = mergeAndOrderCategories(
