@@ -9,6 +9,7 @@ import {
 import { inventoryItemSchema, recipeBomSchema } from "../types/schemas";
 import type { InventoryItem, RecipeBom } from "../types/inventory";
 import { logger, ERR } from "../utils/logger";
+import { readLocalJSON } from "../utils/safeParse";
 
 let inventoryListeners: (() => void)[] = [];
 export const triggerLocalInventoryChange = () =>
@@ -118,7 +119,11 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     handleSupabaseReadError(e, "getInventory");
   }
   const ls = localStorage.getItem("local_inventory_items");
-  if (ls) return JSON.parse(ls);
+  if (ls)
+    return readLocalJSON<InventoryItem[]>(
+      "local_inventory_items",
+      DEFAULT_INVENTORY,
+    );
   localStorage.setItem(
     "local_inventory_items",
     JSON.stringify(DEFAULT_INVENTORY),
@@ -145,10 +150,9 @@ export async function saveInventoryItem(item: InventoryItem) {
   } catch (e) {
     handleSupabaseWriteError(e, "saveInventory");
   }
-  const arr = JSON.parse(
-    localStorage.getItem("local_inventory_items") ||
-      JSON.stringify(DEFAULT_INVENTORY),
-  );
+  const arr = readLocalJSON<InventoryItem[]>("local_inventory_items", [
+    ...DEFAULT_INVENTORY,
+  ]);
   const idx = arr.findIndex((x: any) => x.id === item.id);
   if (idx !== -1) arr[idx] = { ...arr[idx], ...payload };
   else arr.push(payload);
@@ -172,8 +176,9 @@ export async function deleteInventoryItem(id: string) {
     handleSupabaseWriteError(e, "deleteInventory");
   }
   await kvCache.invalidate("inventory_items");
-  const arr = (
-    JSON.parse(localStorage.getItem("local_inventory_items") || "[]") as any[]
+  const arr = readLocalJSON<InventoryItem[]>(
+    "local_inventory_items",
+    [],
   ).filter((x) => x.id !== id);
   localStorage.setItem("local_inventory_items", JSON.stringify(arr));
   triggerLocalInventoryChange();
@@ -196,7 +201,7 @@ export async function getRecipeBoms(): Promise<RecipeBom[]> {
     handleSupabaseReadError(e, "getBoms");
   }
   const ls = localStorage.getItem("local_recipe_boms");
-  if (ls) return JSON.parse(ls);
+  if (ls) return readLocalJSON<RecipeBom[]>("local_recipe_boms", DEFAULT_BOMS);
   localStorage.setItem("local_recipe_boms", JSON.stringify(DEFAULT_BOMS));
   return DEFAULT_BOMS;
 }
@@ -221,9 +226,9 @@ export async function saveRecipeBom(bom: RecipeBom) {
     handleSupabaseWriteError(e, "saveBom");
   }
   await kvCache.invalidate("recipe_boms");
-  const arr = JSON.parse(
-    localStorage.getItem("local_recipe_boms") || JSON.stringify(DEFAULT_BOMS),
-  );
+  const arr = readLocalJSON<RecipeBom[]>("local_recipe_boms", [
+    ...DEFAULT_BOMS,
+  ]);
   const idx = arr.findIndex((x: any) => x.id === payload.id);
   if (idx !== -1) arr[idx] = { ...arr[idx], ...payload };
   else arr.push(payload);
@@ -246,9 +251,9 @@ export async function deleteRecipeBom(id: string) {
     handleSupabaseWriteError(e, "deleteBom");
   }
   await kvCache.invalidate("recipe_boms");
-  const arr = (
-    JSON.parse(localStorage.getItem("local_recipe_boms") || "[]") as any[]
-  ).filter((x) => x.id !== id);
+  const arr = readLocalJSON<RecipeBom[]>("local_recipe_boms", []).filter(
+    (x) => x.id !== id,
+  );
   localStorage.setItem("local_recipe_boms", JSON.stringify(arr));
   triggerLocalInventoryChange();
   triggerBroadcast("inventory_changed");

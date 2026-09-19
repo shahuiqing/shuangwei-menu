@@ -6,6 +6,7 @@ import {
 import { kvCache } from "./services/kvCache";
 import { blobStorage } from "./services/blobStorage";
 import { compressBase64Image } from "./utils/image";
+import { readLocalJSON } from "./utils/safeParse";
 import type { Order } from "./types/order";
 import type { InventoryItem, RecipeBom } from "./types/inventory";
 
@@ -292,8 +293,7 @@ const triggerLocalOrdersChange = async () => {
     handleSupabaseReadError(e, "triggerLocalOrdersChange");
   }
 
-  const localOrdersStr = localStorage.getItem("local_orders");
-  const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+  const localOrders = readLocalJSON<any[]>("local_orders", []);
 
   const mergedMap = new Map<string, any>();
 
@@ -364,8 +364,7 @@ const triggerLocalTablesChange = async () => {
     handleSupabaseReadError(e, "triggerLocalTablesChange");
   }
 
-  const localTablesStr = localStorage.getItem("local_tables");
-  const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
+  const localTables = readLocalJSON<any[]>("local_tables", []);
 
   const merged = [...remoteTables];
   localTables.forEach((lt: any) => {
@@ -396,6 +395,7 @@ export const triggerLocalInventoryChange = () => {
 };
 
 let globalSyncChannel: any = null;
+let syncChannelRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
 let isRealtimeConnected = false;
 export const getIsRealtimeConnected = () => isRealtimeConnected;
@@ -448,8 +448,7 @@ export const ensureSyncChannel = () => {
         );
         kvCache.invalidate("app_settings");
         if (payload?.deletedItemIds && Array.isArray(payload.deletedItemIds)) {
-          const localDelStr = localStorage.getItem("menuDeletedItemIds");
-          const localDel = localDelStr ? JSON.parse(localDelStr) : [];
+          const localDel = readLocalJSON<string[]>("menuDeletedItemIds", []);
           const mergedDel = Array.from(
             new Set([...localDel, ...payload.deletedItemIds]),
           );
@@ -469,7 +468,7 @@ export const ensureSyncChannel = () => {
               broadcastOrdersMemoryCache.delete(delId);
               const localOrdersStr = localStorage.getItem("local_orders");
               if (localOrdersStr) {
-                let localOrders = JSON.parse(localOrdersStr);
+                let localOrders = readLocalJSON<any[]>("local_orders", []);
                 localOrders = localOrders.filter(
                   (o: any) => String(o._id) !== delId && String(o.id) !== delId,
                 );
@@ -529,7 +528,7 @@ export const ensureSyncChannel = () => {
             });
             const localOrdersStr = localStorage.getItem("local_orders");
             if (localOrdersStr) {
-              let localOrders = JSON.parse(localOrdersStr);
+              let localOrders = readLocalJSON<any[]>("local_orders", []);
               localOrders = localOrders.filter(
                 (o: any) => String(o._id) !== delId && String(o.id) !== delId,
               );
@@ -543,7 +542,7 @@ export const ensureSyncChannel = () => {
               });
               const localOrdersStr = localStorage.getItem("local_orders");
               if (localOrdersStr) {
-                let localOrders = JSON.parse(localOrdersStr);
+                let localOrders = readLocalJSON<any[]>("local_orders", []);
                 localOrders = localOrders.filter(
                   (o: any) => o.status !== payload.status,
                 );
@@ -560,10 +559,7 @@ export const ensureSyncChannel = () => {
             const norm = normalizeOrder(payload.order);
             if (norm && norm._id) {
               broadcastOrdersMemoryCache.set(String(norm._id), norm);
-              const localOrdersStr = localStorage.getItem("local_orders");
-              const localOrders = localOrdersStr
-                ? JSON.parse(localOrdersStr)
-                : [];
+              const localOrders = readLocalJSON<any[]>("local_orders", []);
               const idx = localOrders.findIndex(
                 (o: any) =>
                   String(o._id) === String(norm._id) ||
@@ -597,10 +593,7 @@ export const ensureSyncChannel = () => {
                 timestamp: payload.timestamp || new Date().toISOString(),
               });
               broadcastOrdersMemoryCache.set(sId, updated);
-              const localOrdersStr = localStorage.getItem("local_orders");
-              const localOrders = localOrdersStr
-                ? JSON.parse(localOrdersStr)
-                : [];
+              const localOrders = readLocalJSON<any[]>("local_orders", []);
               const idx = localOrders.findIndex(
                 (o: any) => String(o._id) === sId || String(o.id) === sId,
               );
@@ -680,12 +673,24 @@ export const ensureSyncChannel = () => {
         console.log(`Supabase unified sync channel status: ${status}`);
         if (status === "SUBSCRIBED") {
           isRealtimeConnected = true;
+          if (syncChannelRetryTimer) {
+            clearTimeout(syncChannelRetryTimer);
+            syncChannelRetryTimer = null;
+          }
         } else if (
           status === "CLOSED" ||
           status === "CHANNEL_ERROR" ||
           status === "TIMED_OUT"
         ) {
           isRealtimeConnected = false;
+          // 终端状态不会自动恢复订阅，丢弃旧 channel 并定时重建，恢复实时同步
+          globalSyncChannel = null;
+          if (!syncChannelRetryTimer) {
+            syncChannelRetryTimer = setTimeout(() => {
+              syncChannelRetryTimer = null;
+              ensureSyncChannel();
+            }, 3000);
+          }
         }
       });
   }
@@ -799,53 +804,44 @@ export const api = {
     }
 
     // Local fallback
-    const cachedCategories = localStorage.getItem("menuCategories");
-    const cachedPromotions = localStorage.getItem("menuPromotions");
     const cachedBgUrl = localStorage.getItem("menuBgUrl");
     const cachedRestaurantName = localStorage.getItem("menuRestaurantName");
     const cachedWelcomeMessage = localStorage.getItem("menuWelcomeMessage");
     const cachedLogoUrl = localStorage.getItem("menuLogoUrl");
     const cachedAdminPassword = localStorage.getItem("menuAdminPassword");
-    const cachedDevicePasswords = localStorage.getItem("menuDevicePasswords");
     const cachedSecurityQuestion = localStorage.getItem("menuSecurityQuestion");
     const cachedSecurityAnswer = localStorage.getItem("menuSecurityAnswer");
     const cachedSoundEnabled = localStorage.getItem("menuSoundEnabled");
     const cachedLayoutStyle = localStorage.getItem("menuLayoutStyle");
-    const cachedReceiptSettings = localStorage.getItem("menuReceiptSettings");
-    const cachedDeletedItemIds = localStorage.getItem("menuDeletedItemIds");
     const cachedThemeMode = localStorage.getItem("menuThemeMode");
 
-    const parsedDeletedIds = cachedDeletedItemIds
-      ? JSON.parse(cachedDeletedItemIds)
-      : [];
+    const parsedDeletedIds = readLocalJSON<string[]>("menuDeletedItemIds", []);
+    const cachedCategories = readLocalJSON<any[]>("menuCategories", []);
 
     return {
-      categories: cachedCategories
+      categories: cachedCategories.length
         ? mergeAndOrderCategories(
-            JSON.parse(cachedCategories),
+            cachedCategories,
             INITIAL_MENU_CATEGORIES,
             parsedDeletedIds,
           )
         : INITIAL_MENU_CATEGORIES,
-      promotions: cachedPromotions ? JSON.parse(cachedPromotions) : [],
+      promotions: readLocalJSON<any[]>("menuPromotions", []),
       bgUrl: cachedBgUrl || "",
       restaurantName: cachedRestaurantName || "炙·双味居",
       welcomeMessage: cachedWelcomeMessage || "Premium Charcoal BBQ",
       logoUrl: cachedLogoUrl || "",
       adminPassword: cachedAdminPassword || "admin123",
-      devicePasswords: cachedDevicePasswords
-        ? JSON.parse(cachedDevicePasswords)
-        : [],
+      devicePasswords: readLocalJSON<any[]>("menuDevicePasswords", []),
       securityQuestion: cachedSecurityQuestion || "",
       securityAnswer: cachedSecurityAnswer || "",
       soundEnabled: cachedSoundEnabled ? cachedSoundEnabled === "true" : true,
       layoutStyle: cachedLayoutStyle || "grid",
-      receiptSettings: cachedReceiptSettings
-        ? JSON.parse(cachedReceiptSettings)
-        : {},
-      deletedItemIds: cachedDeletedItemIds
-        ? JSON.parse(cachedDeletedItemIds)
-        : [],
+      receiptSettings: readLocalJSON<Record<string, unknown>>(
+        "menuReceiptSettings",
+        {},
+      ),
+      deletedItemIds: parsedDeletedIds,
       theme: (cachedThemeMode as "midnight" | "light") || "midnight",
     };
   },
@@ -879,7 +875,7 @@ export const api = {
     // Active polling fallback (ONLY polls if Supabase is unhealthy or unconfigured to sync local tabs)
     // Avoids polling the database if Supabase is connected and healthy
     const pollInterval = setInterval(() => {
-      if (!isSupabaseConfigured || !isSupabaseHealthy) {
+      if (!isSupabaseConfigured || !isSupabaseHealthy || !isRealtimeConnected) {
         api
           .getSettings()
           .then(handleData)
@@ -923,8 +919,7 @@ export const api = {
         }
       }
 
-      const localOrdersStr = localStorage.getItem("local_orders");
-      let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+      let localOrders = readLocalJSON<any[]>("local_orders", []);
       let needsSave = false;
       localOrders = localOrders.map((lo: Record<string, unknown>) => {
         if (!lo._id && !lo.id) needsSave = true;
@@ -961,8 +956,7 @@ export const api = {
       );
     } catch (e) {
       handleSupabaseReadError(e, "getOrders");
-      const localOrdersStr = localStorage.getItem("local_orders");
-      let localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+      let localOrders = readLocalJSON<any[]>("local_orders", []);
       let needsSave = false;
       localOrders = localOrders.map((lo: Record<string, unknown>) => {
         if (!lo._id && !lo.id) needsSave = true;
@@ -1002,6 +996,8 @@ export const api = {
     fetchAndTrigger();
     ensureSyncChannel();
 
+    let lastFetchTime = 0;
+
     const pollInterval = setInterval(() => {
       // 智能自适应策略（额度防护）：
       // 1. 如果页面处于后台 (document.hidden)，彻底不进行 API 轮询
@@ -1020,7 +1016,6 @@ export const api = {
       }
     }, 10000);
 
-    let lastFetchTime = 0;
     const handleFocus = () => {
       const now = Date.now();
       if (now - lastFetchTime < 10000) return;
@@ -1046,8 +1041,7 @@ export const api = {
     const custName = customerNameOrTable || "A1";
 
     // 1. Check local storage
-    const localOrdersStr = localStorage.getItem("local_orders");
-    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    const localOrders = readLocalJSON<any[]>("local_orders", []);
     const localActive = localOrders
       .map(normalizeOrder)
       .find((o: any) => isOrderMatchingTable(o, custName) && isOrderActive(o));
@@ -1113,13 +1107,15 @@ export const api = {
       }
     }
 
-    const candidates = [localActive, memActive, dbActive].filter(Boolean);
+    const candidates = [localActive, memActive, dbActive].filter(
+      (x): x is Order => x != null,
+    );
     if (candidates.length > 0) {
       candidates.sort(
         (a, b) =>
           parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp),
       );
-      return { hasActiveOrder: true, activeOrder: candidates[0] };
+      return { hasActiveOrder: true, activeOrder: candidates[0] ?? null };
     }
 
     return { hasActiveOrder: false, activeOrder: null };
@@ -1144,8 +1140,7 @@ export const api = {
       }
     }
 
-    const localOrdersStr = localStorage.getItem("local_orders");
-    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    const localOrders = readLocalJSON<any[]>("local_orders", []);
 
     // Always create a brand-new independent order so new orders are never mixed up with previous orders
     const fullOrder = normalizeOrder({
@@ -1202,8 +1197,7 @@ export const api = {
     const sId = String(targetOrderId);
 
     // Find base order
-    const localOrdersStr = localStorage.getItem("local_orders");
-    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    const localOrders = readLocalJSON<any[]>("local_orders", []);
     let baseOrder =
       broadcastOrdersMemoryCache.get(sId) ||
       localOrders
@@ -1324,8 +1318,7 @@ export const api = {
       handleSupabaseError(e, "updateOrder");
     }
 
-    const localOrdersStr = localStorage.getItem("local_orders");
-    const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+    const localOrders = readLocalJSON<any[]>("local_orders", []);
     const idx = localOrders.findIndex(
       (o: any) => String(o._id) === sId || String(o.id) === sId,
     );
@@ -1377,7 +1370,7 @@ export const api = {
 
     const localOrdersStr = localStorage.getItem("local_orders");
     if (localOrdersStr) {
-      let localOrders = JSON.parse(localOrdersStr);
+      let localOrders = readLocalJSON<any[]>("local_orders", []);
       if (status) {
         localOrders = localOrders.filter((o: any) => o.status !== status);
       } else {
@@ -1484,7 +1477,7 @@ export const api = {
 
     const localOrdersStr = localStorage.getItem("local_orders");
     if (localOrdersStr) {
-      let localOrders = JSON.parse(localOrdersStr);
+      let localOrders = readLocalJSON<any[]>("local_orders", []);
       localOrders = localOrders.filter(
         (o: any) => String(o._id) !== sId && String(o.id) !== sId,
       );
@@ -1506,8 +1499,7 @@ export const api = {
         .filter(
           (o) => isOrderMatchingTable(o, customerName) && isOrderActive(o),
         );
-      const localOrdersStr = localStorage.getItem("local_orders");
-      const localOrders = localOrdersStr ? JSON.parse(localOrdersStr) : [];
+      const localOrders = readLocalJSON<any[]>("local_orders", []);
       const localActive = localOrders
         .map(normalizeOrder)
         .filter(
@@ -1597,7 +1589,7 @@ export const api = {
       } catch (e) {
         handleSupabaseReadError(e, "subscribeToCustomerOrder fetchAndCallback");
         const localMemOrder = getLatestActiveLocalOrMem();
-        callback(localMemOrder);
+        callback(localMemOrder ?? null);
       }
     };
 
@@ -1680,7 +1672,7 @@ export const api = {
 
     const localOrdersStr = localStorage.getItem("local_orders");
     if (localOrdersStr) {
-      const localOrders = JSON.parse(localOrdersStr);
+      const localOrders = readLocalJSON<any[]>("local_orders", []);
       const idx = localOrders.findIndex(
         (o: any) => String(o._id) === sId || String(o.id) === sId,
       );
@@ -2099,8 +2091,7 @@ export const api = {
     }
 
     // Local Fallback
-    const localTablesStr = localStorage.getItem("local_tables");
-    const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
+    const localTables = readLocalJSON<any[]>("local_tables", []);
     const existingIdx = localTables.findIndex(
       (t: any) => t.tableNo === tableNo,
     );
@@ -2139,8 +2130,7 @@ export const api = {
       handleSupabaseReadError(e, "getTableQr");
     }
 
-    const localTablesStr = localStorage.getItem("local_tables");
-    const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
+    const localTables = readLocalJSON<any[]>("local_tables", []);
     return localTables.find((t: any) => t.tableNo === tableNo) || null;
   },
 
@@ -2161,7 +2151,7 @@ export const api = {
     // Local
     const localTablesStr = localStorage.getItem("local_tables");
     if (localTablesStr) {
-      const localTables = JSON.parse(localTablesStr);
+      const localTables = readLocalJSON<any[]>("local_tables", []);
       const idx = localTables.findIndex((t: any) => t.tableNo === tableNo);
       if (idx !== -1) {
         localTables[idx] = { ...localTables[idx], active };
@@ -2189,7 +2179,7 @@ export const api = {
     // Local
     const localTablesStr = localStorage.getItem("local_tables");
     if (localTablesStr) {
-      let localTables = JSON.parse(localTablesStr);
+      let localTables = readLocalJSON<any[]>("local_tables", []);
       localTables = localTables.filter((t: any) => t.tableNo !== tableNo);
       localStorage.setItem("local_tables", JSON.stringify(localTables));
       triggerLocalTablesChange();
@@ -2217,8 +2207,7 @@ export const api = {
         handleSupabaseReadError(e, "subscribeToTables fetchAndTrigger");
       }
 
-      const localTablesStr = localStorage.getItem("local_tables");
-      const localTables = localTablesStr ? JSON.parse(localTablesStr) : [];
+      const localTables = readLocalJSON<any[]>("local_tables", []);
 
       const merged = [...remoteTables];
       localTables.forEach((lt: any) => {
@@ -2246,7 +2235,7 @@ export const api = {
     // Active polling fallback (ONLY polls if Supabase is unhealthy or unconfigured to sync local tabs)
     // Avoids polling the database if Supabase is connected and healthy
     const pollInterval = setInterval(() => {
-      if (!isSupabaseConfigured || !isSupabaseHealthy) {
+      if (!isSupabaseConfigured || !isSupabaseHealthy || !isRealtimeConnected) {
         fetchAndTrigger();
       }
     }, 5000);
@@ -2298,7 +2287,7 @@ export const api = {
 
     const localStr = localStorage.getItem("local_inventory_items");
     if (localStr) {
-      return JSON.parse(localStr);
+      return readLocalJSON<InventoryItem[]>("local_inventory_items", []);
     }
     localStorage.setItem(
       "local_inventory_items",
@@ -2327,10 +2316,10 @@ export const api = {
       handleSupabaseError(e, "saveInventoryItem");
     }
 
-    const localStr = localStorage.getItem("local_inventory_items");
-    const localItems: InventoryItem[] = localStr
-      ? JSON.parse(localStr)
-      : [...DEFAULT_INVENTORY_ITEMS];
+    const localItems: InventoryItem[] = readLocalJSON<InventoryItem[]>(
+      "local_inventory_items",
+      [...DEFAULT_INVENTORY_ITEMS],
+    );
     const idx = localItems.findIndex((i: InventoryItem) => i.id === item.id);
     if (idx !== -1) {
       localItems[idx] = { ...localItems[idx], ...payload } as InventoryItem;
@@ -2360,7 +2349,10 @@ export const api = {
     kvCache.invalidate("inventory_items");
     const localStr = localStorage.getItem("local_inventory_items");
     if (localStr) {
-      let localItems: InventoryItem[] = JSON.parse(localStr);
+      let localItems: InventoryItem[] = readLocalJSON<InventoryItem[]>(
+        "local_inventory_items",
+        [],
+      );
       localItems = localItems.filter((i: InventoryItem) => i.id !== id);
       localStorage.setItem("local_inventory_items", JSON.stringify(localItems));
       triggerLocalInventoryChange();
@@ -2388,7 +2380,7 @@ export const api = {
 
     const localStr = localStorage.getItem("local_recipe_boms");
     if (localStr) {
-      return JSON.parse(localStr);
+      return readLocalJSON<RecipeBom[]>("local_recipe_boms", []);
     }
     localStorage.setItem(
       "local_recipe_boms",
@@ -2416,10 +2408,10 @@ export const api = {
     }
 
     kvCache.invalidate("recipe_boms");
-    const localStr = localStorage.getItem("local_recipe_boms");
-    const localBoms: RecipeBom[] = localStr
-      ? JSON.parse(localStr)
-      : [...DEFAULT_RECIPE_BOMS];
+    const localBoms: RecipeBom[] = readLocalJSON<RecipeBom[]>(
+      "local_recipe_boms",
+      [...DEFAULT_RECIPE_BOMS],
+    );
     const idx = localBoms.findIndex((b: RecipeBom) => b.id === payload.id);
     if (idx !== -1) {
       localBoms[idx] = { ...localBoms[idx], ...payload } as RecipeBom;
@@ -2448,7 +2440,10 @@ export const api = {
     kvCache.invalidate("recipe_boms");
     const localStr = localStorage.getItem("local_recipe_boms");
     if (localStr) {
-      let localBoms: RecipeBom[] = JSON.parse(localStr);
+      let localBoms: RecipeBom[] = readLocalJSON<RecipeBom[]>(
+        "local_recipe_boms",
+        [],
+      );
       localBoms = localBoms.filter((b: RecipeBom) => b.id !== id);
       localStorage.setItem("local_recipe_boms", JSON.stringify(localBoms));
       triggerLocalInventoryChange();

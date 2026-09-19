@@ -90,9 +90,27 @@ class BlobStorageManager {
   }
 
   /**
-   * 上传 Base64 或 File 图片到 Blob 存储
-   * 优先使用 EdgeOne / 独立 COS 服务，其次使用 Supabase Storage Bucket，最后降级返回安全 Base64
+   * 上传 Base64 或 File 图片
+   * 首选 Supabase Storage Bucket（图片主要存储于此），其次独立 COS/EdgeOne Endpoint，最后降级返回安全 Base64
    */
+  private inferExt(fileOrBase64: string | File): string {
+    let mime = "";
+    if (typeof fileOrBase64 === "string") {
+      const m = fileOrBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);/);
+      if (m?.[1]) mime = m[1];
+    } else {
+      mime = fileOrBase64.type || "";
+    }
+    const extMap: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+      "image/svg+xml": "svg",
+    };
+    return extMap[mime] || "jpg";
+  }
+
   async uploadImage(
     fileOrBase64: string | File,
     fileNameHint?: string,
@@ -100,69 +118,10 @@ class BlobStorageManager {
     const config = this.getConfig();
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
-    const fileName = `${fileNameHint || "img"}_${timestamp}_${randomStr}.jpg`;
+    const ext = this.inferExt(fileOrBase64);
+    const fileName = `${fileNameHint || "img"}_${timestamp}_${randomStr}.${ext}`;
 
-    // 1. 如果配置了独立 Blob / 腾讯云 COS / EdgeOne 上传 Endpoint
-    if (config.endpoint) {
-      try {
-        let body: any;
-        const headers: Record<string, string> = {};
-
-        if (config.uploadToken) {
-          headers["Authorization"] = `Bearer ${config.uploadToken}`;
-        }
-
-        if (typeof fileOrBase64 === "string") {
-          headers["Content-Type"] = "application/json";
-          body = JSON.stringify({
-            filename: fileName,
-            base64Data: fileOrBase64,
-            bucket: config.bucketName,
-          });
-        } else {
-          const formData = new FormData();
-          formData.append("file", fileOrBase64, fileName);
-          formData.append("bucket", config.bucketName || "menu-assets");
-          body = formData;
-        }
-
-        const res = await fetch(`${config.endpoint}/upload`, {
-          method: "POST",
-          headers,
-          body,
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.url) {
-            return data.url;
-          }
-        }
-      } catch (e) {
-        console.warn(
-          "[Blob Storage] Dedicated upload failed, falling back to Supabase Bucket:",
-          e,
-        );
-      }
-    }
-
-    // 2. 尝试使用 EdgeOne Blob API（仅作本地缓存，不作为成功上传的 URL，仍需走 Supabase 获取公网 URL）
-    if (typeof fileOrBase64 === "string") {
-      try {
-        const savedEo = await this.setEdgeOneBlob(
-          fileName,
-          fileOrBase64,
-          config.bucketName || "my-store",
-        );
-        if (savedEo) {
-          console.log(
-            `[EdgeOne Blob] File cached as key: ${fileName} (not a public URL)`,
-          );
-        }
-      } catch {}
-    }
-
-    // 3. 使用 Supabase Storage API 存储 Blob
+    // 1. 首选 Supabase Storage（图片主要存储于此）
     if (supabase) {
       try {
         const bucket = config.bucketName || "menu-assets";
@@ -202,6 +161,58 @@ class BlobStorageManager {
       } catch (err) {
         console.warn("[Supabase Storage] Storage upload error:", err);
       }
+    }
+
+    // 2. 独立 Blob / 腾讯云 COS / EdgeOne 上传 Endpoint（可选兜底）
+    if (config.endpoint) {
+      try {
+        let body: any;
+        const headers: Record<string, string> = {};
+
+        if (config.uploadToken) {
+          headers["Authorization"] = `Bearer ${config.uploadToken}`;
+        }
+
+        if (typeof fileOrBase64 === "string") {
+          headers["Content-Type"] = "application/json";
+          body = JSON.stringify({
+            filename: fileName,
+            base64Data: fileOrBase64,
+            bucket: config.bucketName,
+          });
+        } else {
+          const formData = new FormData();
+          formData.append("file", fileOrBase64, fileName);
+          formData.append("bucket", config.bucketName || "menu-assets");
+          body = formData;
+        }
+
+        const res = await fetch(`${config.endpoint}/upload`, {
+          method: "POST",
+          headers,
+          body,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.url) {
+            return data.url;
+          }
+        }
+      } catch (e) {
+        console.warn("[Blob Storage] Dedicated upload failed:", e);
+      }
+    }
+
+    // 3. EdgeOne Blob 本地缓存（可选兜底，非公网 URL，不返回）
+    if (typeof fileOrBase64 === "string") {
+      try {
+        await this.setEdgeOneBlob(
+          fileName,
+          fileOrBase64,
+          config.bucketName || "my-store",
+        );
+      } catch {}
     }
 
     // 4. 兜底方案：如果是 Base64 字符串则直接返回，避免阻断上传

@@ -10,6 +10,7 @@ import {
 import { orderSchema } from "../types/schemas";
 import type { Order, OrderStatus } from "../types/order";
 import { logger, ERR } from "../utils/logger";
+import { readLocalJSON } from "../utils/safeParse";
 
 export const normalizeOrder = (o: unknown): Order => {
   if (!o) return o as never;
@@ -129,8 +130,7 @@ export async function getOrders(limit: number = 200): Promise<Order[]> {
           ERR.ORDERS_READ,
         );
     }
-    const localStr = localStorage.getItem("local_orders");
-    const local: Order[] = (localStr ? JSON.parse(localStr) : []).map(
+    const local: Order[] = readLocalJSON<Order[]>("local_orders", []).map(
       normalizeOrder,
     );
     const merged = new Map<string, Order>();
@@ -164,7 +164,7 @@ export async function getOrders(limit: number = 200): Promise<Order[]> {
   } catch (e) {
     handleSupabaseReadError(e, "getOrders");
     logger.error("orders", "getOrders failed", e, ERR.ORDERS_READ);
-    const ls = JSON.parse(localStorage.getItem("local_orders") || "[]");
+    const ls = readLocalJSON<Order[]>("local_orders", []);
     return (ls as Order[]).map(normalizeOrder);
   }
 }
@@ -278,7 +278,7 @@ export async function addOrder(order: any) {
   }
   // 本地与内存始终写入（离线兜底），但若 Supabase 失败，记录告警并触发后台重试标记
   try {
-    const ls = JSON.parse(localStorage.getItem("local_orders") || "[]");
+    const ls = readLocalJSON<Order[]>("local_orders", []);
     ls.push(full);
     localStorage.setItem("local_orders", JSON.stringify(ls));
     memCache.set(String(full._id), full);
@@ -314,7 +314,7 @@ export async function updateOrder(
   const prev: Order | undefined =
     override ||
     memCache.get(sId) ||
-    (JSON.parse(localStorage.getItem("local_orders") || "[]") as Order[]).find(
+    (readLocalJSON<Order[]>("local_orders", []) as Order[]).find(
       (o) => String(o._id) === sId || String(o.id) === sId,
     );
   const updated = normalizeOrder({
@@ -346,7 +346,7 @@ export async function updateOrder(
     logger.error("orders", "updateOrder exception", e, ERR.ORDERS_WRITE);
     handleSupabaseWriteError(e, "updateOrder");
   }
-  const arr = JSON.parse(localStorage.getItem("local_orders") || "[]");
+  const arr = readLocalJSON<Order[]>("local_orders", []);
   const idx = arr.findIndex(
     (o: Order) => String(o._id) === sId || String(o.id) === sId,
   );
@@ -385,9 +385,9 @@ export async function deleteOrder(orderId: string) {
     logger.error("orders", "deleteOrder exception", e, ERR.ORDERS_WRITE);
     handleSupabaseWriteError(e, "deleteOrder");
   }
-  const arr = (
-    JSON.parse(localStorage.getItem("local_orders") || "[]") as Order[]
-  ).filter((o) => String(o._id) !== sId && String(o.id) !== sId);
+  const arr = (readLocalJSON<Order[]>("local_orders", []) as Order[]).filter(
+    (o) => String(o._id) !== sId && String(o.id) !== sId,
+  );
   localStorage.setItem("local_orders", JSON.stringify(arr));
   notifyOrders();
   triggerBroadcast("orders_changed", { action: "delete", orderId });
@@ -399,9 +399,7 @@ export async function clearOrders(status?: string) {
       if (v.status === status) memCache.delete(k);
     });
   else memCache.clear();
-  const arr = JSON.parse(
-    localStorage.getItem("local_orders") || "[]",
-  ) as Order[];
+  const arr = readLocalJSON<Order[]>("local_orders", []) as Order[];
   const next = status ? arr.filter((o) => o.status !== status) : [];
   localStorage.setItem("local_orders", JSON.stringify(next));
   try {
@@ -431,7 +429,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
   const id = String(orderId);
   const cur =
     memCache.get(id) ||
-    (JSON.parse(localStorage.getItem("local_orders") || "[]") as Order[]).find(
+    (readLocalJSON<Order[]>("local_orders", []) as Order[]).find(
       (o) => String(o._id) === id || String(o.id) === id,
     );
   const from = String(cur?.status || "pending");
