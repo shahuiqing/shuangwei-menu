@@ -521,6 +521,8 @@ export function useMenuManager(deps: MenuManagerDeps) {
       },
     ];
     setCategories(updatedCategories);
+    if (onSaveToCloud)
+      onSaveToCloud({ categories: updatedCategories, silent: true });
     setNewCategory({
       name: "",
       enName: "",
@@ -704,6 +706,8 @@ export function useMenuManager(deps: MenuManagerDeps) {
       return cat;
     });
     setCategories(updatedCategories);
+    if (onSaveToCloud)
+      onSaveToCloud({ categories: updatedCategories, silent: true });
     setNewDish({
       title: "",
       enTitle: "",

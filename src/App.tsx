@@ -815,12 +815,10 @@ export default function App() {
         alert("✅ 成功保存到云端 (Saved to cloud successfully)");
       }
     } catch (err) {
-      if (!overrides?.silent) {
-        alert(
-          "❌ 保存到云端失败 (Cloud sync failed): " +
-            ((err as Error)?.message || err),
-        );
-      }
+      alert(
+        "❌ 保存到云端失败 (Cloud sync failed): " +
+          ((err as Error)?.message || err),
+      );
     } finally {
       setSyncProgress("保存完成");
       setTimeout(() => setSyncProgress(""), 1000);
