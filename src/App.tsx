@@ -1039,7 +1039,7 @@ export default function App() {
     return "en";
   });
   const [showSplash, setShowSplash] = useState(true);
-  const [isAdminAuthed, setIsAdminAuthed] = useState(false);
+  const [isAdminAuthed, setIsAdminAuthed] = useState(true);
   const [isDeviceAuthed, setIsDeviceAuthed] = useState(() => {
     const savedToken = safeGetItem("deviceAuthToken");
     const expiry = safeGetItem("deviceAuthTokenExpiry");

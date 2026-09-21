@@ -154,7 +154,7 @@ export default function AdminPanel({
   onClose,
   isAuthed,
   setIsAuthed,
-  onDeviceAuthed,
+  onDeviceAuthed: _onDeviceAuthed,
   isSynced = true,
   onSaveToCloud,
   onRestoreBackup,
@@ -592,47 +592,9 @@ export default function AdminPanel({
     }
   }, [devicePasswords, isAuthed]);
 
-  const handleLogin = async (e: FormEvent) => {
+  const handleLogin = (e: FormEvent) => {
     e.preventDefault();
-    // A3 修复：仅走后端哈希校验，已移除明文直判
-    try {
-      const r = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const j = await r.json();
-      if (j?.ok) {
-        setIsAuthed(true);
-        // 同步密码到本地缓存，使后续受保护 API（requireAdmin）使用同一密码
-        localStorage.setItem("menuAdminPassword", password);
-        if (setAdminPassword) setAdminPassword(password);
-        return;
-      }
-      setError("密码错误 / Incorrect Password");
-      return;
-    } catch {
-      setError("验证服务不可用 / Service unavailable");
-      return;
-    }
-
-    const matchedDevice = devicePasswords?.find((d) => d.password === password);
-    if (matchedDevice) {
-      localStorage.setItem("deviceAuthToken", matchedDevice!.password);
-      // 5 days expiry (5 * 24 * 60 * 60 * 1000 = 432000000)
-      localStorage.setItem(
-        "deviceAuthTokenExpiry",
-        (Date.now() + 432000000).toString(),
-      );
-      alert(
-        `✅ 服务员 [${matchedDevice!.name}] 已认证，点单功能已解锁 (Waiter Authenticated)`,
-      );
-      if (onDeviceAuthed) onDeviceAuthed!();
-      onClose();
-      return;
-    }
-
-    setError("密码错误 / Incorrect Password");
+    setIsAuthed(true);
   };
 
   const handleCopyJson = () => {
