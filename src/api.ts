@@ -2710,7 +2710,9 @@ export const api = {
           welcomeMessage:
             existingSettings?.welcomeMessage || "Premium Charcoal BBQ",
           logoUrl: existingSettings?.logoUrl || "",
-          adminPassword: existingSettings?.adminPassword || "admin123",
+          adminPasswordHash:
+            existingSettings?.adminPasswordHash ||
+            "$2b$10$9w21j6nlNxwRP1o7LdgJ.uhwLkakeoxaFy37CKt6AG/DccTR72Pcy",
           devicePasswords: existingSettings?.devicePasswords || [],
           securityQuestion: existingSettings?.securityQuestion || "",
           securityAnswer: existingSettings?.securityAnswer || "",

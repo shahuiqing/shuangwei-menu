@@ -16,15 +16,21 @@ interface Env {
  * 2) 兼容明文 adminPassword
  * 3) ADMIN_SECRET 环境变量
  */
-export async function onRequest(context: { request: Request; env: Env }): Promise<Response> {
+export async function onRequest(context: {
+  request: Request;
+  env: Env;
+}): Promise<Response> {
   try {
     const { password } = await context.request.json().catch(() => ({}));
     if (!password) {
       return json({ ok: false, error: "password required" }, 400);
     }
 
-    const supabaseUrl = context.env.SUPABASE_URL || context.env.VITE_SUPABASE_URL;
-    const supabaseKey = context.env.SUPABASE_SERVICE_ROLE_KEY || context.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl =
+      context.env.SUPABASE_URL || context.env.VITE_SUPABASE_URL;
+    const supabaseKey =
+      context.env.SUPABASE_SERVICE_ROLE_KEY ||
+      context.env.VITE_SUPABASE_ANON_KEY;
 
     // 1) Supabase（优先 service role，保证能读 adminPasswordHash）
     if (supabaseUrl && supabaseKey) {
@@ -32,7 +38,7 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
         const supabase = createClient(supabaseUrl, supabaseKey);
         const { data } = await supabase
           .from("settings")
-          .select("adminPassword, adminPasswordHash")
+          .select("adminPasswordHash")
           .eq("id", "global")
           .maybeSingle();
         if (data) {
@@ -40,9 +46,6 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
           if (hash.startsWith("$2")) {
             const ok = await bcrypt.compare(String(password), hash);
             return json({ ok });
-          }
-          if (data.adminPassword) {
-            return json({ ok: String(password) === data.adminPassword });
           }
         }
       } catch (e) {
