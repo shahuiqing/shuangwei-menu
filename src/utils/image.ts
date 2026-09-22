@@ -1,11 +1,16 @@
-export const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.80): Promise<string> => {
+export const compressImage = (
+  file: File,
+  maxWidth = 1000,
+  maxHeight = 1000,
+  quality = 0.8,
+): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         let width = img.width;
         let height = img.height;
 
@@ -24,35 +29,41 @@ export const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, qua
         canvas.width = width;
         canvas.height = height;
 
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (!ctx) {
-          reject(new Error('Failed to get canvas context'));
+          reject(new Error("Failed to get canvas context"));
           return;
         }
 
-        ctx.fillStyle = '#FFFFFF';
+        ctx.fillStyle = "#FFFFFF";
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
         // Try webp first for maximum compression, fallback to jpeg
-        let compressedBase64 = canvas.toDataURL('image/webp', quality);
-        if (!compressedBase64.startsWith('data:image/webp')) {
-          compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        let compressedBase64 = canvas.toDataURL("image/webp", quality);
+        if (!compressedBase64.startsWith("data:image/webp")) {
+          compressedBase64 = canvas.toDataURL("image/jpeg", quality);
         }
         resolve(compressedBase64);
       };
-      img.onerror = () => reject(new Error('Image failed to load in compressImage'));
+      img.onerror = () =>
+        reject(new Error("Image failed to load in compressImage"));
       img.src = event.target?.result as string;
     };
-    reader.onerror = () => reject(new Error('File reading failed'));
+    reader.onerror = () => reject(new Error("File reading failed"));
   });
 };
 
-export const compressBase64Image = (base64Str: string, maxWidth = 1000, maxHeight = 1000, quality = 0.80): Promise<string> => {
+export const compressBase64Image = (
+  base64Str: string,
+  maxWidth = 1000,
+  maxHeight = 1000,
+  quality = 0.8,
+): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       let width = img.width;
       let height = img.height;
 
@@ -71,26 +82,27 @@ export const compressBase64Image = (base64Str: string, maxWidth = 1000, maxHeigh
       canvas.width = width;
       canvas.height = height;
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       if (!ctx) {
-        reject(new Error('Failed to get canvas context'));
+        reject(new Error("Failed to get canvas context"));
         return;
       }
-      
-      ctx.fillStyle = '#FFFFFF';
+
+      ctx.fillStyle = "#FFFFFF";
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
 
       // Try webp first for maximum compression, fallback to jpeg
-      let compressedBase64 = canvas.toDataURL('image/webp', quality);
-      if (!compressedBase64.startsWith('data:image/webp')) {
-        compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+      let compressedBase64 = canvas.toDataURL("image/webp", quality);
+      if (!compressedBase64.startsWith("data:image/webp")) {
+        compressedBase64 = canvas.toDataURL("image/jpeg", quality);
       }
       resolve(compressedBase64);
     };
-    img.onerror = () => reject(new Error('Image failed to load in compressBase64Image'));
-    if (!base64Str.startsWith('data:')) {
-      img.crossOrigin = 'anonymous';
+    img.onerror = () =>
+      reject(new Error("Image failed to load in compressBase64Image"));
+    if (!base64Str.startsWith("data:")) {
+      img.crossOrigin = "anonymous";
     }
     img.src = base64Str;
   });
@@ -100,7 +112,7 @@ export const drawBeautifulTableCard = (
   canvas: HTMLCanvasElement,
   qrCanvas: HTMLCanvasElement,
   tableNo: string,
-  storeName: string
+  storeName: string,
 ) => {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -128,7 +140,7 @@ export const drawBeautifulTableCard = (
   // Corner Accents
   const cornerSize = 60;
   ctx.fillStyle = "#ea580c";
-  
+
   // Top Left Corner
   ctx.beginPath();
   ctx.moveTo(30, 30 + cornerSize);
@@ -200,7 +212,7 @@ export const drawBeautifulTableCard = (
   const qrSize = 480;
   const qrX = w / 2 - qrSize / 2;
   const qrY = 620;
-  
+
   ctx.fillStyle = "#ffffff";
   ctx.shadowColor = "rgba(0,0,0,0.15)";
   ctx.shadowBlur = 20;
@@ -211,7 +223,7 @@ export const drawBeautifulTableCard = (
   const qry2 = qrY - 20;
   const qrw = qrSize + 40;
   const qrh = qrSize + 40;
-  
+
   ctx.moveTo(qrx2 + r, qry2);
   ctx.lineTo(qrx2 + qrw - r, qry2);
   ctx.quadraticCurveTo(qrx2 + qrw, qry2, qrx2 + qrw, qry2 + r);
@@ -228,14 +240,14 @@ export const drawBeautifulTableCard = (
   ctx.shadowColor = "transparent";
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
-  
+
   ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
 
   // Call to Action Text
   ctx.fillStyle = "#18181b";
   ctx.font = "900 52px sans-serif";
   ctx.fillText("扫码点餐", w / 2, 1220);
-  
+
   ctx.fillStyle = "#52525b";
   ctx.font = "500 32px sans-serif";
   ctx.fillText("Scan the QR Code to Order", w / 2, 1270);
@@ -255,18 +267,12 @@ export const drawBeautifulTableCard = (
 };
 
 /**
- * 为 Supabase Storage 图片 URL 追加 CDN 缩略图参数，减少传输量节省免费层配额。
- * 非 Supabase URL（外链/base64）原样返回。
+ * 图片 URL 处理：直接返回原地址。
+ * 之前对 /object/public/ 追加 `?width=...&quality=80` 是错误的缩略图端点（正确应是 /render/image/），
+ * 且可能被 Supabase CDN/ImgProxy 拦截导致图片加载失败，故移除。
  * @param url 原始图片 URL
- * @param width 目标宽度（默认 500）
- * @returns 带缩略图参数的 URL
+ * @returns 原样返回
  */
-export function getOptimizedImageUrl(url: string, width = 500): string {
-  if (!url) return url;
-  // 仅对 Supabase Storage 公开 URL 加缩略图参数
-  if (url.includes('/object/public/')) {
-    const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}width=${width}&quality=80`;
-  }
+export function getOptimizedImageUrl(url: string, _width = 500): string {
   return url;
 }
