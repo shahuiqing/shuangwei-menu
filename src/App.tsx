@@ -70,23 +70,37 @@ const ImageWithSkeleton = ({
     if (loadedSrc === src || errorSrc === src) return;
 
     let isMounted = true;
-    const img = new Image();
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const maxAttempts = 3;
 
-    img.onload = () => {
-      if (isMounted) setLoadedSrc(src);
+    const tryLoad = () => {
+      if (!isMounted) return;
+      const img = new Image();
+      img.onload = () => {
+        if (isMounted) setLoadedSrc(src);
+      };
+      img.onerror = () => {
+        if (!isMounted) return;
+        attempts += 1;
+        if (attempts >= maxAttempts) {
+          setErrorSrc(src);
+        } else {
+          // 网络抖动/临时失败时自动重试，避免图片直接空掉
+          timer = setTimeout(tryLoad, 800 * attempts);
+        }
+      };
+      img.src = src;
+      if (img.complete && img.naturalWidth > 0) {
+        setLoadedSrc(src);
+      }
     };
-    img.onerror = () => {
-      if (isMounted) setErrorSrc(src);
-    };
 
-    img.src = src;
-
-    if (img.complete && img.naturalWidth > 0) {
-      setLoadedSrc(src);
-    }
+    tryLoad();
 
     return () => {
       isMounted = false;
+      if (timer) clearTimeout(timer);
     };
   }, [src, loadedSrc, errorSrc]);
 
