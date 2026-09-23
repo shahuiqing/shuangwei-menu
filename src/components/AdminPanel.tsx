@@ -1,6 +1,7 @@
 import { safeGetItem } from "../utils/storage";
 import { checkpointService } from "../services/checkpoint";
 import { lanSync } from "../services/lanSync";
+import { supabase, ADMIN_EMAIL } from "../supabase";
 import { useState, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { api, parseOrderTimestamp } from "../api";
@@ -654,9 +655,28 @@ export default function AdminPanel({
     }
   }, [devicePasswords, isAuthed]);
 
-  const handleLogin = (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    setIsAuthed(true);
+    // 通过 Supabase Auth 真正登录：登录后写操作受 RLS 保护，未登录者无法改数据
+    if (!supabase) {
+      setError("Supabase 未配置 / Supabase not configured");
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: ADMIN_EMAIL,
+        password,
+      });
+      if (!error) {
+        setIsAuthed(true);
+        localStorage.setItem("menuAdminPassword", password);
+        if (setAdminPassword) setAdminPassword(password);
+        return;
+      }
+      setError("密码错误 / Incorrect Password");
+    } catch {
+      setError("验证失败 / Login failed");
+    }
   };
 
   const handleCopyJson = () => {
@@ -1194,23 +1214,35 @@ export default function AdminPanel({
     }, 60000);
   };
 
-  const handleChangePassword = (e: FormEvent) => {
+  const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
     if (!newAdminPassword.trim()) return;
-    if (setAdminPassword) {
-      setAdminPassword(newAdminPassword);
-      setNewAdminPassword("");
-      if (onSaveToCloud) {
-        onSaveToCloud({ adminPassword: newAdminPassword, silent: true });
-        alert(
-          "密码修改成功并已同步到云端！ / Password changed and synced to cloud!",
-        );
-      } else {
-        alert(
-          "密码修改成功！请别忘了保存到云端。 / Password changed successfully!",
-        );
-      }
+    if (!supabase) {
+      alert("Supabase 未配置 / Supabase not configured");
+      return;
     }
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newAdminPassword,
+      });
+      if (error) {
+        alert("修改密码失败 / Failed: " + error.message);
+        return;
+      }
+      if (setAdminPassword) setAdminPassword(newAdminPassword);
+      setNewAdminPassword("");
+      alert("密码修改成功！/ Password changed successfully!");
+    } catch (err: any) {
+      alert("修改密码失败 / Failed: " + (err?.message || err));
+    }
+  };
+
+  const handleAdminLogout = async () => {
+    try {
+      if (supabase) await supabase.auth.signOut();
+    } catch {}
+    setIsAuthed(false);
+    if (onClose) onClose();
   };
 
   const handleChangeSecurity = (e: FormEvent) => {
@@ -3236,6 +3268,24 @@ export default function AdminPanel({
                       一旦更改，所有设备下次登录都需要使用新密码。
                     </p>
                   </form>
+
+                  {/* 管理员登录状态 / 退出 */}
+                  <div className="mb-6 p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50">
+                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <Lock size={20} className="text-red-500" /> 管理员登录状态
+                    </h3>
+                    <p className="text-xs text-zinc-400 mb-3">
+                      已通过 Supabase 安全登录。未登录者无法修改数据（RLS
+                      保护）。退出后本机将失去修改权限。
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleAdminLogout}
+                      className="bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl px-4 py-2.5 transition-colors text-sm"
+                    >
+                      退出登录 (Log out)
+                    </button>
+                  </div>
 
                   {/* Config Device Passwords */}
                   <form

@@ -31,6 +31,7 @@ import {
 import { QRCodeCanvas } from "qrcode.react";
 import { getOptimizedImageUrl } from "./utils/image";
 import { checkpointService } from "./services/checkpoint";
+import { supabase } from "./supabase";
 import { lazy, Suspense } from "react";
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 import CartMenu from "./components/CartMenu";
@@ -1080,7 +1081,18 @@ export default function App() {
     return "en";
   });
   const [showSplash, setShowSplash] = useState(true);
-  const [isAdminAuthed, setIsAdminAuthed] = useState(true);
+  const [isAdminAuthed, setIsAdminAuthed] = useState(false);
+  // Supabase Auth 会话：登录后自动恢复，登出后清除（真正的鉴权，写操作受 RLS 保护）
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setIsAdminAuthed(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsAdminAuthed(!!session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
   const [isDeviceAuthed, setIsDeviceAuthed] = useState(() => {
     const savedToken = safeGetItem("deviceAuthToken");
     const expiry = safeGetItem("deviceAuthTokenExpiry");
