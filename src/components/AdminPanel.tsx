@@ -1,4 +1,6 @@
 import { safeGetItem } from "../utils/storage";
+import { checkpointService } from "../services/checkpoint";
+import { lanSync } from "../services/lanSync";
 import { useState, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { api, parseOrderTimestamp } from "../api";
@@ -226,6 +228,58 @@ export default function AdminPanel({
   const [copiedSuccess, setCopiedSuccess] = useState(false);
   const [orderView, setOrderView] = useState<"active" | "history">("active");
   const [importProgress, setImportProgress] = useState("");
+
+  // 本地重置点（快照）+ 局域网备用通道状态
+  const [checkpoints, setCheckpoints] = useState(() =>
+    checkpointService.list(),
+  );
+  const [lanConnected, setLanConnected] = useState(false);
+  useEffect(
+    () =>
+      checkpointService.subscribe(() =>
+        setCheckpoints(checkpointService.list()),
+      ),
+    [],
+  );
+  useEffect(() => lanSync.subscribeStatus(setLanConnected), []);
+
+  const handleSaveCheckpoint = () => {
+    const name = window.prompt(
+      "给这个重置点起个名字（可留空）",
+      "手动重置点 " + new Date().toLocaleString(),
+    );
+    if (name === null) return;
+    checkpointService.save(name, {
+      categories,
+      promotions,
+      restaurantName,
+      welcomeMessage,
+      bgUrl,
+      logoUrl,
+      layoutStyle,
+      theme,
+      soundEnabled,
+      receiptSettings,
+      deletedItemIds: deletedItemIds || [],
+    });
+    alert("✅ 已保存重置点（存于本机，不依赖数据库）");
+  };
+
+  const handleRestoreCheckpoint = (cp: any) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "恢复重置点确认",
+      message: `确定要恢复到【${cp.name}】吗？当前未保存的修改会被覆盖。`,
+      subDetail: `${new Date(cp.createdAt).toLocaleString()} · ${cp.data?.categories?.length || 0} 个分类`,
+      confirmText: "确认恢复",
+      confirmBtnClass:
+        "px-4 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors",
+      onConfirm: async () => {
+        if (onRestoreBackup) await onRestoreBackup(cp.data);
+        setConfirmDialog(null);
+      },
+    });
+  };
 
   const menuManager = useMenuManager({
     categories,
@@ -485,6 +539,14 @@ export default function AdminPanel({
       if (unsubscribe) unsubscribe();
     };
   }, [currency, receiptSettings, isPrintServer]);
+
+  // 局域网订单备用通道：接收同网段服务器广播来的订单（数据库不可用时的备用手段）
+  useEffect(() => {
+    const unsub = lanSync.subscribeOrders((order) => {
+      api.receiveLanOrder(order);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -3318,6 +3380,71 @@ export default function AdminPanel({
                           onChange={handleImportJson}
                         />
                       </label>
+                    </div>
+                  </div>
+
+                  {/* 本地重置点（快照） */}
+                  <div className="mb-6 p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50">
+                    <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                      <Archive size={20} className="text-emerald-500" />{" "}
+                      本地重置点 / 快照 (Restore Points)
+                    </h3>
+                    <p className="text-xs text-zinc-400 mb-4">
+                      每次成功保存到云端后会自动写入一个「自动重置点」。当菜单异常或数据库不可用时，可一键恢复到任意重置点，快速保证功能可用（数据存于本机，不依赖数据库）。
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
+                      <button
+                        onClick={handleSaveCheckpoint}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl transition-colors text-sm font-semibold active:scale-95"
+                      >
+                        💾 保存当前为重置点
+                      </button>
+                      <span className="text-[11px] text-zinc-500">
+                        局域网订单备用通道：
+                        {lanConnected
+                          ? "已连接"
+                          : lanSync.isLanMode()
+                            ? "未连接"
+                            : "未启用（HTTPS 部署下自动禁用）"}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {checkpoints.length === 0 && (
+                        <div className="text-xs text-zinc-500 text-center py-3">
+                          暂无重置点
+                        </div>
+                      )}
+                      {checkpoints.map((cp: any) => (
+                        <div
+                          key={cp.id}
+                          className="flex items-center justify-between gap-3 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm text-white truncate">
+                              {cp.auto ? "🔄 " : "📌 "}
+                              {cp.name}
+                            </div>
+                            <div className="text-[10px] text-zinc-500">
+                              {new Date(cp.createdAt).toLocaleString()} ·{" "}
+                              {cp.data?.categories?.length || 0} 个分类
+                            </div>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => handleRestoreCheckpoint(cp)}
+                              className="text-xs bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              恢复
+                            </button>
+                            <button
+                              onClick={() => checkpointService.remove(cp.id)}
+                              className="text-xs bg-red-600/20 hover:bg-red-600/40 text-red-400 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 

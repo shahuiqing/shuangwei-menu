@@ -5,6 +5,7 @@ import {
 } from "./initialData";
 import { kvCache } from "./services/kvCache";
 import { blobStorage } from "./services/blobStorage";
+import { lanSync } from "./services/lanSync";
 import { compressBase64Image } from "./utils/image";
 import { readLocalJSON } from "./utils/safeParse";
 import type { Order } from "./types/order";
@@ -1186,8 +1187,31 @@ export const api = {
 
     triggerLocalOrdersChange();
     triggerBroadcast("orders_changed", { action: "upsert", order: fullOrder });
+    // 局域网备用通道：数据库不可用时，仍可通过同网段服务器把订单送到后厨
+    try {
+      if (lanSync.isLanMode()) lanSync.sendOrder(fullOrder);
+    } catch {}
     api.deductInventoryForOrderItems(order.items as Record<string, unknown>[]);
     return fullOrder;
+  },
+
+  /** 局域网备用通道：接收同网段服务器广播来的订单（仅本地合并，不重复外发） */
+  receiveLanOrder: (order: Record<string, unknown>) => {
+    try {
+      const norm = normalizeOrder(order);
+      if (!norm?._id) return;
+      broadcastOrdersMemoryCache.set(String(norm._id), norm);
+      const localOrders = readLocalJSON<any[]>("local_orders", []);
+      const idx = localOrders.findIndex(
+        (o: any) => String(o._id) === String(norm._id),
+      );
+      if (idx !== -1) localOrders[idx] = norm;
+      else localOrders.push(norm);
+      localStorage.setItem("local_orders", JSON.stringify(localOrders));
+      triggerLocalOrdersChange();
+    } catch (e) {
+      console.warn("[lan] receiveLanOrder failed", e);
+    }
   },
 
   appendDishesToOrder: async (

@@ -673,6 +673,30 @@ async function startServer() {
             await cartHub.clearCart(data.table);
             cartHub.broadcastCart(data.table, {});
           }
+        } else if (data.type === "new-order" && data.order) {
+          // 局域网订单备用通道：广播给所有在线设备（后厨/管理端），并落本地文件
+          const msg = JSON.stringify({
+            type: "order_received",
+            order: data.order,
+          });
+          for (const c of clients) {
+            try {
+              c.ws.send(msg);
+            } catch {}
+          }
+          try {
+            let orders: any[] = [];
+            if (fs.existsSync(LOCAL_ORDERS_FILE)) {
+              try {
+                orders = JSON.parse(
+                  fs.readFileSync(LOCAL_ORDERS_FILE, "utf-8"),
+                );
+              } catch {}
+              if (!Array.isArray(orders)) orders = [];
+            }
+            orders.push(data.order);
+            writeOrdersSafely(LOCAL_ORDERS_FILE, orders);
+          } catch {}
         }
       } catch {}
     });

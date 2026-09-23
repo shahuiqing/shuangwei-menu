@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { getOptimizedImageUrl } from "./utils/image";
+import { checkpointService } from "./services/checkpoint";
 import { lazy, Suspense } from "react";
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 import CartMenu from "./components/CartMenu";
@@ -825,6 +826,32 @@ export default function App() {
         },
         setSyncProgress,
       );
+      // 自动重置点：每次成功保存后写入本地快照，便于数据库异常时快速恢复
+      try {
+        checkpointService.autoSave({
+          categories: overrides?.categories || categories,
+          promotions: overrides?.promotions || promotions,
+          restaurantName:
+            overrides?.restaurantName !== undefined
+              ? overrides.restaurantName
+              : restaurantName,
+          welcomeMessage:
+            overrides?.welcomeMessage !== undefined
+              ? overrides.welcomeMessage
+              : welcomeMessage,
+          bgUrl: overrides?.bgUrl !== undefined ? overrides.bgUrl : bgUrl,
+          logoUrl:
+            overrides?.logoUrl !== undefined ? overrides.logoUrl : logoUrl,
+          layoutStyle: overrides?.layoutStyle || layoutStyle,
+          theme: overrides?.theme || theme,
+          soundEnabled:
+            overrides?.soundEnabled !== undefined
+              ? overrides.soundEnabled
+              : soundEnabled,
+          receiptSettings: overrides?.receiptSettings || receiptSettings,
+          deletedItemIds: updatedDeletedItemIds,
+        });
+      } catch {}
       if (!overrides?.silent) {
         alert("✅ 成功保存到云端 (Saved to cloud successfully)");
       }
