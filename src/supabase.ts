@@ -14,8 +14,3 @@ export const supabase = isSupabaseConfigured
   : null;
 
 export const isSupabaseHealthy = true;
-
-// 管理员登录邮箱（Supabase Auth）：登录界面只需输入密码，邮箱固定在此。
-// 可通过 .env 的 VITE_ADMIN_EMAIL 覆盖。
-export const ADMIN_EMAIL =
-  (import.meta as any).env?.VITE_ADMIN_EMAIL || "admin@shuangwei.app";

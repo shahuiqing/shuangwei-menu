@@ -1,7 +1,12 @@
 import { safeGetItem } from "../utils/storage";
 import { checkpointService } from "../services/checkpoint";
 import { lanSync } from "../services/lanSync";
-import { supabase, ADMIN_EMAIL } from "../supabase";
+import {
+  verifyAdminPassword,
+  saveAdminPassword,
+  markAdminAuthed,
+  clearAdminAuthed,
+} from "../utils/adminAuth";
 import { useState, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { api, parseOrderTimestamp } from "../api";
@@ -657,26 +662,16 @@ export default function AdminPanel({
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    // 通过 Supabase Auth 真正登录：登录后写操作受 RLS 保护，未登录者无法改数据
-    if (!supabase) {
-      setError("Supabase 未配置 / Supabase not configured");
+    // 本地密码校验，不依赖数据库（数据库挂了也能登录）
+    const ok = await verifyAdminPassword(password);
+    if (ok) {
+      markAdminAuthed();
+      setIsAuthed(true);
+      localStorage.setItem("menuAdminPassword", password);
+      if (setAdminPassword) setAdminPassword(password);
       return;
     }
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: ADMIN_EMAIL,
-        password,
-      });
-      if (!error) {
-        setIsAuthed(true);
-        localStorage.setItem("menuAdminPassword", password);
-        if (setAdminPassword) setAdminPassword(password);
-        return;
-      }
-      setError("密码错误 / Incorrect Password");
-    } catch {
-      setError("验证失败 / Login failed");
-    }
+    setError("密码错误 / Incorrect Password");
   };
 
   const handleCopyJson = () => {
@@ -1217,30 +1212,14 @@ export default function AdminPanel({
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
     if (!newAdminPassword.trim()) return;
-    if (!supabase) {
-      alert("Supabase 未配置 / Supabase not configured");
-      return;
-    }
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newAdminPassword,
-      });
-      if (error) {
-        alert("修改密码失败 / Failed: " + error.message);
-        return;
-      }
-      if (setAdminPassword) setAdminPassword(newAdminPassword);
-      setNewAdminPassword("");
-      alert("密码修改成功！/ Password changed successfully!");
-    } catch (err: any) {
-      alert("修改密码失败 / Failed: " + (err?.message || err));
-    }
+    await saveAdminPassword(newAdminPassword);
+    if (setAdminPassword) setAdminPassword(newAdminPassword);
+    setNewAdminPassword("");
+    alert("密码修改成功！/ Password changed successfully!");
   };
 
-  const handleAdminLogout = async () => {
-    try {
-      if (supabase) await supabase.auth.signOut();
-    } catch {}
+  const handleAdminLogout = () => {
+    clearAdminAuthed();
     setIsAuthed(false);
     if (onClose) onClose();
   };
@@ -3275,8 +3254,7 @@ export default function AdminPanel({
                       <Lock size={20} className="text-red-500" /> 管理员登录状态
                     </h3>
                     <p className="text-xs text-zinc-400 mb-3">
-                      已通过 Supabase 安全登录。未登录者无法修改数据（RLS
-                      保护）。退出后本机将失去修改权限。
+                      已通过本地密码登录（不依赖数据库，数据库挂了也能进）。退出后本机需要重新输入密码。
                     </p>
                     <button
                       type="button"
