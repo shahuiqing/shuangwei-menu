@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../../api";
+import { api, parseOrderTimestamp } from "../../api";
 import {
   Sparkles,
   Trash2,
@@ -10,6 +10,7 @@ import {
   Printer,
   X,
   LayoutGrid,
+  List,
   Armchair,
   Clock,
 } from "lucide-react";
@@ -51,6 +52,12 @@ const formatTime = (ts: any) => {
   }
 };
 
+const sortByNewest = (arr: any[]) =>
+  [...arr].sort(
+    (a, b) =>
+      parseOrderTimestamp(b.timestamp) - parseOrderTimestamp(a.timestamp),
+  );
+
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   pending: { text: "待接单", cls: "bg-orange-500/20 text-orange-400" },
   cooking: { text: "制作中", cls: "bg-blue-500/20 text-blue-400" },
@@ -85,17 +92,19 @@ export function OrdersTab({
   onCheckout,
 }: OrdersTabProps) {
   const [view, setView] = useState<"orders" | "tables">("orders");
+  const [style, setStyle] = useState<"card" | "list">("card");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const visibleOrders = orders.filter((o) =>
-    orderView === "history"
-      ? o.status === "completed"
-      : o.status !== "completed" && o.status !== "cancelled",
+  const visibleOrders = sortByNewest(
+    orders.filter((o) =>
+      orderView === "history"
+        ? o.status === "completed"
+        : o.status !== "completed" && o.status !== "cancelled",
+    ),
   );
   const activeOrders = orders.filter(
     (o) => o.status !== "completed" && o.status !== "cancelled",
   );
-
   const selected = orders.find((o) => orderKey(o) === selectedId) || null;
 
   // 桌位看板：按桌号聚合（订单自动生成桌位 + 已知桌位显示为空闲）
@@ -259,16 +268,197 @@ export function OrdersTab({
     </div>
   );
 
+  const renderItems = (order: any) => (
+    <ul className="space-y-2">
+      {(order?.items || []).map((item: any, i: number) =>
+        item ? (
+          <li
+            key={i}
+            className={`flex justify-between items-center text-sm p-2.5 rounded-lg ${item.served ? "bg-green-500/10 text-green-500/70 line-through" : item.isAdded ? "bg-orange-500/10 border border-orange-500/20" : "bg-zinc-950"}`}
+          >
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  const newItems = [...order.items];
+                  newItems[i] = { ...item, served: !item.served };
+                  try {
+                    await api.updateOrder(order._id, { items: newItems });
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className={`p-1 rounded-full border ${item.served ? "bg-green-500 text-white border-green-500" : "border-zinc-500 text-transparent hover:border-zinc-300"}`}
+              >
+                <CheckCircle size={14} />
+              </button>
+              <span
+                className={
+                  item.served
+                    ? "text-green-500/70"
+                    : item.isAdded
+                      ? "text-orange-400 font-medium"
+                      : "text-zinc-300"
+                }
+              >
+                {item?.name || ""}
+                {item?.isAdded ? (
+                  <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded-sm">
+                    加菜
+                  </span>
+                ) : null}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {(!order?.status || order?.status === "pending") && (
+                <button
+                  onClick={async () => {
+                    if (confirm(`确定要退掉一个 ${item?.name || ""} 吗？`)) {
+                      const newItems = [...order.items];
+                      let newTotal =
+                        (order.total || 0) - (newItems[i]?.price || 0);
+                      if (newTotal < 0) newTotal = 0;
+                      if (newItems[i].quantity > 1) {
+                        newItems[i] = {
+                          ...newItems[i],
+                          quantity: newItems[i].quantity - 1,
+                        };
+                      } else {
+                        newItems.splice(i, 1);
+                      }
+                      try {
+                        await api.updateOrder(order._id, {
+                          items: newItems,
+                          total: newTotal,
+                        });
+                      } catch {
+                        alert("退菜失败");
+                      }
+                    }
+                  }}
+                  className="text-xs text-red-500 hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors whitespace-nowrap"
+                >
+                  退菜
+                </button>
+              )}
+              <span
+                className={item.served ? "text-green-500/70" : "text-zinc-500"}
+              >
+                x{item?.quantity || 1}
+              </span>
+              <span
+                className={`${item.served ? "text-green-500/70" : "text-zinc-400"} w-14 text-right`}
+              >
+                {((item?.price || 0) * (item?.quantity || 1)).toFixed(2)}
+              </span>
+            </div>
+          </li>
+        ) : null,
+      )}
+    </ul>
+  );
+
+  // 旧版详细列表样式（可自由切换）
+  const renderOldCard = (order: any, isNewest: boolean) => (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-orange-400 font-bold text-lg">
+              桌号/顾客名: {parseTableName(order)}
+            </span>
+            {isNewest && (
+              <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full font-bold animate-pulse">
+                ● 最新
+              </span>
+            )}
+          </div>
+          {order?.deviceName && (
+            <div className="text-zinc-500 text-sm mt-1">
+              设备: {order.deviceName}
+            </div>
+          )}
+          <div className="text-zinc-400 text-xs mt-1">
+            时间: {formatTime(order?.timestamp)}
+          </div>
+          <div className="text-zinc-500 text-xs mt-1">
+            单号: {order?.orderNumber || "N/A"}
+          </div>
+          {order?.isExternal && (
+            <div className="text-orange-500 text-xs mt-1">来自外部网站</div>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <StatusBadge status={order?.status} />
+            {order?.paymentMethod && (
+              <span className="text-[11px] text-orange-400 font-semibold bg-orange-500/10 border border-orange-500/30 px-1.5 py-0.5 rounded">
+                💳 {order.paymentMethod}
+              </span>
+            )}
+            <div className="text-white font-bold text-lg">
+              {order?.total || ""}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 mt-1">
+            {renderActions(order)}
+          </div>
+        </div>
+      </div>
+      {order?.status !== "completed" && (
+        <div className="mt-3 pt-3 border-t border-zinc-800/50">
+          {renderItems(order)}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderCard = (order: any, isNewest: boolean) => {
+    const id = orderKey(order);
+    const items = order?.items || [];
+    const itemCount = items.reduce(
+      (s: number, it: any) => s + (it?.quantity || 1),
+      0,
+    );
+    return (
+      <button
+        key={id}
+        onClick={() => setSelectedId(id)}
+        className={`relative text-left bg-zinc-900 border rounded-2xl p-4 transition-all active:scale-[0.98] flex flex-col gap-2 min-h-[120px] ${isNewest ? "border-green-500/60 ring-1 ring-green-500/30" : "border-zinc-800 hover:border-orange-500/60"}`}
+      >
+        {isNewest && (
+          <span className="absolute -top-2 -right-2 text-[10px] px-2 py-0.5 bg-green-500 text-white rounded-full font-bold shadow-lg">
+            最新
+          </span>
+        )}
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-2xl font-black text-white leading-none truncate">
+            {parseTableName(order)}
+          </span>
+          <StatusBadge status={order?.status} />
+        </div>
+        <div className="flex items-center gap-1 text-[11px] text-zinc-500">
+          <Clock size={12} /> {formatTime(order?.timestamp)}
+        </div>
+        <div className="mt-auto flex items-end justify-between">
+          <span className="text-[11px] text-zinc-400">{itemCount} 件</span>
+          <span className="text-lg font-bold text-orange-400">
+            {order?.total || 0}
+          </span>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="mb-6 p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50">
-      {/* 视图切换：订单卡片 / 桌位看板 */}
-      <div className="flex items-center gap-2 mb-4">
+      {/* 视图切换：订单 / 桌位 */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
           <button
             onClick={() => setView("orders")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${view === "orders" ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
           >
-            <LayoutGrid size={15} /> 订单卡片
+            <LayoutGrid size={15} /> 订单
           </button>
           <button
             onClick={() => setView("tables")}
@@ -277,6 +467,25 @@ export function OrdersTab({
             <Armchair size={15} /> 桌位看板
           </button>
         </div>
+
+        {view === "orders" && (
+          <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+            <button
+              onClick={() => setStyle("card")}
+              title="卡片样式"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${style === "card" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"}`}
+            >
+              <LayoutGrid size={15} /> 卡片
+            </button>
+            <button
+              onClick={() => setStyle("list")}
+              title="列表样式（旧版）"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${style === "list" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"}`}
+            >
+              <List size={15} /> 列表
+            </button>
+          </div>
+        )}
       </div>
 
       {view === "orders" ? (
@@ -333,37 +542,19 @@ export function OrdersTab({
             <p className="text-zinc-500 text-center py-10">
               暂无订单 (No orders)
             </p>
-          ) : (
+          ) : style === "card" ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {visibleOrders.map((order) => {
-                const id = orderKey(order);
-                const items = order?.items || [];
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setSelectedId(id)}
-                    className="text-left bg-zinc-900 border border-zinc-800 hover:border-orange-500/60 rounded-2xl p-4 transition-all active:scale-[0.98] flex flex-col gap-2 min-h-[120px]"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-2xl font-black text-white leading-none truncate">
-                        {parseTableName(order)}
-                      </span>
-                      <StatusBadge status={order?.status} />
-                    </div>
-                    <div className="flex items-center gap-1 text-[11px] text-zinc-500">
-                      <Clock size={12} /> {formatTime(order?.timestamp)}
-                    </div>
-                    <div className="mt-auto flex items-end justify-between">
-                      <span className="text-[11px] text-zinc-400">
-                        {items.length} 项
-                      </span>
-                      <span className="text-lg font-bold text-orange-400">
-                        {order?.total || 0}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+              {visibleOrders.map((order, idx) =>
+                renderCard(order, idx === 0 && orderView === "active"),
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {visibleOrders.map((order, idx) => (
+                <div key={orderKey(order)}>
+                  {renderOldCard(order, idx === 0 && orderView === "active")}
+                </div>
+              ))}
             </div>
           )}
         </>
@@ -414,7 +605,7 @@ export function OrdersTab({
         </>
       )}
 
-      {/* 订单详情弹窗：点击卡片后打印/加菜/结账等 */}
+      {/* 订单详情弹窗 */}
       {selected && (
         <div
           className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"
@@ -449,113 +640,7 @@ export function OrdersTab({
               <div className="flex flex-wrap gap-2 mb-4">
                 {renderActions(selected)}
               </div>
-
-              {selected?.status !== "completed" && (
-                <ul className="space-y-2">
-                  {(selected?.items || []).map((item: any, i: number) =>
-                    item ? (
-                      <li
-                        key={i}
-                        className={`flex justify-between items-center text-sm p-2.5 rounded-lg ${item.served ? "bg-green-500/10 text-green-500/70 line-through" : item.isAdded ? "bg-orange-500/10 border border-orange-500/20" : "bg-zinc-950"}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={async () => {
-                              const newItems = [...selected.items];
-                              newItems[i] = {
-                                ...item,
-                                served: !item.served,
-                              };
-                              try {
-                                await api.updateOrder(selected._id, {
-                                  items: newItems,
-                                });
-                              } catch (e) {
-                                console.error(e);
-                              }
-                            }}
-                            className={`p-1 rounded-full border ${item.served ? "bg-green-500 text-white border-green-500" : "border-zinc-500 text-transparent hover:border-zinc-300"}`}
-                          >
-                            <CheckCircle size={14} />
-                          </button>
-                          <span
-                            className={
-                              item.served
-                                ? "text-green-500/70"
-                                : item.isAdded
-                                  ? "text-orange-400 font-medium"
-                                  : "text-zinc-300"
-                            }
-                          >
-                            {item?.name || ""}
-                            {item?.isAdded ? (
-                              <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded-sm">
-                                加菜
-                              </span>
-                            ) : null}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {(!selected?.status ||
-                            selected?.status === "pending") && (
-                            <button
-                              onClick={async () => {
-                                if (
-                                  confirm(
-                                    `确定要退掉一个 ${item?.name || ""} 吗？`,
-                                  )
-                                ) {
-                                  const newItems = [...selected.items];
-                                  let newTotal =
-                                    (selected.total || 0) -
-                                    (newItems[i]?.price || 0);
-                                  if (newTotal < 0) newTotal = 0;
-                                  if (newItems[i].quantity > 1) {
-                                    newItems[i] = {
-                                      ...newItems[i],
-                                      quantity: newItems[i].quantity - 1,
-                                    };
-                                  } else {
-                                    newItems.splice(i, 1);
-                                  }
-                                  try {
-                                    await api.updateOrder(selected._id, {
-                                      items: newItems,
-                                      total: newTotal,
-                                    });
-                                  } catch {
-                                    alert("退菜失败");
-                                  }
-                                }
-                              }}
-                              className="text-xs text-red-500 hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors whitespace-nowrap"
-                            >
-                              退菜
-                            </button>
-                          )}
-                          <span
-                            className={
-                              item.served
-                                ? "text-green-500/70"
-                                : "text-zinc-500"
-                            }
-                          >
-                            x{item?.quantity || 1}
-                          </span>
-                          <span
-                            className={`${item.served ? "text-green-500/70" : "text-zinc-400"} w-14 text-right`}
-                          >
-                            {(
-                              (item?.price || 0) * (item?.quantity || 1)
-                            ).toFixed(2)}
-                          </span>
-                        </div>
-                      </li>
-                    ) : null,
-                  )}
-                </ul>
-              )}
-
+              {selected?.status !== "completed" && renderItems(selected)}
               <div className="flex justify-between items-center mt-5 pt-4 border-t border-zinc-800">
                 <span className="text-zinc-400 text-sm">合计</span>
                 <span className="text-2xl font-black text-orange-400">
