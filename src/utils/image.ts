@@ -276,3 +276,11 @@ export const drawBeautifulTableCard = (
 export function getOptimizedImageUrl(url: string, _width = 500): string {
   return url;
 }
+
+/**
+ * 判断一个值是否是"像样的图片地址"，避免把文字/拼音/空值当成 URL 去加载（否则产生大量 404）。
+ */
+export function isValidImageSrc(v: unknown): boolean {
+  if (!v || typeof v !== "string") return false;
+  return /^(https?:\/\/|data:image\/|blob:|\/|\.\/)/.test(v.trim());
+}

@@ -212,3 +212,189 @@ npm run preview
 2. **库存表权限**：anon 直连（上线快、安全妥协）还是 service_role 边缘函数（更安全、工作量大）？
 3. **KPI 聚合**：是否接受新增 SQL RPC（阶段 B），还是先只做阶段 A？
 4. **是否新增 owner 独立 CI**（当前 `.github/workflows/ci.yml` 不覆盖 owner）。
+
+---
+
+## 10. 采购 / 库存 / 成本 / 消耗 模块（重点新增）
+
+> 需求：① 采购管理；② 订单结账后自动扣库存；③ 每种食材/耗材的消耗；④ 成本与利润；⑤ 后厨用料情况。
+
+### 10.1 关键架构决策：扣减放哪里？
+
+结账动作发生在**顾客端**（`src/components/AdminPanel.tsx:1746` → `api.updateOrder(id,{status:"completed"})`），老板端可能并未打开。因此：
+
+| 方案                              | 是否可行 | 说明                                                                                               |
+| --------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| A. 数据库触发器（**推荐**）       | ✅       | `orders.status→completed` 时由 Postgres 执行 BOM 扣减，与任何客户端无关，天然覆盖顾客端/老板端结账 |
+| B. 老板端前端监听 realtime 后扣减 | ❌       | 老板端没打开就不扣；重复扣；有竞态                                                                 |
+| C. 改顾客端结账逻辑               | ❌       | 违反「不改顾客端」原则                                                                             |
+
+**采用方案 A**：新增 `SECURITY DEFINER` 触发器函数，绕过 RLS 直接操作库存；同时对同一订单 `reference` 做幂等保护。
+
+### 10.2 数据模型（复用现有表，最小新增）
+
+| 表                              | 用途                                                                     | 现状                |
+| ------------------------------- | ------------------------------------------------------------------------ | ------------------- |
+| `inventory_items`               | 原料/耗材档案：名称、分类、现存量、单位、安全库存、单价(成本)            | 已存在，RLS 锁 anon |
+| `recipe_boms`                   | 菜品↔原料配方：`menu_item_name` + `inventory_item_id` + `dosage`         | 已存在，RLS 锁 anon |
+| `purchase_orders`               | 采购单：供应商、数量、单价、总成本、时间                                 | 已存在，RLS 锁 anon |
+| `inventory_transactions`        | 库存流水：`purchase_in`/`order_out`/`adjustment`/`waste`，含 `unit_cost` | 已存在，RLS 锁 anon |
+| `settings.categories[].items[]` | 菜品售价（`price` 字符串需解析）、售罄/库存                              | 已存在，anon 可读写 |
+
+新增（可选，按需）：
+
+```sql
+-- 后厨档口维度（用于「后厨用料」按档口统计），可空
+ALTER TABLE public.recipe_boms ADD COLUMN IF NOT EXISTS station VARCHAR(50) DEFAULT '';
+-- 库存索引
+CREATE INDEX IF NOT EXISTS idx_inv_txn_created ON public.inventory_transactions (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inv_txn_item ON public.inventory_transactions (item_id, type);
+CREATE INDEX IF NOT EXISTS idx_inv_txn_ref ON public.inventory_transactions (reference);
+CREATE INDEX IF NOT EXISTS idx_bom_name ON public.recipe_boms (menu_item_name);
+```
+
+**符号约定**：`inventory_transactions.quantity` 有符号 —— 入库为正（`purchase_in`），出库为负（`order_out`）；`stock` 变更一律 `stock = stock + delta`。
+
+### 10.3 结账自动扣减（核心 SQL）
+
+```sql
+CREATE OR REPLACE FUNCTION public.apply_order_bom()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE it jsonb; v_name text; v_qty numeric; b record; v_deduct numeric;
+BEGIN
+  -- 首次进入 completed：按配方出库
+  IF NEW.status = 'completed' AND COALESCE(OLD.status,'') <> 'completed' THEN
+    IF EXISTS (SELECT 1 FROM inventory_transactions
+               WHERE reference = NEW.id AND type = 'order_out') THEN
+      RETURN NEW;                          -- 幂等
+    END IF;
+    FOR it IN SELECT * FROM jsonb_array_elements(COALESCE(NEW.items,'[]'::jsonb)) LOOP
+      v_name := it->>'name';
+      v_qty  := COALESCE((it->>'quantity')::numeric, 0);
+      CONTINUE WHEN v_name IS NULL OR v_qty = 0;
+      FOR b IN
+        SELECT rb.inventory_item_id AS id, rb.dosage, rb.unit, ii.name AS inv_name, ii.price
+        FROM recipe_boms rb JOIN inventory_items ii ON ii.id = rb.inventory_item_id
+        WHERE rb.menu_item_name = v_name
+      LOOP
+        v_deduct := COALESCE(b.dosage,0) * v_qty;
+        UPDATE inventory_items SET stock = stock - v_deduct, updated_at = now() WHERE id = b.id;
+        INSERT INTO inventory_transactions
+          (id,item_id,item_name,type,quantity,unit,unit_cost,reference,notes,created_at)
+        VALUES ('TXN-'||NEW.id||'-'||b.id, b.id, b.inv_name, 'order_out',
+                -v_deduct, b.unit, b.price, NEW.id, v_name, now());
+      END LOOP;
+    END LOOP;
+  END IF;
+
+  -- 已结账后被取消：回补（写入反向流水 + 加回库存）
+  IF NEW.status = 'cancelled' AND OLD.status = 'completed' THEN
+    INSERT INTO inventory_transactions
+      (id,item_id,item_name,type,quantity,unit,unit_cost,reference,notes,created_at)
+    SELECT 'REV-'||NEW.id||'-'||t.item_id, t.item_id, t.item_name, 'adjustment',
+           -t.quantity, t.unit, t.unit_cost, NEW.id, '结账后取消回补', now()
+    FROM inventory_transactions t WHERE t.reference = NEW.id AND t.type = 'order_out';
+    UPDATE inventory_items ii SET stock = ii.stock - x.qty, updated_at = now()
+    FROM (SELECT item_id, SUM(quantity) qty FROM inventory_transactions
+          WHERE reference = NEW.id AND type='order_out' GROUP BY item_id) x
+    WHERE ii.id = x.item_id;
+  END IF;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_order_bom ON public.orders;
+CREATE TRIGGER trg_order_bom AFTER UPDATE OF status ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.apply_order_bom();
+```
+
+要点：
+
+- 以 `reference = order.id` 幂等，重复结账不会重复扣。
+- `unit_cost` 快照当时 `inventory_items.price`，保证历史成本准确。
+- 未配置配方的菜品：不扣、记 `unknown` 待补（另可在 `Consumption` 页提示「未配配方菜品」）。
+
+### 10.4 RLS 放开（老板端 anon 访问）
+
+新增 `supabase_owner_inventory_rls.sql`（与 `settings`/`orders` 既有妥协口径一致）：
+
+```sql
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['inventory_items','recipe_boms','purchase_orders','inventory_transactions'] LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "anon_all_%1$s" ON public.%1$s', t);
+    EXECUTE format('CREATE POLICY "anon_all_%1$s" ON public.%1$s FOR ALL USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
+```
+
+> 更安全的替代：老板端写操作走 `service_role` 边缘函数（工作量大）。触发器本身 `SECURITY DEFINER`，不受此策略影响。
+
+### 10.5 成本与利润模型
+
+- **菜品成本** `dishCost(name) = Σ (recipe_boms.dosage × inventory_items.price)`。
+- **订单 COGS**（历史口径）：`Σ inventory_transactions WHERE type='order_out' AND reference=orderId (quantity × unit_cost)`，或实时口径 `Σ 菜品成本 × 数量`。
+- **营收**：优先 `orders.finalTotal`（结账写入），回退 `total`。
+- **毛利** = 营收 − COGS；**毛利率** = 毛利 / 营收。
+- 现有「菜单工程矩阵」由「销量×营收」升级为「销量×毛利」，四象限变成真实盈利分析（明星/金牛/问题/瘦狗更准）。
+
+报表：
+
+- 成本毛利总览：营收 / COGS / 毛利 / 毛利率 + 日趋势 + 环比。
+- 按菜品毛利排行；按分类毛利；低毛利预警。
+- 采购支出趋势（`purchase_orders`）与实际销售成本对比。
+
+### 10.6 采购管理
+
+流程：建采购单 → 入库。
+
+- 选择供应商、原料、数量、单价 → 写入 `purchase_orders`（`total_cost = quantity × unit_price`）。
+- 同步 `inventory_items.stock += quantity`、写入 `inventory_transactions(type='purchase_in', unit_cost=unit_price)`。
+- 页面：采购记录列表/筛选/导出、供应商汇总、月度采购支出、单品价格趋势、一键「补货建议」（低于 `safety_stock`）。
+
+### 10.7 消耗 / 后厨用料
+
+- 按原料：区间内 `order_out` 汇总数量/金额，含「其他东西」（`inventory_items.category != 食材` 的耗材）。
+- 按时间：日消耗趋势。
+- 按菜品：各菜品消耗的原料明细（`reference`/`notes` 关联）。
+- 损耗：`waste` 类型单独统计。
+- 后厨档口：若启用 `recipe_boms.station`，按档口/灶台汇总用料。
+- 库存预警：`stock <= safety_stock` 列表 + 库存金额（`stock × price`）。
+
+### 10.8 老板端新增页面与数据层
+
+```
+owner/src/views/Procurement.tsx    # 采购管理
+owner/src/views/Inventory.tsx      # 库存总览 / 盘点调整
+owner/src/views/Recipe.tsx         # 配方 BOM 与菜品成本
+owner/src/views/CostReport.tsx     # 成本与毛利
+owner/src/views/Consumption.tsx    # 食材/耗材消耗 · 后厨用料
+owner/src/lib/inventory.ts         # 库存 CRUD + 流水
+owner/src/lib/procurement.ts       # 采购单
+owner/src/lib/bom.ts               # 配方
+owner/src/lib/cost.ts              # 成本/毛利计算
+```
+
+`Layout.tsx` 导航新增：`采购`、`库存`、`配方`、`成本`、`消耗`（可归入「经营」分组）。
+
+### 10.9 里程碑
+
+| #   | 任务                                               | 依赖  | 验收                                                             |
+| --- | -------------------------------------------------- | ----- | ---------------------------------------------------------------- |
+| C0  | `supabase_inventory_bom.sql`：索引 + 触发器 + 回补 | —     | 顾客端结账后 `inventory_transactions` 出现 `order_out`，库存减少 |
+| C1  | RLS 放开脚本                                       | C0    | 老板端 anon 能读写四表                                           |
+| C2  | 采购管理页                                         | C1    | 建采购单 → 库存增加 + `purchase_in` 流水                         |
+| C3  | 库存 + 配方页                                      | C1    | 维护原料/配方/安全库存                                           |
+| C4  | 成本毛利页                                         | C1/C3 | 营收−COGS=毛利，口径可追溯                                       |
+| C5  | 消耗/后厨用料页                                    | C0    | 按原料/菜品/时间/耗材统计消耗                                    |
+| C6  | 菜单工程并入成本                                   | C4    | 四象限按毛利重算                                                 |
+
+### 10.10 本模块决策（已于评审确认）
+
+> ✅ 触发器扣减 · 单价快照 · anon 直连 · 菜品名匹配。以下为已确认口径，作为实现依据：
+
+1. **自动扣减口径**：确认「结账(completed)才扣」；是否也要在 `served` 时预扣？（默认只在结账扣）
+2. **成本价来源**：`inventory_items.price` 直接作为单价，还是按采购单做**移动加权平均**？（默认先用单价快照）
+3. **配方匹配键**：用菜品名（`menu_item_name`）匹配 `order.items[].name`；是否需同时支持按 `menu_item_id`（更稳，但要顾客端写入 id）？（默认按名）
+4. **「其他东西」**：用 `inventory_items.category` 区分「食材 / 耗材 / 包装」即可吗？
+5. **后厨档口**：是否需要 `recipe_boms.station` 档口维度，还是只按原料/菜品统计？
+6. **未配配方菜品**：是否允许其成本记为 0 并在报表标红提示？
+7. **库存表 RLS**：anon 直连（快）还是 service_role 边缘函数（安全）？

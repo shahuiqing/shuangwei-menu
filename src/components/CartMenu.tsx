@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { getLoc, Language } from "../utils/loc";
+import { isValidImageSrc } from "../utils/image";
 import { api } from "../api";
 import type { MenuCategory, ReceiptSettings } from "../types/menu";
 
@@ -408,11 +409,17 @@ export default function CartMenu({
 
                   return (
                     <div key={id} className="flex gap-4 items-center">
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className="w-16 h-16 rounded-xl object-cover bg-zinc-900"
-                      />
+                      {isValidImageSrc(item.image) ? (
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="w-16 h-16 rounded-xl object-cover bg-zinc-900"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-xl bg-zinc-900 flex items-center justify-center text-zinc-700">
+                          <ChefHat size={20} />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-bold text-zinc-100 truncate">
                           {getLoc(item, language, "title")}

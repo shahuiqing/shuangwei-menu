@@ -29,7 +29,7 @@ import {
   Download,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
-import { getOptimizedImageUrl } from "./utils/image";
+import { getOptimizedImageUrl, isValidImageSrc } from "./utils/image";
 import { checkpointService } from "./services/checkpoint";
 import { isAdminAuthed as readAdminAuthed } from "./utils/adminAuth";
 import { lazy, Suspense } from "react";
@@ -70,6 +70,11 @@ const ImageWithSkeleton = ({
   useEffect(() => {
     if (!src) return;
     if (loadedSrc === src || errorSrc === src) return;
+    // 非法地址（文字/拼音/空值）直接判为失败，不发起加载，避免大量 404
+    if (!isValidImageSrc(src)) {
+      setErrorSrc(src);
+      return;
+    }
 
     let isMounted = true;
     let attempts = 0;
