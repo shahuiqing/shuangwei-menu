@@ -15,6 +15,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { ChartCard, KpiCard, EmptyState, Skeleton } from "../components/ui";
+import { Segmented } from "../components/Segmented";
 import { fmtMoney, fmtDateTime, STATUS_TEXT } from "../lib/format";
 import {
   buildDishCategoryMap,
@@ -165,24 +166,18 @@ export default function Dashboard({
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="flex items-center gap-3">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 shrink-0">
-          {(
+        <Segmented
+          value={range}
+          onChange={setRange}
+          options={
             [
               ["today", "今天"],
               ["7d", "近7天"],
               ["30d", "近30天"],
               ["all", "全部"],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setRange(id)}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          }
+        />
         <span className="hidden sm:inline text-[11px] text-zinc-500">
           服务端聚合 · 环比上一周期
         </span>

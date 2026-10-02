@@ -11,6 +11,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { ChartCard, EmptyState, Skeleton } from "../components/ui";
+import { Segmented } from "../components/Segmented";
 import { fmtMoney } from "../lib/format";
 import { QUAD_LABEL, type MatrixQuad, type RangeKey } from "../lib/analytics";
 import { rangeToIso, dishStats, type DishStat } from "../lib/aggregate";
@@ -85,39 +86,27 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
-          {(
+        <Segmented
+          value={range}
+          onChange={setRange}
+          options={
             [
               ["7d", "近7天"],
               ["30d", "近30天"],
               ["all", "全部"],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setRange(id)}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
-          {(
+          }
+        />
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={
             [
               ["profit", "按毛利"],
               ["revenue", "按营收"],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${mode === id ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          }
+        />
       </div>
 
       {mode === "profit" && noRecipe > 0 && (

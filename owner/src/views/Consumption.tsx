@@ -10,6 +10,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
 import { num } from "../lib/inventory";
@@ -109,28 +110,18 @@ export default function Consumption({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
-          {(
+        <Segmented
+          value={range}
+          onChange={setRange}
+          options={
             [
               ["today", "今天"],
               ["7d", "近7天"],
               ["30d", "近30天"],
               ["all", "全部"],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setRange(id)}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                range === id
-                  ? "bg-orange-600 text-white"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          }
+        />
         <button
           onClick={exportCsv}
           className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"

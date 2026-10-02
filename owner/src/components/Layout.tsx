@@ -16,8 +16,9 @@ import {
   NotebookText,
   BadgeDollarSign,
   Flame,
-  MoreHorizontal,
+  Plus,
   X,
+  ChevronRight,
 } from "lucide-react";
 
 export type OwnerTab =
@@ -49,13 +50,50 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "settings", label: "系统设置", icon: SettingsIcon },
 ];
 
-// 移动端底部主导航（第一屏即可触达高频功能）
+// 移动端底部主导航（4 个高频目的地，中间凸起按钮打开「更多」）
 const MOBILE_PRIMARY: OwnerTab[] = [
   "dashboard",
   "orders",
   "cost",
   "consumption",
 ];
+
+function TabItem({
+  id,
+  tab,
+  go,
+}: {
+  id: OwnerTab;
+  tab: OwnerTab;
+  go: (t: OwnerTab) => void;
+}) {
+  const item = NAV.find((n) => n.id === id)!;
+  const Icon = item.icon;
+  const on = tab === id;
+  return (
+    <button
+      onClick={() => go(id)}
+      className="relative flex-1 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"
+    >
+      <span
+        className={`flex items-center justify-center w-12 h-8 rounded-full transition-all ${
+          on ? "bg-orange-500/15 ring-1 ring-orange-500/25" : ""
+        }`}
+      >
+        <Icon
+          size={21}
+          strokeWidth={on ? 2.4 : 2}
+          className={on ? "text-orange-400" : "text-zinc-500"}
+        />
+      </span>
+      <span
+        className={`text-[10px] leading-none ${on ? "text-orange-400 font-semibold" : "text-zinc-500 font-medium"}`}
+      >
+        {item.label}
+      </span>
+    </button>
+  );
+}
 
 // 移动端「更多」里的分组
 const MOBILE_GROUPS: { title: string; items: OwnerTab[] }[] = [
@@ -148,26 +186,28 @@ export function Layout({
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* 顶栏：移动端毛玻璃 + 安全区；桌面端标题 */}
-        <header className="sticky top-0 z-30 border-b border-white/5 glass-bar">
-          <div className="safe-top px-3.5 lg:px-6 flex items-center justify-between gap-3">
-            <div className="lg:hidden flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/30">
+        {/* 顶部栏：移动端 App 风格（头像+店名+状态+刷新）；桌面端标题 */}
+        <header className="sticky top-0 z-30 glass-bar">
+          <div className="safe-top px-4 lg:px-6 flex items-center justify-between gap-3">
+            <div className="lg:hidden flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40 ring-1 ring-white/10">
                 双
               </div>
               <div className="min-w-0">
-                <div className="text-white font-bold leading-tight truncate text-[15px]">
-                  {active?.label}
+                <div className="text-white font-semibold leading-tight truncate text-[15px]">
+                  {storeName}
                 </div>
-                <div className="flex items-center gap-1 text-[10px] text-zinc-500 leading-tight">
+                <div className="flex items-center gap-1.5 text-[11px] leading-tight mt-0.5">
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${live ? "bg-green-500 animate-pulse" : configured ? "bg-zinc-500" : "bg-red-500"}`}
+                    className={`w-1.5 h-1.5 rounded-full ${live ? "bg-emerald-400 animate-pulse" : configured ? "bg-zinc-500" : "bg-rose-500"}`}
                   />
-                  {live
-                    ? "实时同步中"
-                    : lastUpdated
-                      ? `更新于 ${lastUpdated}`
-                      : "同步中…"}
+                  <span className={live ? "text-emerald-400" : "text-zinc-500"}>
+                    {live
+                      ? "实时同步中"
+                      : lastUpdated
+                        ? `更新于 ${lastUpdated}`
+                        : "同步中…"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -180,7 +220,7 @@ export function Layout({
               <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-500">
                 <Wifi
                   size={13}
-                  className={live ? "text-green-500" : "text-zinc-500"}
+                  className={live ? "text-emerald-400" : "text-zinc-500"}
                 />
                 {live
                   ? "实时同步中"
@@ -191,10 +231,10 @@ export function Layout({
               <button
                 onClick={onRefresh}
                 title="刷新"
-                className="active:scale-90 transition-transform p-2.5 text-zinc-300 hover:text-white hover:bg-white/5 rounded-full"
+                className="active:scale-90 transition-transform w-10 h-10 flex items-center justify-center text-zinc-300 hover:text-white bg-white/5 rounded-full ring-1 ring-white/10"
               >
                 <RefreshCw
-                  size={18}
+                  size={17}
                   className={loading ? "animate-spin" : ""}
                 />
               </button>
@@ -202,65 +242,42 @@ export function Layout({
           </div>
         </header>
 
-        {/* 内容区：移动端留出底部导航高度 + 安全区 */}
-        <main className="flex-1 px-3.5 lg:px-6 py-4 lg:py-6 max-w-[1400px] w-full mx-auto mobile-safe-bottom lg:pb-6">
+        {/* 内容区：移动端独立滚动 + 底部导航留白；桌面居中 */}
+        <main className="flex-1 px-4 lg:px-6 py-3 lg:py-6 max-w-[1400px] w-full mx-auto mobile-safe-bottom lg:pb-6">
+          {/* 移动端大标题（App 风格） */}
+          <div className="lg:hidden pb-3">
+            <h1 className="text-[26px] font-black tracking-tight text-white leading-tight">
+              {active?.label}
+            </h1>
+          </div>
           {children}
         </main>
       </div>
 
-      {/* 移动端底部导航（现代毛玻璃 + 活跃胶囊指示） */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/5 glass-bar safe-bottom">
-        <div className="flex items-stretch px-1.5 pt-1.5">
-          {MOBILE_PRIMARY.map((id) => {
-            const item = NAV.find((n) => n.id === id)!;
-            const Icon = item.icon;
-            const on = tab === id;
-            return (
-              <button
-                key={id}
-                onClick={() => go(id)}
-                className="relative flex-1 flex flex-col items-center gap-0.5 py-1.5 active:scale-95 transition-transform"
-              >
-                <span
-                  className={`flex items-center justify-center w-11 h-7 rounded-full transition-colors ${on ? "bg-orange-600/20" : ""}`}
-                >
-                  <Icon
-                    size={20}
-                    className={on ? "text-orange-400" : "text-zinc-500"}
-                  />
-                </span>
-                <span
-                  className={`text-[10px] font-medium ${on ? "text-orange-400" : "text-zinc-500"}`}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-          <button
-            onClick={() => setMoreOpen(true)}
-            className="relative flex-1 flex flex-col items-center gap-0.5 py-1.5 active:scale-95 transition-transform"
-          >
-            <span
-              className={`flex items-center justify-center w-11 h-7 rounded-full transition-colors ${
-                NAV.some((n) => n.id === tab && !MOBILE_PRIMARY.includes(n.id))
-                  ? "bg-orange-600/20"
-                  : ""
-              }`}
+      {/* 移动端底部 Tab 栏（5 个目的地 + 中间凸起「更多」） */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 glass-bar border-t border-white/[0.06] safe-bottom">
+        <div className="flex items-stretch h-[58px]">
+          {MOBILE_PRIMARY.slice(0, 2).map((id) => (
+            <TabItem key={id} id={id} tab={tab} go={go} />
+          ))}
+
+          {/* 中间凸起按钮：打开全部功能 */}
+          <div className="relative flex-1 flex items-end justify-center">
+            <button
+              onClick={() => setMoreOpen(true)}
+              aria-label="全部功能"
+              className="absolute -top-6 w-14 h-14 rounded-full btn-brand text-white flex items-center justify-center ring-4 ring-zinc-950 active:scale-95 transition-transform"
             >
-              <MoreHorizontal
-                size={20}
-                className={
-                  NAV.some(
-                    (n) => n.id === tab && !MOBILE_PRIMARY.includes(n.id),
-                  )
-                    ? "text-orange-400"
-                    : "text-zinc-500"
-                }
-              />
+              <Plus size={26} strokeWidth={2.4} />
+            </button>
+            <span className="pb-1.5 text-[10px] font-medium text-zinc-500">
+              更多
             </span>
-            <span className="text-[10px] font-medium text-zinc-500">更多</span>
-          </button>
+          </div>
+
+          {MOBILE_PRIMARY.slice(2).map((id) => (
+            <TabItem key={id} id={id} tab={tab} go={go} />
+          ))}
         </div>
       </nav>
 
@@ -288,10 +305,10 @@ export function Layout({
             <div className="space-y-5">
               {MOBILE_GROUPS.map((g) => (
                 <div key={g.title}>
-                  <div className="text-[11px] text-zinc-500 font-semibold mb-2 px-0.5">
+                  <div className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2 px-1">
                     {g.title}
                   </div>
-                  <div className="grid grid-cols-3 gap-2.5">
+                  <div className="rounded-2xl bg-zinc-950/60 border border-white/5 overflow-hidden divide-y divide-white/5">
                     {g.items.map((id) => {
                       const item = NAV.find((n) => n.id === id)!;
                       const Icon = item.icon;
@@ -300,16 +317,26 @@ export function Layout({
                         <button
                           key={id}
                           onClick={() => go(id)}
-                          className={`flex flex-col items-center gap-2 py-4 rounded-2xl border active:scale-95 transition-transform ${
-                            on
-                              ? "bg-orange-600/15 text-orange-400 border-orange-600/40"
-                              : "bg-zinc-950/60 text-zinc-300 border-white/5"
+                          className={`w-full flex items-center gap-3.5 px-4 py-3.5 active:bg-white/5 transition-colors ${
+                            on ? "text-orange-400" : "text-zinc-200"
                           }`}
                         >
-                          <Icon size={22} />
-                          <span className="text-xs font-medium">
+                          <span
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              on
+                                ? "bg-orange-500/15 text-orange-400"
+                                : "bg-white/5 text-zinc-400"
+                            }`}
+                          >
+                            <Icon size={18} />
+                          </span>
+                          <span className="text-[15px] font-medium flex-1 text-left">
                             {item.label}
                           </span>
+                          <ChevronRight
+                            size={18}
+                            className={on ? "text-orange-400" : "text-zinc-600"}
+                          />
                         </button>
                       );
                     })}

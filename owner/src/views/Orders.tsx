@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmptyState, Skeleton } from "../components/ui";
+import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
 import {
@@ -235,27 +236,22 @@ export default function Orders({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-3.5 sm:space-y-4">
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full">
-          {(
+        <Segmented
+          value={range}
+          onChange={(v) => {
+            setRange(v);
+            resetPage();
+          }}
+          size="sm"
+          options={
             [
               ["today", "今天"],
               ["7d", "近7天"],
               ["30d", "近30天"],
               ["all", "全部"],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => {
-                setRange(id);
-                resetPage();
-              }}
-              className={`shrink-0 px-3 py-1.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          }
+        />
 
         <select
           value={status}

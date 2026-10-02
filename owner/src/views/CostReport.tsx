@@ -18,6 +18,7 @@ import {
   Legend,
 } from "recharts";
 import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { Segmented } from "../components/Segmented";
 import { fmtMoney } from "../lib/format";
 import { fetchBoms, fetchInventory, num } from "../lib/inventory";
 import { dishMargins, sumCost, type DishMargin } from "../lib/cost";
@@ -89,28 +90,18 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
-          {(
+        <Segmented
+          value={range}
+          onChange={setRange}
+          options={
             [
               ["today", "今天"],
               ["7d", "近7天"],
               ["30d", "近30天"],
               ["all", "全部"],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setRange(id)}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                range === id
-                  ? "bg-orange-600 text-white"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          }
+        />
         <span className="text-[11px] text-zinc-500 flex items-center gap-1">
           <RefreshCw size={12} /> 成本由配方 × 原料单价在服务端聚合
         </span>
