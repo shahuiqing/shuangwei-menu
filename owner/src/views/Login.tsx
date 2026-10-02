@@ -78,7 +78,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
             <button
               type="submit"
               disabled={busy}
-              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl px-4 py-3 transition-colors disabled:opacity-50"
+              className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3 transition-colors disabled:opacity-50"
             >
               {busy ? "验证中…" : "登 录"}
             </button>
@@ -119,7 +119,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
             <button
               type="submit"
               disabled={busy}
-              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl px-4 py-3 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <ShieldCheck size={18} /> {busy ? "验证中…" : "确认修改并登录"}
             </button>

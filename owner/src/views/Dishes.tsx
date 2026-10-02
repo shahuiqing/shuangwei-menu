@@ -323,7 +323,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
             <button
               disabled={busy}
               onClick={submitCat}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
               <Save size={16} /> 保存
             </button>
@@ -415,7 +415,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
             <button
               disabled={busy}
               onClick={submitDish}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
               <Save size={16} /> 保存
             </button>

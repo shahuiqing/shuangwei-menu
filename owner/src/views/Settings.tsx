@@ -108,7 +108,7 @@ export default function Settings({
         <button
           onClick={saveStore}
           disabled={savingStore}
-          className="mt-3 w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+          className="mt-3 w-full py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
         >
           {savingStore ? "保存中…" : "保存店铺名称"}
         </button>

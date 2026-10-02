@@ -97,9 +97,9 @@ export function Layout({
   return (
     <div className="min-h-full flex bg-zinc-950">
       {/* 桌面侧边栏 */}
-      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-white/5 bg-zinc-950 sticky top-0 h-screen">
+      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-white/5 bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen">
         <div className="h-16 flex items-center gap-3 px-5 border-b border-white/5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white font-black shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40">
             双
           </div>
           <div className="min-w-0">
@@ -116,12 +116,15 @@ export function Layout({
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 tab === id
-                  ? "bg-orange-600/15 text-orange-400 border border-orange-600/30"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+                  ? "bg-gradient-to-r from-orange-500/20 to-orange-600/5 text-orange-300 ring-1 ring-orange-500/25 shadow-[0_6px_18px_-10px_rgba(234,88,12,0.8)]"
+                  : "text-zinc-400 hover:text-white hover:bg-white/5"
               }`}
             >
+              {tab === id && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-orange-400" />
+              )}
               <Icon size={18} />
               {label}
             </button>
@@ -146,7 +149,7 @@ export function Layout({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* 顶栏：移动端毛玻璃 + 安全区；桌面端标题 */}
-        <header className="sticky top-0 z-30 border-b border-white/5 bg-zinc-950/70 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b border-white/5 glass-bar">
           <div className="safe-top px-3.5 lg:px-6 flex items-center justify-between gap-3">
             <div className="lg:hidden flex items-center gap-2.5 min-w-0">
               <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/30">
@@ -206,7 +209,7 @@ export function Layout({
       </div>
 
       {/* 移动端底部导航（现代毛玻璃 + 活跃胶囊指示） */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/5 bg-zinc-950/80 backdrop-blur-xl safe-bottom">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/5 glass-bar safe-bottom">
         <div className="flex items-stretch px-1.5 pt-1.5">
           {MOBILE_PRIMARY.map((id) => {
             const item = NAV.find((n) => n.id === id)!;

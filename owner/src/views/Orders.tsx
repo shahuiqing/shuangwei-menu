@@ -526,7 +526,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                           className={`py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 ${
                             s === "cancelled"
                               ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
-                              : "bg-orange-600 hover:bg-orange-500 text-white"
+                              : "btn-brand text-white"
                           }`}
                         >
                           {STATUS_TEXT[s] || s}
@@ -606,7 +606,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                     <button
                       disabled={busy}
                       onClick={saveEdit}
-                      className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold disabled:opacity-50"
+                      className="flex-1 py-2.5 rounded-xl btn-brand text-white text-sm font-semibold disabled:opacity-50"
                     >
                       保存修改
                     </button>

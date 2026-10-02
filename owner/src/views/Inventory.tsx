@@ -147,7 +147,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         </button>
         <button
           onClick={() => setEditing({ ...EMPTY })}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white bg-orange-600 hover:bg-orange-500 rounded-xl"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-white btn-brand rounded-xl"
         >
           <Plus size={16} /> 新增原料
         </button>
@@ -293,7 +293,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
             </div>
             <button
               onClick={submitEdit}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold active:scale-[0.98] transition-transform"
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold active:scale-[0.98] transition-transform"
             >
               <Save size={16} /> 保存
             </button>

@@ -3,6 +3,18 @@
 @theme {
   --font-sans:
     "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* 品牌橙 */
+  --color-brand-50: #fff7ed;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+
+  /* 语义色 */
+  --color-pos: #22c55e;
+  --color-neg: #f43f5e;
+  --color-info: #38bdf8;
+  --color-warn: #f59e0b;
 }
 
 html,
@@ -18,10 +30,23 @@ html {
 
 body {
   margin: 0;
-  background-color: #09090b;
   color: #fafafa;
   font-family: var(--font-sans);
   overscroll-behavior-y: none;
+  /* 深色底 + 顶部橙色氛围光 */
+  background-color: #08080b;
+  background-image:
+    radial-gradient(
+      1200px 600px at 100% -10%,
+      rgba(249, 115, 22, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at -10% 10%,
+      rgba(120, 53, 15, 0.12),
+      transparent 55%
+    );
+  background-attachment: fixed;
 }
 
 /* 移动端安全区（刘海屏 / 底部横条） */
@@ -45,7 +70,6 @@ body {
   padding-bottom: var(--sab);
 }
 
-/* 内容区为底部固定导航预留高度（含安全区） */
 .mobile-safe-bottom {
   padding-bottom: calc(5.25rem + var(--sab));
 }
@@ -68,7 +92,6 @@ body {
   background: transparent;
 }
 
-/* 触摸端隐藏滚动条，更清爽 */
 @media (hover: none) {
   ::-webkit-scrollbar {
     width: 0;
@@ -76,7 +99,7 @@ body {
   }
 }
 
-/* 抽屉动画 */
+/* 动画 */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -93,8 +116,72 @@ body {
     transform: translateY(0);
   }
 }
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-/* 数字等宽，KPI 对齐更稳 */
+/* 数字等宽 */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* 卡片：柔和描边 + 顶部高光 + 阴影 */
+.card-surface {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    rgba(39, 39, 42, 0.55),
+    rgba(24, 24, 27, 0.75)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1.25rem;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 30px -16px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+}
+.card-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08),
+    transparent 40%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glass-bar {
+  background: rgba(9, 9, 11, 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* 品牌按钮 */
+.btn-brand {
+  background: linear-gradient(135deg, #fb923c, #ea580c);
+  box-shadow:
+    0 6px 18px -6px rgba(234, 88, 12, 0.6),
+    0 1px 0 0 rgba(255, 255, 255, 0.18) inset;
+}
+.btn-brand:hover {
+  filter: brightness(1.06);
+}
+
+.animate-rise {
+  animation: riseIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

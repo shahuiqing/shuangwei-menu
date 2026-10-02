@@ -36,22 +36,24 @@ import {
 } from "../lib/aggregate";
 
 const PIE_COLORS = [
-  "#f97316",
-  "#3b82f6",
-  "#10b981",
-  "#a855f7",
-  "#ef4444",
-  "#eab308",
-  "#14b8a6",
-  "#ec4899",
+  "#fb923c",
+  "#38bdf8",
+  "#34d399",
+  "#a78bfa",
+  "#fb7185",
+  "#fbbf24",
+  "#2dd4bf",
+  "#f472b6",
 ];
 
 const tooltipStyle = {
-  background: "#18181b",
-  border: "1px solid #3f3f46",
-  borderRadius: 12,
+  background: "rgba(24,24,27,0.95)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 14,
   color: "#fafafa",
   fontSize: 12,
+  boxShadow: "0 12px 30px -12px rgba(0,0,0,0.8)",
+  backdropFilter: "blur(8px)",
 };
 
 const pct = (cur: number, prev: number) =>
@@ -227,16 +229,20 @@ export default function Dashboard({
               <AreaChart data={trendPoints}>
                 <defs>
                   <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f97316" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#fb923c" stopOpacity={0.55} />
+                    <stop offset="100%" stopColor="#fb923c" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.06)"
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: "#71717a", fontSize: 11 }}
                   tickLine={false}
-                  axisLine={{ stroke: "#27272a" }}
+                  axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
                   minTickGap={24}
                 />
                 <YAxis
@@ -247,14 +253,16 @@ export default function Dashboard({
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
+                  cursor={{ stroke: "rgba(251,146,60,0.35)" }}
                   formatter={(v: number) => [fmtMoney(v), "营收"]}
                 />
                 <Area
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#f97316"
-                  strokeWidth={2}
+                  stroke="#fb923c"
+                  strokeWidth={2.5}
                   fill="url(#rev)"
+                  activeDot={{ r: 4, strokeWidth: 0 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -312,14 +320,14 @@ export default function Dashboard({
               <BarChart data={hourPoints}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="#27272a"
+                  stroke="rgba(255,255,255,0.06)"
                   vertical={false}
                 />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: "#71717a", fontSize: 10 }}
                   tickLine={false}
-                  axisLine={{ stroke: "#27272a" }}
+                  axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
                   interval={2}
                 />
                 <YAxis
@@ -333,7 +341,12 @@ export default function Dashboard({
                   contentStyle={tooltipStyle}
                   formatter={(v: number) => [`${v} 单`, "订单"]}
                 />
-                <Bar dataKey="orders" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="orders"
+                  fill="#38bdf8"
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={26}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>

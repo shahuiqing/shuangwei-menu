@@ -196,7 +196,7 @@ export default function Recipe({
                     <div className="flex gap-2">
                       <button
                         onClick={() => submit(d.name)}
-                        className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold"
+                        className="flex-1 py-2 rounded-lg btn-brand text-white text-sm font-semibold"
                       >
                         保存
                       </button>

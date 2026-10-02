@@ -246,7 +246,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                   </span>
                   <button
                     onClick={() => preselect(i)}
-                    className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold"
+                    className="px-3 py-1.5 rounded-lg btn-brand text-white text-xs font-semibold"
                   >
                     补货
                   </button>
@@ -266,7 +266,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         </button>
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white bg-orange-600 hover:bg-orange-500 rounded-xl"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-white btn-brand rounded-xl"
         >
           <Plus size={16} /> 新建采购
         </button>
@@ -451,7 +451,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
 
         <button
           onClick={submit}
-          className="mt-4 w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold active:scale-[0.98] transition-transform"
+          className="mt-4 w-full py-3 rounded-xl btn-brand text-white font-semibold active:scale-[0.98] transition-transform"
         >
           保存并入库
         </button>
