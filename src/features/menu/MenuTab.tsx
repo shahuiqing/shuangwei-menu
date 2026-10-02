@@ -575,6 +575,7 @@ export function MenuTab(props: MenuTabProps) {
         {/* Add Dish Settings */}
         <form
           data-menu-form
+          noValidate
           onSubmit={handleAddDish}
           className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50"
         >
@@ -621,7 +622,6 @@ export function MenuTab(props: MenuTabProps) {
                 菜品名称 (中) *
               </label>
               <input
-                required
                 type="text"
                 value={newDish.title}
                 onChange={(e) =>
@@ -725,7 +725,6 @@ export function MenuTab(props: MenuTabProps) {
                 </label>
                 <div className="flex gap-2">
                   <input
-                    required
                     type="text"
                     placeholder="28"
                     value={newDish.price}
