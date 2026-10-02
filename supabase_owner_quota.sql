@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders (created_at);
 
 -- ─── 2. 汇总 KPI（营收 / 订单 / 份数 / 已结账）───
 CREATE OR REPLACE FUNCTION public.owner_sales_summary(p_start timestamptz, p_end timestamptz)
-RETURNS TABLE(revenue numeric, orders bigint, items bigint, completed bigint)
+RETURNS TABLE(revenue numeric, orders bigint, items numeric, completed bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT
     COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0))

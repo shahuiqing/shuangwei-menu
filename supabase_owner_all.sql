@@ -243,7 +243,7 @@ CREATE TRIGGER trg_order_bom
 -- 6. 老板端聚合 RPC（避免前端拉全量，省 egress）
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.owner_sales_summary(p_start timestamptz, p_end timestamptz)
-RETURNS TABLE(revenue numeric, orders bigint, items bigint, completed bigint)
+RETURNS TABLE(revenue numeric, orders bigint, items numeric, completed bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT
     COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0)) FILTER (WHERE status = 'completed'), 0)::numeric,
