@@ -75,6 +75,8 @@ import { DishSortingModal } from "./admin/DishSortingModal";
 import { PrintSetupCard } from "./admin/PrintSetupCard";
 import { ReceiptSetupCard } from "./admin/ReceiptSetupCard";
 import { DatabaseTab } from "./admin/DatabaseTab";
+import { DataSecurityTab } from "./admin/DataSecurityTab";
+import { QuickRepliesTab } from "./admin/QuickRepliesTab";
 import { AppearanceTab } from "./admin/AppearanceTab";
 import { ToolsTab } from "./admin/ToolsTab";
 import { ArchiveCleanupCard } from "./admin/ArchiveCleanupCard";
@@ -128,6 +130,8 @@ export default function AdminPanel({
     | "tools"
     | "security"
     | "database"
+    | "datasecurity"
+    | "quickreplies"
     | "orders"
     | "printer"
     | "qr"
@@ -1677,6 +1681,24 @@ export default function AdminPanel({
                     </p>
                   </form>
                 </>
+              )}
+              {activeTab === "quickreplies" && <QuickRepliesTab />}
+              {activeTab === "datasecurity" && (
+                <DataSecurityTab
+                  categories={categories}
+                  orders={orders}
+                  checkpoints={checkpoints}
+                  onSaveCheckpoint={handleSaveCheckpoint}
+                  onRestoreCheckpoint={handleRestoreCheckpoint}
+                  onRemoveCheckpoint={(id) => checkpointService.remove(id)}
+                  onExportJson={handleExportJson}
+                  onExportCsv={handleExportCsv}
+                  onImportJson={handleImportJson}
+                  base64Count={base64Count}
+                  dbTableStats={dbTableStats}
+                  onRunDiagnostics={runDiagnostics}
+                  isLoadingDiagnostics={isLoadingDiagnostics}
+                />
               )}
               {activeTab === "database" && (
                 <DatabaseTab

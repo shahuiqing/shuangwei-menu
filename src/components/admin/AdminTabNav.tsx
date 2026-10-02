@@ -7,7 +7,9 @@ import {
   Scan,
   Printer,
   Shield,
+  ShieldCheck,
   Database,
+  MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -18,6 +20,8 @@ export type AdminTab =
   | "tools"
   | "security"
   | "database"
+  | "datasecurity"
+  | "quickreplies"
   | "orders"
   | "printer"
   | "qr";
@@ -28,6 +32,7 @@ const TABS: {
   icon: LucideIcon;
 }[] = [
   { id: "orders", label: "订单记录", icon: ShoppingBag },
+  { id: "quickreplies", label: "快速回复", icon: MessageSquare },
   { id: "menu", label: "菜单管理", icon: LayoutList },
   { id: "promotions", label: "活动管理", icon: Flame },
   { id: "appearance", label: "外观设置", icon: Palette },
@@ -35,6 +40,7 @@ const TABS: {
   { id: "qr", label: "扫码点餐", icon: Scan },
   { id: "printer", label: "打印机设置", icon: Printer },
   { id: "security", label: "账户安全", icon: Shield },
+  { id: "datasecurity", label: "数据安全", icon: ShieldCheck },
   { id: "database", label: "数据与备份 (Database)", icon: Database },
 ];
 
