@@ -560,9 +560,21 @@ export function OrdersTab({
         </>
       ) : (
         <>
-          <p className="text-xs text-zinc-500 mb-4">
-            按订单桌号自动生成桌位。橙色=有单占用，灰色=空闲。
-          </p>
+          <div className="flex flex-wrap items-center gap-3 mb-4 text-[11px]">
+            <span className="text-zinc-500 mr-1">桌位颜色：</span>
+            <span className="flex items-center gap-1 text-orange-400">
+              <span className="w-3 h-3 rounded bg-orange-500/60" /> 待接单
+            </span>
+            <span className="flex items-center gap-1 text-blue-400">
+              <span className="w-3 h-3 rounded bg-blue-500/60" /> 制作中
+            </span>
+            <span className="flex items-center gap-1 text-teal-400">
+              <span className="w-3 h-3 rounded bg-teal-500/60" /> 已上菜
+            </span>
+            <span className="flex items-center gap-1 text-zinc-500">
+              <span className="w-3 h-3 rounded bg-zinc-700" /> 空闲
+            </span>
+          </div>
           {tableList.length === 0 ? (
             <p className="text-zinc-500 text-center py-10">
               暂无桌位 (No tables)
@@ -571,27 +583,55 @@ export function OrdersTab({
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
               {tableList.map((t) => {
                 const occupied = t.orders.length > 0;
+                let colorCls = "bg-zinc-900 border-zinc-800 text-zinc-500";
+                let iconCls = "text-zinc-600";
+                let statusLabel = "空闲";
+                if (occupied) {
+                  const hasPending = t.orders.some(
+                    (o: any) => !o.status || o.status === "pending",
+                  );
+                  const hasCooking = t.orders.some(
+                    (o: any) => o.status === "cooking",
+                  );
+                  const allServed = t.orders.every(
+                    (o: any) => o.status === "served",
+                  );
+                  if (hasPending) {
+                    colorCls =
+                      "bg-orange-600/25 border-orange-500 text-orange-200";
+                    iconCls = "text-orange-400";
+                    statusLabel = "待接单";
+                  } else if (hasCooking) {
+                    colorCls = "bg-blue-600/25 border-blue-500 text-blue-200";
+                    iconCls = "text-blue-400";
+                    statusLabel = "制作中";
+                  } else if (allServed) {
+                    colorCls = "bg-teal-600/25 border-teal-500 text-teal-200";
+                    iconCls = "text-teal-400";
+                    statusLabel = "已上菜";
+                  } else {
+                    colorCls =
+                      "bg-purple-600/25 border-purple-500 text-purple-200";
+                    iconCls = "text-purple-400";
+                    statusLabel = "占用";
+                  }
+                }
                 return (
                   <button
                     key={t.table}
                     onClick={() =>
                       occupied && setSelectedId(orderKey(t.orders[0]))
                     }
-                    className={`rounded-2xl p-4 flex flex-col items-center justify-center gap-1 min-h-[104px] border transition-all active:scale-[0.98] ${
-                      occupied
-                        ? "bg-orange-600/20 border-orange-500/60 text-orange-300"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-500"
-                    }`}
+                    className={`rounded-2xl p-4 flex flex-col items-center justify-center gap-1 min-h-[104px] border transition-all active:scale-[0.98] ${colorCls}`}
                   >
-                    <Armchair
-                      size={22}
-                      className={occupied ? "text-orange-400" : "text-zinc-600"}
-                    />
+                    <Armchair size={22} className={iconCls} />
                     <span className="text-xl font-black leading-none">
                       {t.table}
                     </span>
                     {occupied ? (
-                      <span className="text-[11px] font-semibold">
+                      <span className="text-[11px] font-semibold text-center leading-tight">
+                        {statusLabel}
+                        <br />
                         {t.orders.length} 单 · {t.total}
                       </span>
                     ) : (
