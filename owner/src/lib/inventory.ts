@@ -99,17 +99,52 @@ export async function saveInventoryItem(
   return true;
 }
 
-export async function deleteInventoryItem(id: string): Promise<boolean> {
-  if (!supabase) return false;
+export interface DeleteResult {
+  ok: boolean;
+  /** 被配方引用时返回引用数量，供 UI 提示 */
+  referencedBoms?: number;
+  error?: string;
+}
+
+/**
+ * 删除原料。
+ * 若该原料被 recipe_boms 引用，先解除引用（删除相关配方行）再删除，
+ * 避免数据库外键 409（23503）导致删除失败。
+ */
+export async function deleteInventoryItem(id: string): Promise<DeleteResult> {
+  if (!supabase) return { ok: false, error: "未配置数据库" };
+
+  // 先查引用
+  const { data: refs } = await supabase
+    .from("recipe_boms")
+    .select("id")
+    .eq("inventory_item_id", id);
+  const refCount = Array.isArray(refs) ? refs.length : 0;
+
+  if (refCount > 0) {
+    const { error: eBom } = await supabase
+      .from("recipe_boms")
+      .delete()
+      .eq("inventory_item_id", id);
+    if (eBom) {
+      console.warn("[owner] deleteInventoryItem boms:", eBom.message);
+      return { ok: false, referencedBoms: refCount, error: eBom.message };
+    }
+  }
+
   const { error } = await supabase
     .from("inventory_items")
     .delete()
     .eq("id", id);
   if (error) {
     console.warn("[owner] deleteInventoryItem:", error.message);
-    return false;
+    return {
+      ok: false,
+      referencedBoms: refCount || undefined,
+      error: error.message,
+    };
   }
-  return true;
+  return { ok: true, referencedBoms: refCount };
 }
 
 /** 盘点/损耗调整：delta 正数入库、负数出库 */

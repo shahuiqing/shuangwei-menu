@@ -96,10 +96,25 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   };
 
   const remove = async (i: InventoryItem) => {
-    if (!confirm(`删除原料「${i.name}」？`)) return;
-    const ok = await deleteInventoryItem(i.id);
-    if (!ok) return toast.error("删除失败");
-    toast.success("已删除");
+    if (
+      !confirm(
+        `删除原料「${i.name}」？若已被菜品配方引用，将一并移除相关配方项。`,
+      )
+    )
+      return;
+    const r = await deleteInventoryItem(i.id);
+    if (!r.ok) {
+      if (r.referencedBoms)
+        return toast.error(
+          `删除失败：该原料被 ${r.referencedBoms} 条配方引用，请先到「配方 BOM」解除引用`,
+        );
+      return toast.error(`删除失败：${r.error || "未知错误"}`);
+    }
+    toast.success(
+      r.referencedBoms
+        ? `已删除，并移除 ${r.referencedBoms} 条相关配方`
+        : "已删除",
+    );
     load();
   };
 
