@@ -13,6 +13,10 @@
 -- =============================================================
 
 -- ─── 1. orders 结账字段（camelCase，供 PostgREST / 前端列发现识别）───
+-- 关键：customerName / timestamp 必须存在，否则顾客端在空表时会用硬编码列
+-- 清单插入，被 PostgREST 以 PGRST204 拒绝（订单写不进库）。
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "customerName"  TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "timestamp"     TIMESTAMPTZ;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "paymentMethod"  TEXT DEFAULT '';
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "discountAmount" NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "receivedAmount" NUMERIC(10,2) DEFAULT 0;

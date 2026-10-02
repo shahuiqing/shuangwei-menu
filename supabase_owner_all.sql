@@ -66,8 +66,12 @@ CREATE TABLE IF NOT EXISTS public.inventory_transactions (
 ALTER TABLE public.recipe_boms ADD COLUMN IF NOT EXISTS station VARCHAR(50) DEFAULT '';
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. orders 结账字段（此前前端写入被静默丢弃）+ 索引
+-- 1. orders 字段 + 索引
+-- 关键修复：顾客端在空表时会用硬编码列清单（含 customerName / timestamp），
+-- 表里若缺这两列，PostgREST 会以 PGRST204 拒绝插入，导致订单永远写不进库。
 -- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "customerName"   TEXT DEFAULT '';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "timestamp"      TIMESTAMPTZ;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "paymentMethod"  TEXT DEFAULT '';
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "discountAmount" NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "receivedAmount" NUMERIC(10,2) DEFAULT 0;
