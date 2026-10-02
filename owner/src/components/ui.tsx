@@ -1,11 +1,48 @@
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowUpRight, ArrowDownRight, Minus, Inbox } from "lucide-react";
+
+/** 数字滚动（尊重 prefers-reduced-motion） */
+function useCountUp(target: number | undefined) {
+  const [n, setN] = useState(target ?? 0);
+  const prev = useRef(0);
+
+  useEffect(() => {
+    if (target === undefined) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const from = prev.current;
+    const to = target;
+    prev.current = to;
+    if (reduce || from === to) {
+      setN(to);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const dur = 650;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      setN(from + (to - from) * e);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+
+  return n;
+}
 
 export function KpiCard({
   icon: Icon,
   label,
   value,
+  valueNum,
+  format = (n: number) => String(Math.round(n)),
   sub,
   change,
   accent = "text-orange-400",
@@ -14,6 +51,8 @@ export function KpiCard({
   icon: LucideIcon;
   label: string;
   value: string;
+  valueNum?: number;
+  format?: (n: number) => string;
   sub?: string;
   change?: number;
   accent?: string;
@@ -21,6 +60,8 @@ export function KpiCard({
 }) {
   const up = (change ?? 0) > 0.05;
   const down = (change ?? 0) < -0.05;
+  const anim = useCountUp(valueNum);
+  const display = valueNum !== undefined ? format(anim ?? 0) : value;
   return (
     <div className="card-surface p-4 sm:p-5 active:scale-[0.99] transition-all duration-200 overflow-hidden hover:border-white/10">
       <div className="flex items-start justify-between">
@@ -54,7 +95,7 @@ export function KpiCard({
         {label}
       </div>
       <div className={`tnum text-2xl sm:text-3xl font-black mt-0.5 ${accent}`}>
-        {value}
+        {display}
       </div>
       {sub && <div className="text-[11px] text-zinc-500 mt-1">{sub}</div>}
     </div>
@@ -92,17 +133,26 @@ export function ChartCard({
   );
 }
 
-export function EmptyState({ text, hint }: { text: string; hint?: string }) {
+export function EmptyState({
+  text,
+  hint,
+  action,
+}: {
+  text: string;
+  hint?: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-14 text-zinc-600">
       <div className="relative w-16 h-16 flex items-center justify-center mb-3.5">
-        <span className="absolute inset-0 rounded-full border border-dashed border-white/10" />
-        <span className="w-11 h-11 rounded-2xl bg-gradient-to-b from-zinc-800/80 to-zinc-900 border border-white/[0.07] flex items-center justify-center shadow-[0_10px_24px_-16px_rgba(0,0,0,0.9)]">
-          <Inbox size={20} className="text-zinc-500" />
+        <span className="absolute inset-0 rounded-full border border-dashed border-orange-500/30" />
+        <span className="w-11 h-11 rounded-2xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-center shadow-[0_10px_24px_-16px_rgba(234,88,12,0.9)]">
+          <Inbox size={20} className="text-orange-500" />
         </span>
       </div>
       <span className="text-sm text-zinc-500">{text}</span>
       {hint && <span className="text-xs text-zinc-600 mt-1">{hint}</span>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
@@ -110,7 +160,7 @@ export function EmptyState({ text, hint }: { text: string; hint?: string }) {
 export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded-lg bg-gradient-to-r from-zinc-800/60 via-zinc-800 to-zinc-800/60 bg-[length:200%_100%] ${className}`}
+      className={`animate-pulse rounded-lg bg-gradient-to-r from-zinc-800/60 via-zinc-700/70 to-zinc-800/60 bg-[length:200%_100%] ${className}`}
     />
   );
 }
@@ -145,7 +195,7 @@ export function SkeletonChart({ h = "h-40" }: { h?: string }) {
         {heights.map((v, i) => (
           <div
             key={i}
-            className="flex-1 rounded-md animate-pulse bg-gradient-to-r from-zinc-800/60 via-zinc-800 to-zinc-800/60"
+            className="flex-1 rounded-md animate-pulse bg-gradient-to-r from-zinc-800/60 via-zinc-700/70 to-zinc-800/60"
             style={{ height: `${v}%` }}
           />
         ))}

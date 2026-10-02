@@ -109,11 +109,19 @@ export default function CostReport({ version = 0 }: { version?: number }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard icon={Wallet} label="营业收入" value={fmtMoney(revenue)} />
+        <KpiCard
+          icon={Wallet}
+          label="营业收入"
+          value={fmtMoney(revenue)}
+          valueNum={revenue}
+          format={fmtMoney}
+        />
         <KpiCard
           icon={TrendingUp}
           label="销售成本 (COGS)"
           value={fmtMoney(cogs)}
+          valueNum={cogs}
+          format={fmtMoney}
           accent="text-red-400"
           bg="bg-red-500/10"
         />
@@ -121,6 +129,8 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           icon={Wallet}
           label="毛利"
           value={fmtMoney(profit)}
+          valueNum={profit}
+          format={fmtMoney}
           accent={profit >= 0 ? "text-green-400" : "text-red-400"}
           bg={profit >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
         />
@@ -128,6 +138,8 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           icon={Percent}
           label="毛利率"
           value={`${margin.toFixed(1)}%`}
+          valueNum={margin}
+          format={(n) => `${n.toFixed(1)}%`}
           accent="text-teal-400"
           bg="bg-teal-500/10"
         />

@@ -233,6 +233,17 @@ export function Layout({
   const pull = usePullToRefresh(onRefresh, true);
   const pulling = pull > 4;
   const ready = pull > 56;
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () =>
+      setScrolled(
+        (window.scrollY || document.documentElement.scrollTop || 0) > 6,
+      );
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
     <div className="min-h-full flex bg-zinc-950">
@@ -296,7 +307,13 @@ export function Layout({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* 顶部栏：移动端 App 风格（头像+店名+状态+刷新）；桌面端标题 */}
-        <header className="sticky top-0 z-30 glass-bar">
+        <header
+          className={`sticky top-0 z-30 glass-bar transition-shadow duration-300 ${
+            scrolled
+              ? "shadow-[0_14px_30px_-22px_rgba(0,0,0,0.85)]"
+              : "shadow-none"
+          }`}
+        >
           <div className="safe-top px-4 lg:px-6 flex items-center justify-between gap-3">
             <div className="lg:hidden flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40 ring-1 ring-white/10">

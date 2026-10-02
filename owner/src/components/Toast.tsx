@@ -61,7 +61,7 @@ export function ToastHost() {
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto flex items-center gap-3 pl-2 pr-4 py-2 rounded-2xl bg-zinc-900/92 backdrop-blur-xl border shadow-[0_16px_40px_-16px_rgba(0,0,0,0.85)] ${th.box} animate-[toastIn_.3s_cubic-bezier(.2,.9,.25,1)]`}
+              className={`relative overflow-hidden pointer-events-auto flex items-center gap-3 pl-2 pr-4 py-2 rounded-2xl bg-zinc-900/92 backdrop-blur-xl border shadow-[0_16px_40px_-16px_rgba(0,0,0,0.85)] ${th.box} animate-[toastIn_.3s_cubic-bezier(.2,.9,.25,1)]`}
             >
               <span
                 className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 shadow-lg ${th.iconBox}`}
@@ -69,6 +69,10 @@ export function ToastHost() {
                 <Icon size={16} strokeWidth={2.6} />
               </span>
               <span className="text-sm font-medium leading-snug">{t.msg}</span>
+              {/* 倒计时进度条 */}
+              <span className="absolute left-0 right-0 bottom-0 h-[2px] bg-current/20">
+                <span className="block h-full bg-current/70 origin-right animate-[toastBar_3s_linear_forwards]" />
+              </span>
             </div>
           );
         })}

@@ -125,11 +125,14 @@ export default function Inventory({ version = 0 }: { version?: number }) {
           icon={Wallet}
           label="库存总值"
           value={fmtMoney(inventoryValue(list))}
+          valueNum={inventoryValue(list)}
+          format={fmtMoney}
         />
         <KpiCard
           icon={Layers}
           label="原料品类"
           value={String(categories)}
+          valueNum={categories}
           sub={`共 ${list.length} 种`}
           accent="text-blue-400"
           bg="bg-blue-500/10"
@@ -138,6 +141,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
           icon={AlertTriangle}
           label="低库存预警"
           value={String(low.length)}
+          valueNum={low.length}
           accent={low.length ? "text-red-400" : "text-green-400"}
           bg={low.length ? "bg-red-500/10" : "bg-green-500/10"}
         />

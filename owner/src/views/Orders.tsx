@@ -332,7 +332,10 @@ export default function Orders({ version = 0 }: { version?: number }) {
           {/* 手机卡片 */}
           <div className="sm:hidden space-y-2.5">
             {rows.length === 0 ? (
-              <EmptyState text="暂无订单" />
+              <EmptyState
+                text="暂无订单"
+                hint="可切换时间范围，或到看板查看实时订单"
+              />
             ) : (
               rows.map((o, i) => {
                 const st = statusOf(o);
@@ -495,12 +498,28 @@ export default function Orders({ version = 0 }: { version?: number }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-zinc-700" />
-            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-white/5 px-5 py-4 flex items-start justify-between">
+            <div
+              className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-white/5 px-5 py-4 flex items-start justify-between"
+              style={{
+                borderTop: `4px solid ${statusColor(statusOf(detail))}`,
+              }}
+            >
               <div>
-                <div className="text-3xl font-black text-white">
-                  {tableName(detail)}
+                <div className="flex items-center gap-2.5">
+                  <span className="text-3xl font-black text-white leading-none">
+                    {tableName(detail)}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full font-bold ${STATUS_CLS[statusOf(detail)] || STATUS_CLS.pending}`}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: statusColor(statusOf(detail)) }}
+                    />
+                    {STATUS_TEXT[statusOf(detail)] || "待接单"}
+                  </span>
                 </div>
-                <div className="text-xs text-zinc-500 flex items-center gap-1.5 mt-1">
+                <div className="text-xs text-zinc-500 flex items-center gap-1.5 mt-1.5">
                   <Clock size={12} />
                   {fmtDateTime(detail.timestamp || detail.created_at)} · 单号{" "}
                   {detail.orderNumber || detail.id || "N/A"}
@@ -515,14 +534,12 @@ export default function Orders({ version = 0 }: { version?: number }) {
             </div>
 
             <div className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-bold ${STATUS_CLS[detail.status || "pending"] || STATUS_CLS.pending}`}
-                >
-                  {STATUS_TEXT[detail.status || "pending"] || "待接单"}
+              <div className="flex items-center gap-2 mb-4 text-xs">
+                <span className="text-zinc-500">
+                  共 {itemCount(detail)} 项商品
                 </span>
                 {detail.paymentMethod && (
-                  <span className="flex items-center gap-1 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full">
+                  <span className="flex items-center gap-1 text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full">
                     <CreditCard size={12} /> {detail.paymentMethod}
                   </span>
                 )}
@@ -532,14 +549,16 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 {orderItems(detail).map((it, i) => (
                   <div
                     key={i}
-                    className="flex justify-between items-center bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+                    className="flex justify-between items-center bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
                   >
-                    <span className="text-zinc-300 truncate mr-2">
+                    <span className="text-zinc-200 truncate mr-2">
                       {it?.name || it?.title}
                     </span>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-zinc-500">x{itemQty(it)}</span>
-                      <span className="text-zinc-300 w-16 text-right">
+                      <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
+                        ×{itemQty(it)}
+                      </span>
+                      <span className="tnum text-zinc-300 w-16 text-right">
                         {fmtMoney(itemRevenue(it))}
                       </span>
                     </div>
@@ -547,9 +566,12 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 ))}
               </div>
 
-              <div className="flex justify-between items-center pt-4 mt-4 border-t border-white/5">
-                <span className="text-zinc-400">合计</span>
-                <span className="text-3xl font-black text-orange-400">
+              <div className="mt-4 rounded-2xl bg-zinc-950 border border-white/5 px-4 py-3.5 flex items-center justify-between">
+                <span className="text-sm text-zinc-400">合计</span>
+                <span
+                  className="tnum text-2xl font-black"
+                  style={{ color: "#f97316" }}
+                >
                   {fmtMoney(detail.finalTotal ?? orderTotal(detail))}
                 </span>
               </div>

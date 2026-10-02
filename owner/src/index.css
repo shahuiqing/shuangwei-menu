@@ -136,6 +136,14 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+@keyframes toastBar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
 @keyframes floatY {
   0%,
   100% {
@@ -250,6 +258,11 @@ body {
   --color-blue-400: #2563eb;
   --color-pink-400: #db2777;
   --color-teal-400: #0d9488;
+
+  /* Toast 文案（浅色底上需要深色文字） */
+  --color-emerald-50: #14532d;
+  --color-rose-50: #4c0519;
+  --color-sky-50: #082f49;
 }
 
 [data-theme="light"] body {

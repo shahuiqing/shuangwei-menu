@@ -144,12 +144,16 @@ export default function Consumption({ version = 0 }: { version?: number }) {
           icon={Package}
           label="出库消耗金额"
           value={fmtMoney(totalCost)}
+          valueNum={totalCost}
+          format={fmtMoney}
           sub={`共 ${byItem.length} 种原料`}
         />
         <KpiCard
           icon={Flame}
           label="损耗金额"
           value={fmtMoney(wasteCost)}
+          valueNum={wasteCost}
+          format={fmtMoney}
           accent="text-red-400"
           bg="bg-red-500/10"
         />
@@ -157,6 +161,8 @@ export default function Consumption({ version = 0 }: { version?: number }) {
           icon={Package}
           label="消耗总量"
           value={num(totalQty).toFixed(1)}
+          valueNum={num(totalQty)}
+          format={(n) => n.toFixed(1)}
           accent="text-blue-400"
           bg="bg-blue-500/10"
         />

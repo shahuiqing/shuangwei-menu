@@ -202,11 +202,15 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           icon={Wallet}
           label="累计采购支出"
           value={fmtMoney(stats.total)}
+          valueNum={stats.total}
+          format={fmtMoney}
         />
         <KpiCard
           icon={ShoppingCart}
           label="本月采购支出"
           value={fmtMoney(stats.month)}
+          valueNum={stats.month}
+          format={fmtMoney}
           accent="text-blue-400"
           bg="bg-blue-500/10"
         />
@@ -214,6 +218,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           icon={Truck}
           label="供应商数"
           value={String(stats.suppliers)}
+          valueNum={stats.suppliers}
           accent="text-teal-400"
           bg="bg-teal-500/10"
         />
