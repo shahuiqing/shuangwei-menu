@@ -8,7 +8,7 @@ import {
   Truck,
   AlertTriangle,
 } from "lucide-react";
-import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney } from "../lib/format";
@@ -286,7 +286,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
 
       <ChartCard title="采购记录" subtitle={`共 ${filtered.length} 笔`}>
         {loading ? (
-          <Skeleton className="h-40 w-full" />
+          <SkeletonRows rows={4} />
         ) : filtered.length === 0 ? (
           <EmptyState text="暂无采购记录" />
         ) : (

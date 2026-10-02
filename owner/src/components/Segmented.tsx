@@ -17,7 +17,7 @@ export function Segmented<T extends string>({
   const pad = size === "sm" ? "px-3 py-1.5 text-[13px]" : "px-3.5 py-2 text-sm";
   return (
     <div
-      className={`inline-flex bg-zinc-900/80 rounded-xl p-1 border border-white/[0.06] overflow-x-auto max-w-full shrink-0 ${className}`}
+      className={`seg-track inline-flex bg-zinc-900/80 rounded-xl p-1 border border-white/[0.06] overflow-x-auto max-w-full shrink-0 ${className}`}
     >
       {options.map(([id, label]) => {
         const on = value === id;
@@ -25,7 +25,7 @@ export function Segmented<T extends string>({
           <button
             key={id}
             onClick={() => onChange(id)}
-            className={`shrink-0 ${pad} rounded-lg font-semibold transition-all ${
+            className={`shrink-0 ${pad} ${on ? "seg-on" : ""} rounded-lg font-semibold transition-all ${
               on
                 ? "bg-white/[0.1] text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.6)] ring-1 ring-white/10"
                 : "text-zinc-400 hover:text-white"

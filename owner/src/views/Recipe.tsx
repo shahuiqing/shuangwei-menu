@@ -7,7 +7,7 @@ import {
   X,
   Info,
 } from "lucide-react";
-import { ChartCard, EmptyState, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
 import {
@@ -127,7 +127,7 @@ export default function Recipe({
       )}
 
       {loading ? (
-        <Skeleton className="h-40 w-full" />
+        <SkeletonRows rows={4} />
       ) : dishes.length === 0 ? (
         <EmptyState text="菜单暂无菜品（请先在顾客端配置菜单）" />
       ) : (

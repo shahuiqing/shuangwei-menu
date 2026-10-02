@@ -17,9 +17,12 @@ import {
   BadgeDollarSign,
   Flame,
   LayoutGrid,
+  Sun,
+  Moon,
   X,
   ChevronRight,
 } from "lucide-react";
+import { useTheme } from "../lib/theme";
 
 export type OwnerTab =
   | "dashboard"
@@ -183,6 +186,20 @@ function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
   return pull;
 }
 
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <button
+      onClick={toggle}
+      aria-label={theme === "dark" ? "切换到浅色" : "切换到深色"}
+      title={theme === "dark" ? "浅色模式" : "深色模式"}
+      className="active:scale-90 transition-transform w-10 h-10 flex items-center justify-center text-zinc-300 hover:text-white bg-white/5 rounded-full ring-1 ring-white/10"
+    >
+      {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+    </button>
+  );
+}
+
 export function Layout({
   tab,
   setTab,
@@ -207,6 +224,7 @@ export function Layout({
   children: ReactNode;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
   const active = NAV.find((n) => n.id === tab);
   const go = (t: OwnerTab) => {
     setTab(t);
@@ -259,6 +277,13 @@ export function Layout({
             />
             {configured ? "已连接数据库" : "未配置数据库"}
           </div>
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-white/5"
+          >
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === "dark" ? "浅色模式" : "深色模式"}
+          </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-red-400 hover:bg-zinc-900"
@@ -315,6 +340,7 @@ export function Layout({
                     ? `更新于 ${lastUpdated}`
                     : "同步中…"}
               </span>
+              <ThemeToggle />
               <button
                 onClick={onRefresh}
                 title="刷新"
@@ -410,7 +436,7 @@ export function Layout({
       {/* 移动端「更多」面板（分组 + 抽屉动画） */}
       {moreOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end animate-[fadeIn_.15s_ease]"
+          className="scrim lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end animate-[fadeIn_.15s_ease]"
           onClick={() => setMoreOpen(false)}
         >
           <div

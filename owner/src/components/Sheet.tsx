@@ -39,7 +39,7 @@ export function Sheet({
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-[fadeIn_.15s_ease]"
+      className="scrim fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-[fadeIn_.15s_ease]"
       onClick={onClose}
     >
       <div

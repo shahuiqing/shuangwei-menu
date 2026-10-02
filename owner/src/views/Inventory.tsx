@@ -10,7 +10,7 @@ import {
   Pencil,
   Save,
 } from "lucide-react";
-import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
@@ -180,7 +180,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         action={<Boxes size={18} className="text-orange-500" />}
       >
         {loading ? (
-          <Skeleton className="h-40 w-full" />
+          <SkeletonRows rows={4} />
         ) : shown.length === 0 ? (
           <EmptyState text="暂无原料，点「新增原料」" />
         ) : (

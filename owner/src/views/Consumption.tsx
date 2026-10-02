@@ -9,7 +9,12 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import {
+  ChartCard,
+  EmptyState,
+  KpiCard,
+  SkeletonChart,
+} from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
@@ -22,16 +27,17 @@ import {
   consumptionByDay,
   type ConsStat,
 } from "../lib/aggregate";
-
-const tooltipStyle = {
-  background: "#18181b",
-  border: "1px solid #3f3f46",
-  borderRadius: 12,
-  color: "#fafafa",
-  fontSize: 12,
-};
+import { useChartTheme } from "../lib/theme";
 
 export default function Consumption({ version = 0 }: { version?: number }) {
+  const C = useChartTheme();
+  const tooltipStyle = {
+    background: C.tipBg,
+    border: `1px solid ${C.tipBorder}`,
+    borderRadius: 12,
+    color: C.tipText,
+    fontSize: 12,
+  };
   const [range, setRange] = useState<RangeKey>("7d");
   const [byItem, setByItem] = useState<ConsStat[]>([]);
   const [byDish, setByDish] = useState<ConsStat[]>([]);
@@ -158,7 +164,7 @@ export default function Consumption({ version = 0 }: { version?: number }) {
 
       <ChartCard title="每日消耗金额" subtitle="按出库流水">
         {loading ? (
-          <Skeleton className="h-56 w-full" />
+          <SkeletonChart h="h-56" />
         ) : points.length === 0 ? (
           <EmptyState text="暂无消耗数据" />
         ) : (
@@ -167,18 +173,18 @@ export default function Consumption({ version = 0 }: { version?: number }) {
               <BarChart data={points}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="#27272a"
+                  stroke={C.grid}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
-                  axisLine={{ stroke: "#27272a" }}
+                  axisLine={{ stroke: C.axis }}
                   minTickGap={20}
                 />
                 <YAxis
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={50}

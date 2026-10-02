@@ -10,7 +10,7 @@ import {
   Ban,
   Check,
 } from "lucide-react";
-import { ChartCard, EmptyState, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
@@ -163,7 +163,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
       </div>
 
       {loading ? (
-        <Skeleton className="h-40 w-full" />
+        <SkeletonRows rows={4} />
       ) : cats.length === 0 ? (
         <EmptyState text="暂无菜单，点「新建分类」开始" />
       ) : (

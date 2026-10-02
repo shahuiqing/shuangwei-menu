@@ -17,7 +17,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { fmtMoney } from "../lib/format";
 import { fetchBoms, fetchInventory, num } from "../lib/inventory";
@@ -30,16 +30,17 @@ import {
   dailyProfit,
   type DailyProfit,
 } from "../lib/aggregate";
-
-const tooltipStyle = {
-  background: "#18181b",
-  border: "1px solid #3f3f46",
-  borderRadius: 12,
-  color: "#fafafa",
-  fontSize: 12,
-};
+import { useChartTheme } from "../lib/theme";
 
 export default function CostReport({ version = 0 }: { version?: number }) {
+  const C = useChartTheme();
+  const tooltipStyle = {
+    background: C.tipBg,
+    border: `1px solid ${C.tipBorder}`,
+    borderRadius: 12,
+    color: C.tipText,
+    fontSize: 12,
+  };
   const [range, setRange] = useState<RangeKey>("7d");
   const [margins, setMargins] = useState<DishMargin[]>([]);
   const [revenue, setRevenue] = useState(0);
@@ -146,16 +147,16 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={points}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <CartesianGrid strokeDasharray="3 3" stroke={C.grid} />
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
-                  axisLine={{ stroke: "#27272a" }}
+                  axisLine={{ stroke: C.axis }}
                   minTickGap={20}
                 />
                 <YAxis
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={50}
@@ -164,7 +165,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
                   contentStyle={tooltipStyle}
                   formatter={(v: number) => fmtMoney(v)}
                 />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: C.label }} />
                 <Bar
                   dataKey="revenue"
                   name="营收"
@@ -193,7 +194,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
 
       <ChartCard title="菜品毛利排行" subtitle={`共 ${margins.length} 个菜品`}>
         {loading ? (
-          <Skeleton className="h-40 w-full" />
+          <SkeletonRows rows={5} />
         ) : margins.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (

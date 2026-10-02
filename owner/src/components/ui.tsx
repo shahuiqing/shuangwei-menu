@@ -114,3 +114,95 @@ export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
     />
   );
 }
+
+/** 排行/记录列表占位（与真实行结构一致：序号 + 名称 + 数值） */
+export function SkeletonRows({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 bg-zinc-950 rounded-xl px-3 py-2.5"
+        >
+          <Skeleton className="h-6 w-6 shrink-0 rounded-lg" />
+          <Skeleton className="h-3.5 flex-1 max-w-[45%]" />
+          <div className="ml-auto flex items-center gap-4 shrink-0">
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3.5 w-14" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 图表占位（柱状剪影 + 轴标签） */
+export function SkeletonChart({ h = "h-40" }: { h?: string }) {
+  const heights = [42, 68, 55, 88, 72, 48, 62, 36, 78, 58];
+  return (
+    <div className={`${h} flex flex-col`}>
+      <div className="flex-1 flex items-end gap-1.5 sm:gap-2 px-1">
+        {heights.map((v, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-md animate-pulse bg-gradient-to-r from-zinc-800/60 via-zinc-800 to-zinc-800/60"
+            style={{ height: `${v}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between mt-2 px-1">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-3 w-7" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 订单表格/卡片占位（移动端卡片 + 桌面表格） */
+export function SkeletonTable({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-4">
+      <div className="sm:hidden space-y-2.5">
+        {Array.from({ length: Math.min(rows, 3) }).map((_, i) => (
+          <div key={i} className="card-surface p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <div className="space-y-2 items-end flex flex-col">
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden sm:block bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-4 px-4 py-3 border-b border-white/5">
+          <Skeleton className="h-3 w-14" />
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-16 ml-auto" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-14 ml-auto" />
+        </div>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-4 px-4 py-3.5 border-b border-white/5 last:border-0"
+          >
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-4 w-10 ml-auto" />
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-12 ml-auto" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

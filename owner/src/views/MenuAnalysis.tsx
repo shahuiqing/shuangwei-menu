@@ -10,7 +10,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { ChartCard, EmptyState, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, SkeletonChart } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { fmtMoney } from "../lib/format";
 import { QUAD_LABEL, type MatrixQuad, type RangeKey } from "../lib/analytics";
@@ -23,14 +23,7 @@ import {
   type RecipeBom,
 } from "../lib/inventory";
 import { dishMargins, buildMenuPoints, type MenuPoint } from "../lib/cost";
-
-const tooltipStyle = {
-  background: "#18181b",
-  border: "1px solid #3f3f46",
-  borderRadius: 12,
-  color: "#fafafa",
-  fontSize: 12,
-};
+import { useChartTheme } from "../lib/theme";
 
 type Mode = "revenue" | "profit";
 type Point = MenuPoint;
@@ -39,6 +32,14 @@ const mean = (xs: number[]) =>
   xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 
 export default function MenuAnalysis({ version = 0 }: { version?: number }) {
+  const C = useChartTheme();
+  const tooltipStyle = {
+    background: C.tipBg,
+    border: `1px solid ${C.tipBorder}`,
+    borderRadius: 12,
+    color: C.tipText,
+    fontSize: 12,
+  };
   const [range, setRange] = useState<RangeKey>("30d");
   const [mode, setMode] = useState<Mode>("profit");
   const [dishes, setDishes] = useState<DishStat[]>([]);
@@ -156,7 +157,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
         subtitle={`横轴=销量  纵轴=${unitLabel}  气泡=${valueLabel}（虚线为均值）`}
       >
         {loading ? (
-          <Skeleton className="h-80 w-full" />
+          <SkeletonChart h="h-80" />
         ) : points.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (
@@ -165,20 +166,20 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
               <ScatterChart
                 margin={{ top: 10, right: 20, bottom: 10, left: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <CartesianGrid strokeDasharray="3 3" stroke={C.grid} />
                 <XAxis
                   type="number"
                   dataKey="qty"
                   name="销量"
-                  tick={{ fill: "#71717a", fontSize: 11 }}
-                  axisLine={{ stroke: "#27272a" }}
+                  tick={{ fill: C.label, fontSize: 11 }}
+                  axisLine={{ stroke: C.axis }}
                   tickLine={false}
                 />
                 <YAxis
                   type="number"
                   dataKey="unit"
                   name={unitLabel}
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={48}
@@ -186,12 +187,12 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
                 <ZAxis type="number" dataKey="z" range={[40, 400]} />
                 <ReferenceLine
                   x={avgQty}
-                  stroke="#52525b"
+                  stroke={C.split}
                   strokeDasharray="4 4"
                 />
                 <ReferenceLine
                   y={avgUnit}
-                  stroke="#52525b"
+                  stroke={C.split}
                   strokeDasharray="4 4"
                 />
                 <Tooltip

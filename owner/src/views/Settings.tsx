@@ -9,7 +9,7 @@ import {
   EyeOff,
   AlertTriangle,
 } from "lucide-react";
-import { ChartCard, Skeleton } from "../components/ui";
+import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
 import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
 import { isConfigured, STORE_NAME } from "../lib/supabase";
@@ -157,7 +157,7 @@ export default function Settings({
         action={<HardDrive size={18} className="text-orange-500" />}
       >
         {loadingStats ? (
-          <Skeleton className="h-32 w-full" />
+          <SkeletonRows rows={2} />
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

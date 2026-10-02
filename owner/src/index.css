@@ -165,7 +165,6 @@ body {
 .tnum {
   font-variant-numeric: tabular-nums;
 }
-
 /* 卡片：柔和描边 + 顶部高光 + 阴影 */
 .card-surface {
   position: relative;
@@ -218,4 +217,123 @@ body {
 
 .animate-rise {
   animation: riseIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ============================================================
+   浅色主题：通过覆盖 Tailwind 主题变量实现（工具类引用 var()）
+   ============================================================ */
+[data-theme="light"] {
+  /* 语义反转：深色主题的「白」= 浅色主题的「墨」 */
+  --color-white: #12141a;
+  --color-zinc-50: #0b0c0e;
+  --color-zinc-100: #16171b;
+  --color-zinc-200: #212327;
+  --color-zinc-300: #35383e;
+  --color-zinc-400: #565a62;
+  --color-zinc-500: #74787f;
+  --color-zinc-600: #91949b;
+  --color-zinc-700: #d9dbdf;
+  --color-zinc-800: #eaecf0;
+  --color-zinc-900: #ffffff;
+  --color-zinc-950: #f1f2f4;
+
+  /* 彩色文字在浅底上的可读性修正 */
+  --color-orange-400: #ea580c;
+  --color-emerald-400: #16a34a;
+  --color-green-400: #16a34a;
+  --color-rose-400: #e11d48;
+  --color-red-400: #dc2626;
+  --color-sky-400: #0284c7;
+  --color-cyan-400: #0891b2;
+  --color-amber-400: #d97706;
+  --color-violet-400: #7c3aed;
+  --color-blue-400: #2563eb;
+  --color-pink-400: #db2777;
+  --color-teal-400: #0d9488;
+}
+
+[data-theme="light"] body {
+  color: #18181b;
+  background-color: #f1f2f4;
+  background-image:
+    radial-gradient(
+      1200px 600px at 100% -10%,
+      rgba(249, 115, 22, 0.1),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at -10% 10%,
+      rgba(234, 88, 12, 0.06),
+      transparent 55%
+    );
+}
+
+[data-theme="light"] .card-surface {
+  background: #ffffff;
+  border-color: rgba(15, 17, 21, 0.07);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
+    0 14px 34px -26px rgba(15, 23, 42, 0.5);
+}
+[data-theme="light"] .card-surface::before {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), transparent 40%);
+}
+
+[data-theme="light"] .glass-bar {
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(15, 17, 21, 0.06);
+}
+
+/* 浅色主题下保证输入控件可见（聚焦时让位于 focus:border-orange-500） */
+[data-theme="light"] input:not(:focus),
+[data-theme="light"] select:not(:focus),
+[data-theme="light"] textarea:not(:focus) {
+  background-color: #f6f7f9;
+  border-color: rgba(15, 17, 21, 0.1);
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #91949b;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #c9ccd2;
+}
+
+/* 浅色主题下的遮罩：不再用纯黑，改半透明中性灰 */
+[data-theme="light"] .scrim {
+  background: rgba(15, 17, 21, 0.4);
+}
+
+/* 段落式分段控件：浅色底上需要实心白色选中块 */
+[data-theme="light"] .seg-track {
+  background: #e9eaee;
+  border-color: rgba(15, 17, 21, 0.06);
+}
+[data-theme="light"] .seg-on {
+  background: #ffffff;
+  color: #12141a;
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.16),
+    0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
+  border-radius: 0.5rem;
+}
+
+/* 彩色背景上的文字在浅色主题保持纯白（选择器特异性高于 text-white） */
+[data-theme="light"] .btn-brand,
+[data-theme="light"] .bg-orange-500.text-white,
+[data-theme="light"] .bg-orange-600.text-white,
+[data-theme="light"] .bg-orange-700.text-white,
+[data-theme="light"] .bg-green-600.text-white,
+[data-theme="light"] .bg-emerald-500.text-white,
+[data-theme="light"] .bg-emerald-600.text-white,
+[data-theme="light"] .bg-rose-500.text-white,
+[data-theme="light"] .bg-red-500.text-white,
+[data-theme="light"] .bg-red-600\/90.text-white,
+[data-theme="light"] .bg-red-600.text-white,
+[data-theme="light"] .bg-sky-500.text-white,
+[data-theme="light"] .bg-sky-600.text-white,
+[data-theme="light"] .bg-blue-600.text-white,
+[data-theme="light"] .from-orange-400.to-orange-700.text-white {
+  color: #ffffff;
 }

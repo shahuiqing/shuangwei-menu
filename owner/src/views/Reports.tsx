@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
-import { ChartCard, EmptyState, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
@@ -179,7 +179,7 @@ export default function Reports({
         }
       >
         {loading ? (
-          <Skeleton className="h-40 w-full" />
+          <SkeletonRows rows={5} />
         ) : rows.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (

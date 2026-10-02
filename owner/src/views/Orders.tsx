@@ -11,7 +11,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { EmptyState, Skeleton } from "../components/ui";
+import { EmptyState, SkeletonTable } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
@@ -39,6 +39,20 @@ const STATUS_CLS: Record<string, string> = {
   completed: "bg-green-500/20 text-green-400",
   cancelled: "bg-red-500/20 text-red-400",
 };
+
+/** 订单状态色条：卡片左侧 / 表格首列 */
+const STATUS_HEX: Record<string, string> = {
+  pending: "#f97316",
+  cooking: "#3b82f6",
+  served: "#14b8a6",
+  completed: "#22c55e",
+  cancelled: "#ef4444",
+};
+
+const statusOf = (o: any) => o?.status || "pending";
+const statusColor = (s: string) => STATUS_HEX[s] || STATUS_HEX.pending;
+const itemCount = (o: any) =>
+  orderItems(o).reduce((s: number, it: any) => s + itemQty(it), 0);
 
 const PAGE_SIZE = 50;
 
@@ -312,40 +326,60 @@ export default function Orders({ version = 0 }: { version?: number }) {
       </div>
 
       {loading ? (
-        <Skeleton className="h-64 w-full" />
+        <SkeletonTable rows={5} />
       ) : (
         <>
           {/* 手机卡片 */}
-          <div className="sm:hidden space-y-2">
+          <div className="sm:hidden space-y-2.5">
             {rows.length === 0 ? (
               <EmptyState text="暂无订单" />
             ) : (
-              rows.map((o, i) => (
-                <button
-                  key={o._id || o.id || i}
-                  onClick={() => openDetail(o)}
-                  className="w-full text-left bg-zinc-900 border border-white/5 rounded-xl p-3 active:scale-[0.99] transition-transform"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-lg font-black text-white">
-                      {tableName(o)}
-                    </span>
+              rows.map((o, i) => {
+                const st = statusOf(o);
+                return (
+                  <button
+                    key={o._id || o.id || i}
+                    onClick={() => openDetail(o)}
+                    className="relative w-full text-left card-surface overflow-hidden pl-4 pr-3.5 py-3 active:scale-[0.99] transition-transform"
+                  >
+                    {/* 状态色条 */}
                     <span
-                      className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
-                    >
-                      {STATUS_TEXT[o.status || "pending"] || "待接单"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-1.5 text-xs">
-                    <span className="text-zinc-500">
-                      {fmtDateTime(o.timestamp || o.created_at)}
-                    </span>
-                    <span className="text-orange-400 font-bold text-sm">
-                      {fmtMoney(orderTotal(o))}
-                    </span>
-                  </div>
-                </button>
-              ))
+                      className="absolute left-0 inset-y-0 w-[4px]"
+                      style={{ background: statusColor(st) }}
+                    />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-black text-white leading-none">
+                            {tableName(o)}
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            {itemCount(o)} 项
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mt-1.5">
+                          <Clock size={12} className="shrink-0" />
+                          {fmtDateTime(o.timestamp || o.created_at)}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full font-bold ${STATUS_CLS[st] || STATUS_CLS.pending}`}
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ background: statusColor(st) }}
+                          />
+                          {STATUS_TEXT[st] || "待接单"}
+                        </span>
+                        <span className="tnum text-orange-400 font-black text-base leading-none">
+                          {fmtMoney(orderTotal(o))}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
 
@@ -374,40 +408,51 @@ export default function Orders({ version = 0 }: { version?: number }) {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((o, i) => (
-                      <tr
-                        key={o._id || o.id || i}
-                        className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                      >
-                        <td className="px-4 py-3 text-white font-semibold">
-                          {tableName(o)}
-                        </td>
-                        <td className="px-4 py-3 text-zinc-400">
-                          {fmtDateTime(o.timestamp || o.created_at)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
-                          >
-                            {STATUS_TEXT[o.status || "pending"] || "待接单"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-zinc-400">
-                          {orderItems(o).reduce((s, it) => s + itemQty(it), 0)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-orange-400 font-semibold">
-                          {fmtMoney(orderTotal(o))}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => openDetail(o)}
-                            className="text-zinc-400 hover:text-white inline-flex items-center gap-1"
-                          >
-                            <Clock size={14} /> 查看
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    rows.map((o, i) => {
+                      const st = statusOf(o);
+                      return (
+                        <tr
+                          key={o._id || o.id || i}
+                          className="border-b border-zinc-800/50 hover:bg-zinc-800/30 group"
+                        >
+                          <td className="relative px-4 py-3 text-white font-semibold">
+                            <span
+                              className="absolute left-0 inset-y-0 w-[3px] opacity-70 group-hover:opacity-100"
+                              style={{ background: statusColor(st) }}
+                            />
+                            {tableName(o)}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-400">
+                            {fmtDateTime(o.timestamp || o.created_at)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[st] || STATUS_CLS.pending}`}
+                            >
+                              <span
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ background: statusColor(st) }}
+                              />
+                              {STATUS_TEXT[st] || "待接单"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-zinc-400">
+                            {itemCount(o)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-orange-400 font-semibold">
+                            {fmtMoney(orderTotal(o))}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => openDetail(o)}
+                              className="text-zinc-400 hover:text-white inline-flex items-center gap-1"
+                            >
+                              <Clock size={14} /> 查看
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -442,7 +487,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
       {/* 详情抽屉 */}
       {detail && (
         <div
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end items-end sm:items-stretch"
+          className="scrim fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end items-end sm:items-stretch"
           onClick={() => setDetail(null)}
         >
           <div

@@ -14,7 +14,7 @@ import {
   Bar,
   CartesianGrid,
 } from "recharts";
-import { ChartCard, KpiCard, EmptyState, Skeleton } from "../components/ui";
+import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { fmtMoney, fmtDateTime, STATUS_TEXT } from "../lib/format";
 import {
@@ -35,6 +35,7 @@ import {
   type DishStat,
   type HourPoint,
 } from "../lib/aggregate";
+import { useChartTheme } from "../lib/theme";
 
 const PIE_COLORS = [
   "#fb923c",
@@ -46,16 +47,6 @@ const PIE_COLORS = [
   "#2dd4bf",
   "#f472b6",
 ];
-
-const tooltipStyle = {
-  background: "rgba(24,24,27,0.95)",
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 14,
-  color: "#fafafa",
-  fontSize: 12,
-  boxShadow: "0 12px 30px -12px rgba(0,0,0,0.8)",
-  backdropFilter: "blur(8px)",
-};
 
 const pct = (cur: number, prev: number) =>
   !prev ? (cur > 0 ? 100 : 0) : ((cur - prev) / prev) * 100;
@@ -69,6 +60,16 @@ export default function Dashboard({
   settings: any;
   version?: number;
 }) {
+  const C = useChartTheme();
+  const tooltipStyle = {
+    background: C.tipBg,
+    border: `1px solid ${C.tipBorder}`,
+    borderRadius: 14,
+    color: C.tipText,
+    fontSize: 12,
+    boxShadow: "0 12px 30px -12px rgba(0,0,0,0.35)",
+    backdropFilter: "blur(8px)",
+  };
   const [range, setRange] = useState<RangeKey>("today");
   const [loading, setLoading] = useState(true);
   const [kpi, setKpi] = useState({
@@ -230,18 +231,18 @@ export default function Dashboard({
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.06)"
+                  stroke={C.grid}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
-                  axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                  axisLine={{ stroke: C.axis }}
                   minTickGap={24}
                 />
                 <YAxis
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={44}
@@ -315,18 +316,18 @@ export default function Dashboard({
               <BarChart data={hourPoints}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.06)"
+                  stroke={C.grid}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: "#71717a", fontSize: 10 }}
+                  tick={{ fill: C.label, fontSize: 10 }}
                   tickLine={false}
-                  axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                  axisLine={{ stroke: C.axis }}
                   interval={2}
                 />
                 <YAxis
-                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tick={{ fill: C.label, fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={28}
@@ -351,7 +352,7 @@ export default function Dashboard({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <ChartCard title="热销菜品" subtitle="按份数">
           {loading ? (
-            <Skeleton className="h-40 w-full" />
+            <SkeletonRows rows={5} />
           ) : topDishes.length === 0 ? (
             <EmptyState text="暂无数据" />
           ) : (
