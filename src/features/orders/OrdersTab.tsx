@@ -151,8 +151,8 @@ export function OrdersTab({
               onClick={async () => {
                 try {
                   await api.updateOrderStatus(order._id, "cooking");
-                } catch {
-                  alert("操作失败");
+                } catch (e: any) {
+                  alert("操作失败：" + (e?.message || e));
                 }
               }}
               className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors"
@@ -165,8 +165,8 @@ export function OrdersTab({
               onClick={async () => {
                 try {
                   await api.updateOrderStatus(order._id, "served");
-                } catch {
-                  alert("操作失败");
+                } catch (e: any) {
+                  alert("操作失败：" + (e?.message || e));
                 }
               }}
               className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-teal-600 hover:bg-teal-500 rounded-lg text-white transition-colors"

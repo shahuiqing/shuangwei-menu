@@ -264,15 +264,29 @@ export const isOrderMatchingTable = (
 let ordersListeners: ((orders: Order[]) => void)[] = [];
 let settingsListeners: ((data: Record<string, unknown>) => void)[] = [];
 const broadcastOrdersMemoryCache = new Map<string, Order>();
+let ordersChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
-const triggerLocalOrdersChange = async () => {
+// 合并短时间内的多次触发 + 限量查询，显著减少对 Supabase 的重复请求（降低日志量）
+const triggerLocalOrdersChange = async (immediate = false) => {
   if (ordersListeners.length === 0) {
+    return;
+  }
+  if (!immediate) {
+    if (ordersChangeTimer) return;
+    ordersChangeTimer = setTimeout(() => {
+      ordersChangeTimer = null;
+      triggerLocalOrdersChange(true);
+    }, 700);
     return;
   }
   let remoteOrders: any[] = [];
   try {
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-      const { data, error } = await supabase.from("orders").select("*");
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
       if (error) handleSupabaseReadError(error, "triggerLocalOrdersChange");
       if (data) {
         remoteOrders = data.map(normalizeOrder);
@@ -336,6 +350,24 @@ const triggerLocalOrdersChange = async () => {
 
 let tablesListeners: ((tables: any[]) => void)[] = [];
 
+let menuSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingMenuCats: any[] | null = null;
+// 关系表同步防抖：连续加/移/删菜只在停止 5 秒后同步一次，避免上百次重复查询
+function scheduleMenuSync(cats: any[]) {
+  pendingMenuCats = cats;
+  if (menuSyncTimer) clearTimeout(menuSyncTimer);
+  menuSyncTimer = setTimeout(() => {
+    menuSyncTimer = null;
+    const c = pendingMenuCats;
+    pendingMenuCats = null;
+    if (c) {
+      api.syncCategoriesAndMenuItemsToSupabase(c).catch((err) => {
+        console.warn("[Auto-Sync] menu items sync failed:", err);
+      });
+    }
+  }, 5000);
+}
+
 const triggerLocalTablesChange = async () => {
   if (tablesListeners.length === 0) {
     return;
@@ -343,7 +375,10 @@ const triggerLocalTablesChange = async () => {
   let remoteTables: any[] = [];
   try {
     if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-      const { data, error } = await supabase.from("tables").select("*");
+      const { data, error } = await supabase
+        .from("tables")
+        .select("*")
+        .limit(300);
       if (error) throw error;
       if (data) {
         remoteTables = data;
@@ -1742,15 +1777,9 @@ export const api = {
         triggerBroadcast("settings_changed");
 
         // 自动将分类与菜品同步至 Supabase 关系表 (categories / menu_items)
+        // 防抖：连续保存只在停止 5 秒后同步一次，避免上百次重复查询
         if (cleanPayload.categories && Array.isArray(cleanPayload.categories)) {
-          api
-            .syncCategoriesAndMenuItemsToSupabase(cleanPayload.categories)
-            .catch((err) => {
-              console.warn(
-                "[Auto-Sync] Failed to sync menu items to relational tables:",
-                err,
-              );
-            });
+          scheduleMenuSync(cleanPayload.categories);
         }
 
         if (onProgress) onProgress("");
@@ -2421,6 +2450,15 @@ export const api = {
 
     const logs: string[] = [];
 
+    // 已初始化过就跳过（本地标记），避免每次开页面都查询，显著降低请求/日志量
+    try {
+      if (!force && localStorage.getItem("dbSeededV1") === "1") {
+        return { success: true, logs: ["ℹ️ 已初始化，跳过启动检查"] };
+      }
+    } catch {
+      /* ignore */
+    }
+
     try {
       // 1. settings 表全局数据初始化
       const { data: existingSettings } = await supabase
@@ -2535,6 +2573,11 @@ export const api = {
       triggerBroadcast("settings_changed");
       triggerBroadcast("tables_changed");
 
+      try {
+        localStorage.setItem("dbSeededV1", "1");
+      } catch {
+        /* ignore */
+      }
       return { success: true, logs };
     } catch (err) {
       logs.push(`❌ 初始化数据发生错误: ${(err as Error)?.message || err}`);
