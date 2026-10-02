@@ -75,6 +75,9 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "timestamp"      TIMESTAMPTZ;
 -- 顾客端 normalizeOrder 会带这些别名/标记列；缺任一列 PostgREST 都会 400 拒绝整条插入
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "createdAt"          TIMESTAMPTZ;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "tableNo"            TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "tableNumber"        TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "orderNumber"        TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "isExternal"         BOOLEAN DEFAULT false;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "unprintedNewOrder"  BOOLEAN DEFAULT false;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "unprintedAdditions" JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "paymentMethod"  TEXT DEFAULT '';
