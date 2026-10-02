@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Wallet, ShoppingBag, TrendingUp, Utensils, Clock } from "lucide-react";
 import {
   AreaChart,
@@ -14,15 +14,9 @@ import {
   Bar,
   CartesianGrid,
 } from "recharts";
-import { ChartCard, KpiCard, EmptyState } from "../components/ui";
+import { ChartCard, KpiCard, EmptyState, Skeleton } from "../components/ui";
 import { fmtMoney, fmtDateTime, STATUS_TEXT } from "../lib/format";
 import {
-  computeKpi,
-  rangeBounds,
-  dailySeries,
-  hourlySeries,
-  dishStats,
-  categoryStats,
   buildDishCategoryMap,
   orderTotal,
   isCancelled,
@@ -30,6 +24,16 @@ import {
   tableName,
   type RangeKey,
 } from "../lib/analytics";
+import {
+  rangeToIso,
+  salesSummary,
+  dailySeries,
+  dishStats,
+  hourlySeries,
+  type DailyPoint,
+  type DishStat,
+  type HourPoint,
+} from "../lib/aggregate";
 
 const PIE_COLORS = [
   "#f97316",
@@ -50,53 +54,112 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
+const pct = (cur: number, prev: number) =>
+  !prev ? (cur > 0 ? 100 : 0) : ((cur - prev) / prev) * 100;
+
 export default function Dashboard({
-  orders,
+  recentOrders,
   settings,
 }: {
-  orders: any[];
+  recentOrders: any[];
   settings: any;
 }) {
   const [range, setRange] = useState<RangeKey>("today");
+  const [loading, setLoading] = useState(true);
+  const [kpi, setKpi] = useState({
+    revenue: 0,
+    orders: 0,
+    aov: 0,
+    items: 0,
+    revenueChange: 0,
+    ordersChange: 0,
+    aovChange: 0,
+  });
+  const [trend, setTrend] = useState<DailyPoint[]>([]);
+  const [hourly, setHourly] = useState<HourPoint[]>([]);
+  const [dishes, setDishes] = useState<DishStat[]>([]);
 
-  const kpi = useMemo(
-    () => computeKpi(orders, rangeBounds(range)),
-    [orders, range],
-  );
-  const trend = useMemo(() => dailySeries(orders, 30), [orders]);
-  const hourly = useMemo(() => {
-    const b = rangeBounds(range);
-    return hourlySeries(orders.filter((o) => orderTime(o) >= b.start));
-  }, [orders, range]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const b = rangeToIso(range);
+      const [cur, prev, daily, dish, hours] = await Promise.all([
+        salesSummary(b.start, b.end),
+        salesSummary(b.prevStart, b.prevEnd),
+        dailySeries(rangeToIso("30d").start, rangeToIso("30d").end),
+        dishStats(b.start, b.end),
+        hourlySeries(b.start, b.end),
+      ]);
+      if (!alive) return;
+      const aov = cur.orders ? cur.revenue / cur.orders : 0;
+      const pavg = prev.orders ? prev.revenue / prev.orders : 0;
+      setKpi({
+        revenue: cur.revenue,
+        orders: cur.orders,
+        aov,
+        items: cur.items,
+        revenueChange: pct(cur.revenue, prev.revenue),
+        ordersChange: pct(cur.orders, prev.orders),
+        aovChange: pct(aov, pavg),
+      });
+      setTrend(daily);
+      setDishes(dish);
+      setHourly(hours);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range]);
 
   const dishCatMap = useMemo(() => buildDishCategoryMap(settings), [settings]);
   const cats = useMemo(() => {
-    const b = rangeBounds(range);
-    return categoryStats(
-      orders.filter((o) => orderTime(o) >= b.start),
-      dishCatMap,
-    );
-  }, [orders, range, dishCatMap]);
+    const map = new Map<string, number>();
+    dishes.forEach((d) => {
+      const c = dishCatMap.get(d.name) || "其他";
+      map.set(c, (map.get(c) || 0) + d.revenue);
+    });
+    return Array.from(map.entries())
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [dishes, dishCatMap]);
 
-  const topDishes = useMemo(() => {
-    const b = rangeBounds(range);
-    return dishStats(
-      orders.filter((o) => orderTime(o) >= b.start && !isCancelled(o)),
-    ).slice(0, 6);
-  }, [orders, range]);
+  const trendPoints = useMemo(
+    () =>
+      trend.map((d) => ({
+        label: String(d.day).slice(5),
+        revenue: d.revenue,
+      })),
+    [trend],
+  );
+  const hourPoints = useMemo(() => {
+    const buckets = Array.from({ length: 24 }, (_, h) => ({
+      label: `${String(h).padStart(2, "0")}时`,
+      orders: 0,
+    }));
+    hourly.forEach((h) => {
+      if (h.hour >= 0 && h.hour < 24)
+        buckets[h.hour]!.orders = Number(h.orders);
+    });
+    return buckets;
+  }, [hourly]);
 
+  const topDishes = useMemo(
+    () => [...dishes].sort((a, b) => b.qty - a.qty).slice(0, 6),
+    [dishes],
+  );
   const recent = useMemo(
     () =>
-      [...orders]
+      [...recentOrders]
         .filter((o) => !isCancelled(o))
         .sort((a, b) => orderTime(b) - orderTime(a))
         .slice(0, 8),
-    [orders],
+    [recentOrders],
   );
 
   return (
     <div className="space-y-5">
-      {/* 区间切换 */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
           {(
@@ -116,10 +179,11 @@ export default function Dashboard({
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-zinc-500">环比上一周期对比</span>
+        <span className="text-[11px] text-zinc-500">
+          服务端聚合 · 环比上一周期
+        </span>
       </div>
 
-      {/* KPI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KpiCard
           icon={Wallet}
@@ -152,49 +216,51 @@ export default function Dashboard({
         />
       </div>
 
-      {/* 营收趋势 */}
       <ChartCard title="营收趋势" subtitle="近 30 天营业收入">
-        <div className="h-60">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trend}>
-              <defs>
-                <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f97316" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: "#71717a", fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: "#27272a" }}
-                minTickGap={24}
-              />
-              <YAxis
-                tick={{ fill: "#71717a", fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                width={44}
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v: number) => [fmtMoney(v), "营收"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="revenue"
-                stroke="#f97316"
-                strokeWidth={2}
-                fill="url(#rev)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        {trendPoints.length === 0 ? (
+          <EmptyState text="暂无数据" />
+        ) : (
+          <div className="h-60">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendPoints}>
+                <defs>
+                  <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f97316" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#27272a" }}
+                  minTickGap={24}
+                />
+                <YAxis
+                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={44}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v: number) => [fmtMoney(v), "营收"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#f97316"
+                  strokeWidth={2}
+                  fill="url(#rev)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </ChartCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* 分类占比 */}
         <ChartCard title="分类营收占比" subtitle="按菜品分类">
           {cats.length === 0 ? (
             <EmptyState text="暂无数据" />
@@ -238,11 +304,10 @@ export default function Dashboard({
           )}
         </ChartCard>
 
-        {/* 时段分布 */}
         <ChartCard title="时段订单分布" subtitle="按小时">
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hourly}>
+              <BarChart data={hourPoints}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="#27272a"
@@ -274,9 +339,10 @@ export default function Dashboard({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* 热销 */}
         <ChartCard title="热销菜品" subtitle="按份数">
-          {topDishes.length === 0 ? (
+          {loading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : topDishes.length === 0 ? (
             <EmptyState text="暂无数据" />
           ) : (
             <div className="space-y-2">
@@ -305,7 +371,6 @@ export default function Dashboard({
           )}
         </ChartCard>
 
-        {/* 实时订单流 */}
         <ChartCard title="实时订单流" subtitle="最近订单">
           {recent.length === 0 ? (
             <EmptyState text="暂无订单" />
@@ -340,7 +405,8 @@ export default function Dashboard({
       </div>
 
       <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-600 py-2">
-        <Clock size={12} /> 数据每 60 秒自动刷新
+        <Clock size={12} /> 统计走服务端聚合，近况每 5
+        分钟刷新（页面隐藏时暂停）
       </div>
     </div>
   );

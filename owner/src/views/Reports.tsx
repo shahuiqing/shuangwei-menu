@@ -1,18 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
-import { ChartCard, EmptyState } from "../components/ui";
+import { ChartCard, EmptyState, Skeleton } from "../components/ui";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
+import { buildDishCategoryMap, type RangeKey } from "../lib/analytics";
 import {
-  categoryStats,
-  buildDishCategoryMap,
+  rangeToIso,
   dishStats,
   hourlySeries,
-  isCancelled,
-  orderTime,
-  rangeBounds,
-  type RangeKey,
-} from "../lib/analytics";
+  type DishStat,
+  type HourPoint,
+} from "../lib/aggregate";
 
 type Dimension = "dish" | "category" | "hour";
 
@@ -32,41 +30,65 @@ function downloadCsv(name: string, rows: (string | number)[][]) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function Reports({
-  orders,
-  settings,
-}: {
-  orders: any[];
-  settings: any;
-}) {
+export default function Reports({ settings }: { settings: any }) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [dim, setDim] = useState<Dimension>("dish");
+  const [dishes, setDishes] = useState<DishStat[]>([]);
+  const [hours, setHours] = useState<HourPoint[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const scoped = useMemo(() => {
-    const b = rangeBounds(range);
-    return orders.filter((o) => orderTime(o) >= b.start && !isCancelled(o));
-  }, [orders, range]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const b = rangeToIso(range);
+      const [d, h] = await Promise.all([
+        dishStats(b.start, b.end),
+        hourlySeries(b.start, b.end),
+      ]);
+      if (!alive) return;
+      setDishes(d);
+      setHours(h);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range]);
 
-  const dishes = useMemo(() => dishStats(scoped), [scoped]);
   const dishCatMap = useMemo(() => buildDishCategoryMap(settings), [settings]);
-  const cats = useMemo(
-    () => categoryStats(scoped, dishCatMap),
-    [scoped, dishCatMap],
-  );
-  const hours = useMemo(
-    () => hourlySeries(scoped).filter((h) => h.orders > 0),
-    [scoped],
+  const cats = useMemo(() => {
+    const map = new Map<
+      string,
+      { name: string; qty: number; revenue: number }
+    >();
+    dishes.forEach((d) => {
+      const name = dishCatMap.get(d.name) || "其他";
+      const e = map.get(name) || { name, qty: 0, revenue: 0 };
+      e.qty += d.qty;
+      e.revenue += d.revenue;
+      map.set(name, e);
+    });
+    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+  }, [dishes, dishCatMap]);
+
+  const hourRows = useMemo(
+    () =>
+      hours
+        .map((h) => ({
+          label: `${String(h.hour).padStart(2, "0")}时`,
+          orders: Number(h.orders),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [hours],
   );
 
-  const total = useMemo(
-    () =>
-      dim === "dish"
-        ? dishes.reduce((s, d) => s + d.revenue, 0)
-        : dim === "category"
-          ? cats.reduce((s, c) => s + c.revenue, 0)
-          : hours.reduce((s, h) => s + h.orders, 0),
-    [dim, dishes, cats, hours],
-  );
+  const total =
+    dim === "dish"
+      ? dishes.reduce((s, d) => s + d.revenue, 0)
+      : dim === "category"
+        ? cats.reduce((s, c) => s + c.revenue, 0)
+        : hourRows.reduce((s, h) => s + h.orders, 0);
 
   const onExport = () => {
     if (dim === "dish") {
@@ -82,10 +104,10 @@ export default function Reports({
         ...cats.map((c) => [c.name, c.qty, c.revenue]),
       ]);
     } else {
-      if (!hours.length) return toast.error("暂无数据");
+      if (!hourRows.length) return toast.error("暂无数据");
       downloadCsv(`report_hour_${Date.now()}.csv`, [
         ["时段", "订单数"],
-        ...hours.map((h) => [h.label, h.orders]),
+        ...hourRows.map((h) => [h.label, h.orders]),
       ]);
     }
     toast.success("已导出报表");
@@ -96,7 +118,11 @@ export default function Reports({
       ? dishes.map((d) => ({ key: d.name, qty: d.qty, value: d.revenue }))
       : dim === "category"
         ? cats.map((c) => ({ key: c.name, qty: c.qty, value: c.revenue }))
-        : hours.map((h) => ({ key: h.label, qty: h.orders, value: h.orders }));
+        : hourRows.map((h) => ({
+            key: h.label,
+            qty: h.orders,
+            value: h.orders,
+          }));
   const maxVal = Math.max(1, ...rows.map((r) => r.value));
 
   return (
@@ -151,7 +177,9 @@ export default function Reports({
           </div>
         }
       >
-        {rows.length === 0 ? (
+        {loading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : rows.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (
           <div className="space-y-1">

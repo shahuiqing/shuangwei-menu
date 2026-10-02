@@ -398,3 +398,48 @@ owner/src/lib/cost.ts              # 成本/毛利计算
 5. **后厨档口**：是否需要 `recipe_boms.station` 档口维度，还是只按原料/菜品统计？
 6. **未配配方菜品**：是否允许其成本记为 0 并在报表标红提示？
 7. **库存表 RLS**：anon 直连（快）还是 service_role 边缘函数（安全）？
+
+---
+
+## 11. 免费额度优化（已实现）
+
+### 11.1 额度约束（Supabase Free，2026 官方）
+
+| 项目     | 额度                                    | 对本项目的影响                     |
+| -------- | --------------------------------------- | ---------------------------------- |
+| 数据库   | 500 MB                                  | 订单/流水长期增长需清理            |
+| Egress   | 5 GB/月（+5GB cached）                  | **头号风险**：全量拉订单会迅速耗尽 |
+| Storage  | 1 GB                                    | 菜单图片                           |
+| Realtime | 200 万条/月、峰值 200 连接              | 订阅消息成本                       |
+| 其它     | 闲置 7 天暂停；**免费层不支持图片转换** | 不要用 `?width=` 变换              |
+
+### 11.2 问题与对策
+
+| 问题         | 原状                                               | 对策                                                  |
+| ------------ | -------------------------------------------------- | ----------------------------------------------------- |
+| 全量拉订单   | `fetchOrders(limit=3000).select("*")` 每 60s       | 各页改走 **Postgres 聚合 RPC**，只回传几十行          |
+| 拉全量流水   | 消耗页 `fetchTransactions(5000)`                   | 改 `owner_consumption*` 聚合 RPC                      |
+| 轮询过密     | 60s 固定                                           | 5 分钟兜底 + 页面隐藏暂停                             |
+| 订单列表全量 | 前端内存过滤                                       | **服务端分页** `range + count + ilike`                |
+| 结账字段丢失 | orders 缺列，`finalTotal/paymentMethod` 被静默丢弃 | 补列，营收/支付口径恢复准确                           |
+| DB 增长      | 无监控                                             | `owner_table_stats` 用量面板 + `owner_prune` 手动清理 |
+
+> 效果：仪表盘/报表每次刷新从「数 MB」降到「数 KB」，egress 数量级下降。
+
+### 11.3 新增 SQL：`supabase_owner_quota.sql`
+
+- `orders` 补列：`paymentMethod / discountAmount / receivedAmount / finalTotal / completedAt` + `created_at` 索引。
+- 聚合函数：`owner_sales_summary`、`owner_daily`、`owner_dish_stats`、`owner_hourly`、`owner_consumption(_dish/_daily)`、`owner_daily_profit`。
+- 运维：`owner_table_stats`（用量）、`owner_prune(orders_days, txns_days)`（清理）。
+
+### 11.4 新增/改动代码
+
+- 新增 `owner/src/lib/aggregate.ts`：RPC 封装 + `rangeToIso`（含上一周期）。
+- `App.tsx`：只拉近况 30 单 + 设置，5 分钟轮询、隐藏暂停。
+- `Dashboard / Reports / MenuAnalysis / CostReport / Consumption` 全部改走 RPC。
+- `Orders` 服务端分页（每页 50，搜索/筛选/排序下推，导出上限 1000）。
+- `Settings` 增加数据库用量面板与清理入口。
+
+### 11.5 部署顺序（全部幂等）
+
+1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_owner_inventory_rls.sql` → 5. `supabase_owner_quota.sql`

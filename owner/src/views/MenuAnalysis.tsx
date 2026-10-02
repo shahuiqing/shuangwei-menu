@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ScatterChart,
   Scatter,
@@ -10,18 +10,15 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { ChartCard, EmptyState } from "../components/ui";
+import { ChartCard, EmptyState, Skeleton } from "../components/ui";
 import { fmtMoney } from "../lib/format";
 import {
-  dishStats,
-  isCancelled,
   menuEngineering,
-  orderTime,
-  rangeBounds,
   QUAD_LABEL,
   type MatrixQuad,
   type RangeKey,
 } from "../lib/analytics";
+import { rangeToIso, dishStats, type DishStat } from "../lib/aggregate";
 
 const tooltipStyle = {
   background: "#18181b",
@@ -31,18 +28,30 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-export default function MenuAnalysis({ orders }: { orders: any[] }) {
+export default function MenuAnalysis() {
   const [range, setRange] = useState<RangeKey>("30d");
+  const [dishes, setDishes] = useState<DishStat[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const matrix = useMemo(() => {
-    const b = rangeBounds(range);
-    const scoped = orders.filter(
-      (o) => orderTime(o) >= b.start && !isCancelled(o),
-    );
-    const dishes = dishStats(scoped).filter((d) => d.qty > 0);
-    return menuEngineering(dishes);
-  }, [orders, range]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const b = rangeToIso(range);
+      const d = await dishStats(b.start, b.end);
+      if (!alive) return;
+      setDishes(d);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range]);
 
+  const matrix = useMemo(
+    () => menuEngineering(dishes.filter((d) => d.qty > 0)),
+    [dishes],
+  );
   const avgQty = useMemo(
     () =>
       matrix.length ? matrix.reduce((s, d) => s + d.qty, 0) / matrix.length : 0,
@@ -125,7 +134,9 @@ export default function MenuAnalysis({ orders }: { orders: any[] }) {
         title="菜单工程矩阵"
         subtitle="横轴=销量  纵轴=单价  气泡=营收"
       >
-        {matrix.length === 0 ? (
+        {loading ? (
+          <Skeleton className="h-80 w-full" />
+        ) : matrix.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (
           <div className="h-80">
@@ -164,10 +175,6 @@ export default function MenuAnalysis({ orders }: { orders: any[] }) {
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  formatter={(v: number, n: string) => [
-                    n === "单价" ? fmtMoney(v) : v,
-                    n,
-                  ]}
                   labelFormatter={() => ""}
                   content={({ payload }) => {
                     const p = payload?.[0]?.payload;

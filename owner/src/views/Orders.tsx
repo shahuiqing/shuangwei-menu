@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   X,
-  Eye,
   Download,
   ChevronLeft,
   ChevronRight,
@@ -10,19 +9,18 @@ import {
   CreditCard,
   Printer,
 } from "lucide-react";
-import { EmptyState } from "../components/ui";
+import { EmptyState, Skeleton } from "../components/ui";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
 import {
   orderItems,
-  orderTime,
   orderTotal,
-  rangeBounds,
   tableName,
   itemQty,
   itemRevenue,
   type RangeKey,
 } from "../lib/analytics";
+import { rangeToIso, fetchOrdersPage } from "../lib/aggregate";
 
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-orange-500/20 text-orange-400",
@@ -60,7 +58,7 @@ function exportCsv(rows: any[]) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function Orders({ orders }: { orders: any[] }) {
+export default function Orders() {
   const [range, setRange] = useState<RangeKey>("today");
   const [status, setStatus] = useState("all");
   const [q, setQ] = useState("");
@@ -68,45 +66,64 @@ export default function Orders({ orders }: { orders: any[] }) {
     "time_desc",
   );
   const [page, setPage] = useState(0);
+  const [rows, setRows] = useState<any[]>([]);
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any | null>(null);
+  const [qDebounced, setQDebounced] = useState("");
 
-  const filtered = useMemo(() => {
-    const b = rangeBounds(range);
-    let list = orders.filter((o) => {
-      const t = orderTime(o);
-      if (t < b.start || t > b.end) return false;
-      if (status !== "all" && (o.status || "pending") !== status) return false;
-      if (q.trim()) {
-        const needle = q.trim().toLowerCase();
-        const hay =
-          `${tableName(o)} ${o.customerName || ""} ${o.orderNumber || ""}`.toLowerCase();
-        if (!hay.includes(needle)) return false;
-      }
-      return true;
-    });
-    list = [...list].sort((a, b2) => {
-      if (sort === "time_desc") return orderTime(b2) - orderTime(a);
-      if (sort === "time_asc") return orderTime(a) - orderTime(b2);
-      return orderTotal(b2) - orderTotal(a);
-    });
-    return list;
-  }, [orders, range, status, q, sort]);
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 400);
+    return () => clearTimeout(t);
+  }, [q]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageClamped = Math.min(page, pageCount - 1);
-  const pageRows = filtered.slice(
-    pageClamped * PAGE_SIZE,
-    pageClamped * PAGE_SIZE + PAGE_SIZE,
-  );
-  const revenue = filtered
-    .filter((o) => o.status === "completed")
-    .reduce((s, o) => s + orderTotal(o), 0);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const b = rangeToIso(range);
+      const res = await fetchOrdersPage({
+        start: b.start,
+        end: b.end,
+        status,
+        search: qDebounced,
+        sort,
+        offset: page * PAGE_SIZE,
+        limit: PAGE_SIZE,
+      });
+      if (!alive) return;
+      setRows(res.rows);
+      setCount(res.count);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range, status, sort, page, qDebounced]);
 
+  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const resetPage = () => setPage(0);
+
+  const onExport = async () => {
+    const b = rangeToIso(range);
+    const res = await fetchOrdersPage({
+      start: b.start,
+      end: b.end,
+      status,
+      search: qDebounced,
+      sort,
+      offset: 0,
+      limit: 1000,
+    });
+    if (!res.rows.length) return toast.error("没有可导出的数据");
+    exportCsv(res.rows);
+    toast.success(
+      `已导出 ${res.rows.length} 条订单${res.count > 1000 ? "（上限 1000）" : ""}`,
+    );
+  };
 
   return (
     <div className="space-y-4">
-      {/* 筛选栏 */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
           {(
@@ -148,7 +165,10 @@ export default function Orders({ orders }: { orders: any[] }) {
 
         <select
           value={sort}
-          onChange={(e) => setSort(e.target.value as typeof sort)}
+          onChange={(e) => {
+            setSort(e.target.value as typeof sort);
+            resetPage();
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
         >
           <option value="time_desc">时间 ↓（新→旧）</option>
@@ -167,17 +187,13 @@ export default function Orders({ orders }: { orders: any[] }) {
               setQ(e.target.value);
               resetPage();
             }}
-            placeholder="搜索桌号 / 单号 / 顾客"
+            placeholder="搜索桌号 / 姓名 / 单号"
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
           />
         </div>
 
         <button
-          onClick={() => {
-            if (!filtered.length) return toast.error("没有可导出的数据");
-            exportCsv(filtered);
-            toast.success(`已导出 ${filtered.length} 条订单`);
-          }}
+          onClick={onExport}
           className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
         >
           <Download size={16} /> 导出 CSV
@@ -185,122 +201,131 @@ export default function Orders({ orders }: { orders: any[] }) {
       </div>
 
       <div className="text-sm text-zinc-400">
-        {filtered.length} 单 · 营收{" "}
-        <span className="text-orange-400 font-bold">{fmtMoney(revenue)}</span>
+        共 <span className="text-orange-400 font-bold">{count}</span> 单 ·
+        服务端分页（每页 {PAGE_SIZE}）
       </div>
 
-      {/* 手机卡片 */}
-      <div className="sm:hidden space-y-2">
-        {pageRows.length === 0 ? (
-          <EmptyState text="暂无订单" />
-        ) : (
-          pageRows.map((o, i) => (
-            <button
-              key={o._id || o.id || i}
-              onClick={() => setDetail(o)}
-              className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-xl p-3 active:scale-[0.99] transition-transform"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-lg font-black text-white">
-                  {tableName(o)}
-                </span>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
+      {loading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : (
+        <>
+          {/* 手机卡片 */}
+          <div className="sm:hidden space-y-2">
+            {rows.length === 0 ? (
+              <EmptyState text="暂无订单" />
+            ) : (
+              rows.map((o, i) => (
+                <button
+                  key={o._id || o.id || i}
+                  onClick={() => setDetail(o)}
+                  className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-xl p-3 active:scale-[0.99] transition-transform"
                 >
-                  {STATUS_TEXT[o.status || "pending"] || "待接单"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mt-1.5 text-xs">
-                <span className="text-zinc-500">
-                  {fmtDateTime(o.timestamp || o.created_at)}
-                </span>
-                <span className="text-orange-400 font-bold text-sm">
-                  {fmtMoney(orderTotal(o))}
-                </span>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
-
-      {/* 桌面表格 */}
-      <div className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-zinc-500 text-left border-b border-zinc-800">
-                <th className="px-4 py-3 font-medium">桌号</th>
-                <th className="px-4 py-3 font-medium">时间</th>
-                <th className="px-4 py-3 font-medium">状态</th>
-                <th className="px-4 py-3 font-medium text-right">菜品数</th>
-                <th className="px-4 py-3 font-medium text-right">金额</th>
-                <th className="px-4 py-3 font-medium text-right">详情</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center text-zinc-500 py-10">
-                    暂无订单
-                  </td>
-                </tr>
-              ) : (
-                pageRows.map((o, i) => (
-                  <tr
-                    key={o._id || o.id || i}
-                    className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                  >
-                    <td className="px-4 py-3 text-white font-semibold">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-lg font-black text-white">
                       {tableName(o)}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">
+                    </span>
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
+                    >
+                      {STATUS_TEXT[o.status || "pending"] || "待接单"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 text-xs">
+                    <span className="text-zinc-500">
                       {fmtDateTime(o.timestamp || o.created_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
-                      >
-                        {STATUS_TEXT[o.status || "pending"] || "待接单"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-zinc-400">
-                      {orderItems(o).reduce((s, it) => s + itemQty(it), 0)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-orange-400 font-semibold">
+                    </span>
+                    <span className="text-orange-400 font-bold text-sm">
                       {fmtMoney(orderTotal(o))}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setDetail(o)}
-                        className="text-zinc-400 hover:text-white inline-flex items-center gap-1"
-                      >
-                        <Eye size={14} /> 查看
-                      </button>
-                    </td>
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* 桌面表格 */}
+          <div className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-500 text-left border-b border-zinc-800">
+                    <th className="px-4 py-3 font-medium">桌号</th>
+                    <th className="px-4 py-3 font-medium">时间</th>
+                    <th className="px-4 py-3 font-medium">状态</th>
+                    <th className="px-4 py-3 font-medium text-right">菜品数</th>
+                    <th className="px-4 py-3 font-medium text-right">金额</th>
+                    <th className="px-4 py-3 font-medium text-right">详情</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="text-center text-zinc-500 py-10"
+                      >
+                        暂无订单
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((o, i) => (
+                      <tr
+                        key={o._id || o.id || i}
+                        className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
+                      >
+                        <td className="px-4 py-3 text-white font-semibold">
+                          {tableName(o)}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-400">
+                          {fmtDateTime(o.timestamp || o.created_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
+                          >
+                            {STATUS_TEXT[o.status || "pending"] || "待接单"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-zinc-400">
+                          {orderItems(o).reduce((s, it) => s + itemQty(it), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-orange-400 font-semibold">
+                          {fmtMoney(orderTotal(o))}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => setDetail(o)}
+                            className="text-zinc-400 hover:text-white inline-flex items-center gap-1"
+                          >
+                            <Clock size={14} /> 查看
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 分页 */}
       {pageCount > 1 && (
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={pageClamped === 0}
+            disabled={page === 0}
             className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-40"
           >
             <ChevronLeft size={16} />
           </button>
           <span className="text-sm text-zinc-400">
-            第 {pageClamped + 1} / {pageCount} 页
+            第 {page + 1} / {pageCount} 页
           </span>
           <button
             onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-            disabled={pageClamped >= pageCount - 1}
+            disabled={page >= pageCount - 1}
             className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-40"
           >
             <ChevronRight size={16} />
@@ -326,7 +351,7 @@ export default function Orders({ orders }: { orders: any[] }) {
                 <div className="text-xs text-zinc-500 flex items-center gap-1.5 mt-1">
                   <Clock size={12} />
                   {fmtDateTime(detail.timestamp || detail.created_at)} · 单号{" "}
-                  {detail.orderNumber || "N/A"}
+                  {detail.orderNumber || detail.id || "N/A"}
                 </div>
               </div>
               <button
@@ -373,7 +398,7 @@ export default function Orders({ orders }: { orders: any[] }) {
               <div className="flex justify-between items-center pt-4 mt-4 border-t border-zinc-800">
                 <span className="text-zinc-400">合计</span>
                 <span className="text-3xl font-black text-orange-400">
-                  {fmtMoney(orderTotal(detail))}
+                  {fmtMoney(detail.finalTotal ?? orderTotal(detail))}
                 </span>
               </div>
 

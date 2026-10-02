@@ -5,27 +5,34 @@ import Dashboard from "./views/Dashboard";
 import Orders from "./views/Orders";
 import Reports from "./views/Reports";
 import MenuAnalysis from "./views/MenuAnalysis";
+import Procurement from "./views/Procurement";
+import Inventory from "./views/Inventory";
+import Recipe from "./views/Recipe";
+import CostReport from "./views/CostReport";
+import Consumption from "./views/Consumption";
 import StaffView from "./views/Staff";
 import Settings from "./views/Settings";
 import { Layout, type OwnerTab } from "./components/Layout";
 import { ToastHost } from "./components/Toast";
 import { isAuthed, clearAuthed } from "./lib/auth";
 import { isConfigured, STORE_NAME } from "./lib/supabase";
-import { fetchOrders, fetchSettings } from "./lib/data";
+import { fetchSettings } from "./lib/data";
+import { fetchRecentOrders } from "./lib/aggregate";
 
 export default function App() {
   const [authed, setAuthed] = useState(() => isAuthed());
   const [tab, setTab] = useState<OwnerTab>("dashboard");
-  const [orders, setOrders] = useState<any[]>([]);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
 
+  // 免费额度优化：只拉少量近况订单 + 设置；其余统计由各页 RPC 拉取
   const load = useCallback(async () => {
     if (!isConfigured) return;
     setLoading(true);
-    const [o, s] = await Promise.all([fetchOrders(), fetchSettings()]);
-    setOrders(o);
+    const [o, s] = await Promise.all([fetchRecentOrders(30), fetchSettings()]);
+    setRecentOrders(o);
     setSettings(s);
     setLoading(false);
     setLastUpdated(new Date().toLocaleTimeString("zh-CN"));
@@ -35,10 +42,22 @@ export default function App() {
     if (authed) load();
   }, [authed, load]);
 
+  // 5 分钟兜底轮询；页面隐藏时暂停，减少请求与 egress
   useEffect(() => {
     if (!authed || !isConfigured) return;
-    const t = setInterval(load, 60000);
-    return () => clearInterval(t);
+    const tick = () => {
+      if (document.hidden) return;
+      load();
+    };
+    const t = setInterval(tick, 300000);
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [authed, load]);
 
   if (!authed) {
@@ -78,19 +97,18 @@ export default function App() {
         )}
 
         {tab === "dashboard" && (
-          <Dashboard orders={orders} settings={settings} />
+          <Dashboard recentOrders={recentOrders} settings={settings} />
         )}
-        {tab === "orders" && <Orders orders={orders} />}
-        {tab === "reports" && <Reports orders={orders} settings={settings} />}
-        {tab === "menu" && <MenuAnalysis orders={orders} />}
+        {tab === "orders" && <Orders />}
+        {tab === "reports" && <Reports settings={settings} />}
+        {tab === "menu" && <MenuAnalysis />}
+        {tab === "procurement" && <Procurement />}
+        {tab === "inventory" && <Inventory />}
+        {tab === "recipe" && <Recipe settings={settings} />}
+        {tab === "cost" && <CostReport />}
+        {tab === "consumption" && <Consumption />}
         {tab === "staff" && <StaffView />}
-        {tab === "settings" && (
-          <Settings
-            settings={settings}
-            orderCount={orders.length}
-            onSaved={load}
-          />
-        )}
+        {tab === "settings" && <Settings settings={settings} onSaved={load} />}
       </Layout>
       <ToastHost />
     </>

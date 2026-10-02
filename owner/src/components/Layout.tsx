@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -10,18 +11,47 @@ import {
   RefreshCw,
   LogOut,
   Wifi,
+  ShoppingCart,
+  Boxes,
+  NotebookText,
+  BadgeDollarSign,
+  Flame,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
 
 export type OwnerTab =
-  "dashboard" | "orders" | "reports" | "menu" | "staff" | "settings";
+  | "dashboard"
+  | "orders"
+  | "reports"
+  | "menu"
+  | "procurement"
+  | "inventory"
+  | "recipe"
+  | "cost"
+  | "consumption"
+  | "staff"
+  | "settings";
 
 export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "dashboard", label: "经营看板", icon: LayoutDashboard },
   { id: "orders", label: "订单管理", icon: ReceiptText },
   { id: "reports", label: "销售报表", icon: BarChart3 },
   { id: "menu", label: "菜单分析", icon: UtensilsCrossed },
+  { id: "procurement", label: "采购管理", icon: ShoppingCart },
+  { id: "inventory", label: "库存管理", icon: Boxes },
+  { id: "recipe", label: "配方 BOM", icon: NotebookText },
+  { id: "cost", label: "成本毛利", icon: BadgeDollarSign },
+  { id: "consumption", label: "用料消耗", icon: Flame },
   { id: "staff", label: "员工管理", icon: Users },
   { id: "settings", label: "系统设置", icon: SettingsIcon },
+];
+
+const MOBILE_PRIMARY: OwnerTab[] = [
+  "dashboard",
+  "orders",
+  "cost",
+  "consumption",
 ];
 
 export function Layout({
@@ -45,6 +75,12 @@ export function Layout({
   configured: boolean;
   children: ReactNode;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const go = (t: OwnerTab) => {
+    setTab(t);
+    setMoreOpen(false);
+  };
+
   return (
     <div className="min-h-full flex bg-zinc-950">
       {/* 桌面侧边栏 */}
@@ -62,7 +98,7 @@ export function Layout({
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {NAV.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -143,19 +179,73 @@ export function Layout({
 
       {/* 移动端底部导航 */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 flex">
-        {NAV.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] ${
-              tab === id ? "text-orange-400" : "text-zinc-500"
-            }`}
-          >
-            <Icon size={20} />
-            {label}
-          </button>
-        ))}
+        {MOBILE_PRIMARY.map((id) => {
+          const item = NAV.find((n) => n.id === id)!;
+          const Icon = item.icon;
+          return (
+            <button
+              key={id}
+              onClick={() => go(id)}
+              className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] ${
+                tab === id ? "text-orange-400" : "text-zinc-500"
+              }`}
+            >
+              <Icon size={20} />
+              {item.label}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setMoreOpen(true)}
+          className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] ${
+            NAV.some((n) => n.id === tab && !MOBILE_PRIMARY.includes(n.id))
+              ? "text-orange-400"
+              : "text-zinc-500"
+          }`}
+        >
+          <MoreHorizontal size={20} />
+          更多
+        </button>
       </nav>
+
+      {/* 移动端更多菜单 */}
+      {moreOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end"
+          onClick={() => setMoreOpen(false)}
+        >
+          <div
+            className="w-full bg-zinc-900 border-t border-zinc-800 rounded-t-3xl p-4 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4 px-1">
+              <span className="text-white font-semibold">全部功能</span>
+              <button
+                onClick={() => setMoreOpen(false)}
+                className="text-zinc-400 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {NAV.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => go(id)}
+                  className={`flex flex-col items-center gap-2 py-4 rounded-2xl border ${
+                    tab === id
+                      ? "bg-orange-600/15 text-orange-400 border-orange-600/30"
+                      : "bg-zinc-950 text-zinc-300 border-zinc-800"
+                  }`}
+                >
+                  <Icon size={22} />
+                  <span className="text-xs">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
