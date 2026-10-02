@@ -61,6 +61,7 @@ interface AdminPanelProps {
 }
 
 import { useMenuManager } from "../features/menu/useMenuManager";
+import { playNotificationBeep } from "../utils/audio";
 import { AdminTabNav } from "./admin/AdminTabNav";
 import {
   ConfirmDialog,
@@ -405,21 +406,7 @@ export default function AdminPanel({
       }, 8000);
 
       // Play a sound for prominence
-      try {
-        const ctx = new (
-          window.AudioContext || (window as any).webkitAudioContext
-        )();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.1, ctx.currentTime);
-        osc.start();
-        gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
-        osc.stop(ctx.currentTime + 1);
-      } catch {}
+      playNotificationBeep();
     });
     return () => unsubscribe();
   }, []);
