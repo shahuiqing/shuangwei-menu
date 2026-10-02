@@ -102,7 +102,47 @@ export default function Orders({ orders }: { orders: any[] }) {
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      {/* 手机端：卡片列表 */}
+      <div className="sm:hidden space-y-2">
+        {filtered.length === 0 ? (
+          <p className="text-center text-zinc-500 py-10">暂无订单</p>
+        ) : (
+          filtered.slice(0, 200).map((o, i) => (
+            <button
+              key={o._id || o.id || i}
+              onClick={() => setDetail(o)}
+              className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-xl p-3 active:scale-[0.99] transition-transform"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-lg font-black text-white">
+                  {tableName(o)}
+                </span>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STATUS_CLS[o.status || "pending"] || STATUS_CLS.pending}`}
+                >
+                  {STATUS_TEXT[o.status || "pending"] || "待接单"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-1.5 text-xs">
+                <span className="text-zinc-500">
+                  {fmtDateTime(o.timestamp || o.created_at)}
+                </span>
+                <span className="text-orange-400 font-bold text-sm">
+                  {fmtMoney(Number(o.total || o.total_amount || 0))}
+                </span>
+              </div>
+            </button>
+          ))
+        )}
+        {filtered.length > 200 && (
+          <p className="text-center text-xs text-zinc-500 py-2">
+            仅显示前 200 条，请用筛选缩小范围
+          </p>
+        )}
+      </div>
+
+      {/* 桌面端：表格 */}
+      <div className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

@@ -90,12 +90,12 @@ export default function Reports({ orders }: { orders: any[]; settings?: any }) {
                       </span>
                       <span className="text-zinc-200 truncate">{r.name}</span>
                     </div>
-                    <div className="flex items-center gap-5 shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-5 shrink-0">
                       <span className="text-zinc-500 text-sm">x{r.qty}</span>
-                      <span className="text-zinc-500 text-xs w-12 text-right">
+                      <span className="text-zinc-500 text-xs w-12 text-right hidden sm:inline">
                         {pct.toFixed(1)}%
                       </span>
-                      <span className="text-orange-400 font-semibold w-20 text-right">
+                      <span className="text-orange-400 font-semibold w-16 sm:w-20 text-right">
                         {fmtMoney(r.revenue)}
                       </span>
                     </div>
