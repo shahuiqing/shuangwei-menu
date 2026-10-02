@@ -538,9 +538,12 @@ export default function CartMenu({
                               autoFocus
                             />
                             <button
-                              className="bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-6 rounded-xl transition-colors text-center cursor-pointer shadow-lg shadow-orange-600/30"
+                              disabled={isSubmitting}
+                              className={`bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-6 rounded-xl transition-colors text-center cursor-pointer shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2 ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
                               onClick={async () => {
+                                if (isSubmitting) return;
                                 if (!tableNumber) return;
+                                setIsSubmitting(true);
                                 const matchedDevice = getAuthenticatedDevice();
                                 const deviceName =
                                   matchedDevice?.name ||
@@ -554,6 +557,9 @@ export default function CartMenu({
                                 );
                               }}
                             >
+                              {isSubmitting && (
+                                <Loader2 size={18} className="animate-spin" />
+                              )}
                               {language === "zh" ? "确认下单" : "Confirm"}
                             </button>
                           </div>
