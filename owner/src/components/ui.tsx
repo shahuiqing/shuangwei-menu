@@ -22,7 +22,7 @@ export function KpiCard({
   const up = (change ?? 0) > 0.05;
   const down = (change ?? 0) < -0.05;
   return (
-    <div className="card-surface p-4 sm:p-5 active:scale-[0.99] transition-transform overflow-hidden">
+    <div className="card-surface p-4 sm:p-5 active:scale-[0.99] transition-all duration-200 overflow-hidden hover:border-white/10">
       <div className="flex items-start justify-between">
         <div
           className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl ${bg} ${accent} flex items-center justify-center ring-1 ring-white/5`}
@@ -92,13 +92,17 @@ export function ChartCard({
   );
 }
 
-export function EmptyState({ text }: { text: string }) {
+export function EmptyState({ text, hint }: { text: string; hint?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-zinc-600">
-      <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center mb-3">
-        <Inbox size={22} className="text-zinc-600" />
+    <div className="flex flex-col items-center justify-center py-14 text-zinc-600">
+      <div className="relative w-16 h-16 flex items-center justify-center mb-3.5">
+        <span className="absolute inset-0 rounded-full border border-dashed border-white/10" />
+        <span className="w-11 h-11 rounded-2xl bg-gradient-to-b from-zinc-800/80 to-zinc-900 border border-white/[0.07] flex items-center justify-center shadow-[0_10px_24px_-16px_rgba(0,0,0,0.9)]">
+          <Inbox size={20} className="text-zinc-500" />
+        </span>
       </div>
-      <span className="text-sm">{text}</span>
+      <span className="text-sm text-zinc-500">{text}</span>
+      {hint && <span className="text-xs text-zinc-600 mt-1">{hint}</span>}
     </div>
   );
 }

@@ -180,30 +180,34 @@ export default function App() {
           </div>
         )}
 
-        <ErrorBoundary key={tab}>
-          {tab === "dashboard" && (
-            <Dashboard
-              recentOrders={recentOrders}
-              settings={settings}
-              version={version}
-            />
-          )}
-          {tab === "orders" && <Orders version={version} />}
-          {tab === "reports" && (
-            <Reports settings={settings} version={version} />
-          )}
-          {tab === "dishes" && <Dishes version={version} />}
-          {tab === "menu" && <MenuAnalysis version={version} />}
-          {tab === "procurement" && <Procurement version={version} />}
-          {tab === "inventory" && <Inventory version={version} />}
-          {tab === "recipe" && <Recipe settings={settings} version={version} />}
-          {tab === "cost" && <CostReport version={version} />}
-          {tab === "consumption" && <Consumption version={version} />}
-          {tab === "staff" && <StaffView />}
-          {tab === "settings" && (
-            <Settings settings={settings} onSaved={load} />
-          )}
-        </ErrorBoundary>
+        <div key={tab} className="page-enter">
+          <ErrorBoundary>
+            {tab === "dashboard" && (
+              <Dashboard
+                recentOrders={recentOrders}
+                settings={settings}
+                version={version}
+              />
+            )}
+            {tab === "orders" && <Orders version={version} />}
+            {tab === "reports" && (
+              <Reports settings={settings} version={version} />
+            )}
+            {tab === "dishes" && <Dishes version={version} />}
+            {tab === "menu" && <MenuAnalysis version={version} />}
+            {tab === "procurement" && <Procurement version={version} />}
+            {tab === "inventory" && <Inventory version={version} />}
+            {tab === "recipe" && (
+              <Recipe settings={settings} version={version} />
+            )}
+            {tab === "cost" && <CostReport version={version} />}
+            {tab === "consumption" && <Consumption version={version} />}
+            {tab === "staff" && <StaffView />}
+            {tab === "settings" && (
+              <Settings settings={settings} onSaved={load} />
+            )}
+          </ErrorBoundary>
+        </div>
       </Layout>
       <ToastHost />
     </>

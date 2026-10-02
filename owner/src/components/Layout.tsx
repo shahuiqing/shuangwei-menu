@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -16,7 +16,7 @@ import {
   NotebookText,
   BadgeDollarSign,
   Flame,
-  Plus,
+  LayoutGrid,
   X,
   ChevronRight,
 } from "lucide-react";
@@ -50,6 +50,22 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "settings", label: "系统设置", icon: SettingsIcon },
 ];
 
+// 页面副标题（移动端大标题下方的一行说明）
+const SUBTITLE: Partial<Record<OwnerTab, string>> = {
+  dashboard: "今日经营概览 · 实时数据",
+  orders: "接单、出餐与历史订单",
+  reports: "营收趋势与经营分析",
+  dishes: "上架、改价与售卖状态",
+  menu: "单品盈利与销量排行",
+  procurement: "进货记录与供应商",
+  inventory: "原料库存与预警",
+  recipe: "菜品用料与成本基准",
+  cost: "配方成本 × 单价的毛利核算",
+  consumption: "按订单反推的用料流水",
+  staff: "账号与权限",
+  settings: "店铺信息与系统参数",
+};
+
 // 移动端底部主导航（4 个高频目的地，中间凸起按钮打开「更多」）
 const MOBILE_PRIMARY: OwnerTab[] = [
   "dashboard",
@@ -73,8 +89,12 @@ function TabItem({
   return (
     <button
       onClick={() => go(id)}
+      aria-current={on ? "page" : undefined}
       className="relative flex-1 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"
     >
+      {on && (
+        <span className="absolute top-0 h-[3px] w-7 rounded-b-full bg-gradient-to-r from-orange-400 to-orange-600 shadow-[0_0_10px_rgba(249,115,22,0.8)]" />
+      )}
       <span
         className={`flex items-center justify-center w-12 h-8 rounded-full transition-all ${
           on ? "bg-orange-500/15 ring-1 ring-orange-500/25" : ""
@@ -101,6 +121,67 @@ const MOBILE_GROUPS: { title: string; items: OwnerTab[] }[] = [
   { title: "供应与成本", items: ["procurement", "inventory", "recipe"] },
   { title: "管理", items: ["staff", "settings"] },
 ];
+
+/** 移动端下拉刷新：仅在页面顶部、向下拖动超过阈值时触发刷新 */
+function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
+  const [pull, setPull] = useState(0);
+  const startY = useRef<number | null>(null);
+  const pullRef = useRef(0);
+  const busy = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const setPullBoth = (v: number) => {
+      pullRef.current = v;
+      setPull(v);
+    };
+    const atTop = () =>
+      (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+
+    const onStart = (e: TouchEvent) => {
+      if (busy.current || !atTop()) return;
+      startY.current = e.touches[0].clientY;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (startY.current === null || busy.current) return;
+      const dy = e.touches[0].clientY - startY.current;
+      if (dy <= 0 || !atTop()) {
+        startY.current = null;
+        setPullBoth(0);
+        return;
+      }
+      // 阻尼：越拉越轻
+      setPullBoth(Math.min(96, dy * 0.45));
+    };
+    const onEnd = () => {
+      if (startY.current === null) return;
+      const fired = pullRef.current > 56;
+      startY.current = null;
+      if (fired) {
+        busy.current = true;
+        onRefresh();
+        setTimeout(() => {
+          busy.current = false;
+          setPullBoth(0);
+        }, 700);
+      } else {
+        setPullBoth(0);
+      }
+    };
+
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+      setPullBoth(0);
+    };
+  }, [enabled, onRefresh]);
+
+  return pull;
+}
 
 export function Layout({
   tab,
@@ -131,6 +212,9 @@ export function Layout({
     setTab(t);
     setMoreOpen(false);
   };
+  const pull = usePullToRefresh(onRefresh, true);
+  const pulling = pull > 4;
+  const ready = pull > 56;
 
   return (
     <div className="min-h-full flex bg-zinc-950">
@@ -212,8 +296,11 @@ export function Layout({
               </div>
             </div>
             <div className="hidden lg:block">
-              <div className="text-lg font-bold text-white">
+              <div className="text-lg font-bold text-white leading-tight">
                 {active?.label}
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-0.5">
+                {SUBTITLE[tab]}
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -243,14 +330,53 @@ export function Layout({
         </header>
 
         {/* 内容区：移动端独立滚动 + 底部导航留白；桌面居中 */}
-        <main className="flex-1 px-4 lg:px-6 py-3 lg:py-6 max-w-[1400px] w-full mx-auto mobile-safe-bottom lg:pb-6">
-          {/* 移动端大标题（App 风格） */}
-          <div className="lg:hidden pb-3">
-            <h1 className="text-[26px] font-black tracking-tight text-white leading-tight">
-              {active?.label}
-            </h1>
+        <main className="relative flex-1 px-4 lg:px-6 py-3 lg:py-6 max-w-[1400px] w-full mx-auto mobile-safe-bottom lg:pb-6">
+          {/* 下拉刷新指示（移动端） */}
+          <div
+            aria-hidden
+            className="lg:hidden fixed inset-x-0 z-30 flex flex-col items-center pointer-events-none transition-opacity"
+            style={{
+              top: "calc(env(safe-area-inset-top, 0px) + 3.6rem)",
+              opacity: pulling ? 1 : 0,
+            }}
+          >
+            <div
+              className="w-9 h-9 rounded-full bg-zinc-900/92 backdrop-blur border border-white/10 shadow-lg flex items-center justify-center"
+              style={{ transform: `translateY(${Math.min(pull, 64) - 34}px)` }}
+            >
+              <RefreshCw
+                size={17}
+                className={ready ? "text-orange-400" : "text-zinc-500"}
+                style={{ transform: `rotate(${pull * 4}deg)` }}
+              />
+            </div>
+            <span
+              className="text-[11px] text-zinc-500 mt-1"
+              style={{ transform: `translateY(${Math.min(pull, 64) - 34}px)` }}
+            >
+              {ready ? "松开刷新" : "下拉刷新"}
+            </span>
           </div>
-          {children}
+
+          <div
+            style={{
+              transform: pull
+                ? `translateY(${Math.min(pull, 72)}px)`
+                : undefined,
+            }}
+          >
+            {/* 移动端大标题（App 风格：标题 + 副标题 + 渐变装饰线） */}
+            <div className="lg:hidden pb-4">
+              <h1 className="text-[26px] font-black tracking-tight text-white leading-tight">
+                {active?.label}
+              </h1>
+              <p className="text-[13px] text-zinc-500 mt-1 leading-snug">
+                {SUBTITLE[tab] ?? " "}
+              </p>
+              <div className="title-rule mt-2.5 h-[3px] w-24 rounded-full" />
+            </div>
+            {children}
+          </div>
         </main>
       </div>
 
@@ -266,9 +392,9 @@ export function Layout({
             <button
               onClick={() => setMoreOpen(true)}
               aria-label="全部功能"
-              className="absolute -top-6 w-14 h-14 rounded-full btn-brand text-white flex items-center justify-center ring-4 ring-zinc-950 active:scale-95 transition-transform"
+              className="absolute -top-6 w-14 h-14 rounded-full btn-brand text-white flex items-center justify-center ring-4 ring-zinc-950 active:scale-95 transition-transform shadow-[0_10px_24px_-8px_rgba(234,88,12,0.9)]"
             >
-              <Plus size={26} strokeWidth={2.4} />
+              <LayoutGrid size={24} strokeWidth={2.3} />
             </button>
             <span className="pb-1.5 text-[10px] font-medium text-zinc-500">
               更多
@@ -293,7 +419,14 @@ export function Layout({
           >
             <div className="mx-auto h-1.5 w-10 rounded-full bg-zinc-700 mb-4" />
             <div className="flex items-center justify-between mb-4">
-              <span className="text-white font-bold text-base">全部功能</span>
+              <div>
+                <span className="text-white font-bold text-base block">
+                  全部功能
+                </span>
+                <span className="text-[11px] text-zinc-500">
+                  {storeName} · 老板管理端
+                </span>
+              </div>
               <button
                 onClick={() => setMoreOpen(false)}
                 className="w-8 h-8 rounded-full bg-white/5 text-zinc-400 flex items-center justify-center active:scale-90 transition-transform"
