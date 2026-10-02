@@ -487,18 +487,16 @@ export default function AdminPanel({
   }, []);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    if (activeTab === "qr") {
-      unsubscribe = api.subscribeToTables((data) => {
-        if (Array.isArray(data)) {
-          setTables(data);
-        }
-      });
-    }
+    // 始终订阅桌位，供「订单 → 桌位看板」使用（不只是扫码页）
+    const unsubscribe = api.subscribeToTables((data) => {
+      if (Array.isArray(data)) {
+        setTables(data);
+      }
+    });
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [activeTab]);
+  }, []);
 
   useEffect(() => {
     if (activeTab === "database") {
@@ -1408,6 +1406,7 @@ export default function AdminPanel({
                 <>
                   <OrdersTab
                     orders={orders}
+                    tables={tables}
                     orderView={orderView}
                     setOrderView={setOrderView}
                     currency={currency}
