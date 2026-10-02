@@ -274,6 +274,7 @@ export default function AdminPanel({
     handleDeleteCategory,
     handleDeleteDish,
     handleAddDish,
+    handleQuickAddDish,
     handleEditDish,
     handleCancelEdit,
     editingDishId,
@@ -1507,6 +1508,7 @@ export default function AdminPanel({
                   setNewDish={setNewDish}
                   handleAddCategory={handleAddCategory}
                   handleAddDish={handleAddDish}
+                  handleQuickAddDish={handleQuickAddDish}
                   handleDeleteCategory={handleDeleteCategory}
                   handleDeleteDish={handleDeleteDish}
                   handleEditDish={handleEditDish}

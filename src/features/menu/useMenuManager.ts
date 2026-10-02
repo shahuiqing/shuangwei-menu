@@ -848,6 +848,54 @@ export function useMenuManager(deps: MenuManagerDeps) {
     alert("菜品添加成功！ Dish added successfully!");
   };
 
+  // 快速加菜：只填名称(+可选价格)即可加入，其余字段留默认，稍后可在编辑里补全
+  const handleQuickAddDish = (
+    categoryId: string,
+    title: string,
+    price: string,
+  ) => {
+    const t = String(title || "").trim();
+    if (!t) return;
+    const p = String(price ?? "").trim();
+    const finalPrice =
+      p === "" ? "" : currency && currency !== "none" ? `${p} ${currency}` : p;
+    const targetCatId = categories.some((c: any) => c.id === categoryId)
+      ? categoryId
+      : categories[0]?.id;
+    if (!targetCatId) {
+      alert("请先创建一个分类，再添加菜品！(Create a category first)");
+      return;
+    }
+    const newItem = {
+      title: t,
+      enTitle: "",
+      frTitle: "",
+      arTitle: "",
+      maTitle: "",
+      description: "",
+      enDescription: "",
+      frDescription: "",
+      arDescription: "",
+      maDescription: "",
+      price: finalPrice,
+      image: "",
+      allergens: [] as string[],
+      stock: null,
+      id:
+        "item-" +
+        Date.now().toString(36) +
+        Math.random().toString(36).slice(2, 6),
+    };
+    const updatedCategories = categories.map((cat: any) =>
+      cat.id === targetCatId
+        ? { ...cat, items: [...(cat.items || []), newItem] }
+        : cat,
+    );
+    setCategories(updatedCategories);
+    if (onSaveToCloud)
+      onSaveToCloud({ categories: updatedCategories, silent: true });
+  };
+
   return {
     // State
     selectedCategory,
@@ -882,6 +930,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
     handleDeleteCategory,
     handleDeleteDish,
     handleAddDish,
+    handleQuickAddDish,
     handleEditDish,
     handleCancelEdit,
     handleAITranslate,
