@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { uploadBase64ToStorage } from "../../utils/storage";
 import { api } from "../../api";
@@ -62,6 +62,16 @@ export function useMenuManager(deps: MenuManagerDeps) {
   const [selectedCategory, setSelectedCategory] = useState(
     categories[0]?.id || "",
   );
+
+  // 保证 selectedCategory 始终指向有效分类（分类异步加载/删除后自愈）
+  useEffect(() => {
+    if (
+      categories.length > 0 &&
+      !categories.some((c: any) => c.id === selectedCategory)
+    ) {
+      setSelectedCategory(categories[0]!.id);
+    }
+  }, [categories, selectedCategory]);
   const [newCategory, setNewCategory] = useState({
     name: "",
     enName: "",
@@ -676,8 +686,18 @@ export function useMenuManager(deps: MenuManagerDeps) {
 
   const handleAddDish = (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedCategory || !newDish.title || !newDish.image || !newDish.price)
+    // 兜底：selectedCategory 失效时改用第一个分类，避免"静默失败、啥都没有"
+    const targetCatId = categories.some((c: any) => c.id === selectedCategory)
+      ? selectedCategory
+      : categories[0]?.id;
+    if (!targetCatId) {
+      alert("请先创建一个分类，再添加菜品！(Create a category first)");
       return;
+    }
+    if (!newDish.title || !newDish.price) {
+      alert("请填写菜品名称和价格！(Title & price required)");
+      return;
+    }
     const finalPrice =
       currency && currency !== "none"
         ? `${newDish.price} ${currency}`
@@ -686,26 +706,24 @@ export function useMenuManager(deps: MenuManagerDeps) {
     const stockStr = String(newDish.stock ?? "").trim();
     const stockNum =
       stockStr === "" || isNaN(Number(stockStr)) ? null : Number(stockStr);
-    const updatedCategories = categories.map((cat: any) => {
-      if (cat.id === selectedCategory) {
-        return {
-          ...cat,
-          items: [
-            ...(cat.items || []),
-            {
-              ...newDish,
-              price: finalPrice,
-              stock: stockNum,
-              id: Math.random().toString(36).substr(2, 9),
-            },
-          ],
-        };
-      }
-      return cat;
-    });
+    const newItem = {
+      ...newDish,
+      price: finalPrice,
+      stock: stockNum,
+      id:
+        "item-" +
+        Date.now().toString(36) +
+        Math.random().toString(36).slice(2, 6),
+    };
+    const updatedCategories = categories.map((cat: any) =>
+      cat.id === targetCatId
+        ? { ...cat, items: [...(cat.items || []), newItem] }
+        : cat,
+    );
     setCategories(updatedCategories);
-    if (onSaveToCloud)
-      onSaveToCloud({ categories: updatedCategories, silent: true });
+    if (!categories.some((c: any) => c.id === selectedCategory)) {
+      setSelectedCategory(targetCatId);
+    }
     setNewDish({
       title: "",
       enTitle: "",
@@ -722,6 +740,9 @@ export function useMenuManager(deps: MenuManagerDeps) {
       allergens: [] as string[],
       stock: "",
     });
+    if (onSaveToCloud) {
+      onSaveToCloud({ categories: updatedCategories, silent: true });
+    }
     alert("菜品添加成功！ Dish added successfully!");
   };
 
