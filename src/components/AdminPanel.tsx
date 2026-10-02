@@ -81,6 +81,22 @@ import { AppearanceTab } from "./admin/AppearanceTab";
 import { ToolsTab } from "./admin/ToolsTab";
 import { ArchiveCleanupCard } from "./admin/ArchiveCleanupCard";
 
+// 打印去重：新订单/加菜会同时经「postgres_changes」与「orders_changed 广播」两条通道送达，
+// 且 unprintedNewOrder 标记是异步清除的，极短时间内可能重复触发打印。用 key 在 8 秒窗口内去重。
+const printedRecently = new Map<string, number>();
+function shouldPrintOnce(key: string, ttlMs = 8000): boolean {
+  const now = Date.now();
+  const last = printedRecently.get(key) || 0;
+  if (now - last < ttlMs) return false;
+  printedRecently.set(key, now);
+  if (printedRecently.size > 300) {
+    for (const [k, t] of printedRecently) {
+      if (now - t > ttlMs) printedRecently.delete(k);
+    }
+  }
+  return true;
+}
+
 export default function AdminPanel({
   categories,
   setCategories,
@@ -424,9 +440,12 @@ export default function AdminPanel({
             const updatePayload: any = {};
 
             if (order.unprintedNewOrder) {
-              import("../lib/print").then((m) => {
-                m.printReceipt(order, currency, receiptSettings, true); // print kitchen ticket
-              });
+              const printKey = `order:${order._id || order.id}`;
+              if (shouldPrintOnce(printKey)) {
+                import("../lib/print").then((m) => {
+                  m.printReceipt(order, currency, receiptSettings, true); // print kitchen ticket
+                });
+              }
               needsUpdate = true;
               updatePayload.unprintedNewOrder = false;
             }
@@ -435,17 +454,23 @@ export default function AdminPanel({
               order.unprintedAdditions &&
               order.unprintedAdditions.length > 0
             ) {
-              import("../lib/print").then((m) => {
-                order.unprintedAdditions.forEach((addition: any) => {
-                  const dummyOrder = { ...order, items: addition.items };
-                  m.printReceipt(
-                    dummyOrder,
-                    currency,
-                    receiptSettings,
-                    false,
-                    "addition",
-                  );
-                });
+              order.unprintedAdditions.forEach((addition: any) => {
+                const itemsKey = (addition.items || [])
+                  .map((i: any) => `${i.name || i.id}x${i.quantity || 1}`)
+                  .join(",");
+                const printKey = `add:${order._id || order.id}:${itemsKey}`;
+                if (shouldPrintOnce(printKey)) {
+                  import("../lib/print").then((m) => {
+                    const dummyOrder = { ...order, items: addition.items };
+                    m.printReceipt(
+                      dummyOrder,
+                      currency,
+                      receiptSettings,
+                      false,
+                      "addition",
+                    );
+                  });
+                }
               });
               needsUpdate = true;
               updatePayload.unprintedAdditions = [];
