@@ -833,6 +833,15 @@ export function useMenuManager(deps: MenuManagerDeps) {
       setSelectedCategory(targetCatId);
     }
     resetNewDish();
+    console.log("[添加菜品]", {
+      category: targetCatId,
+      dish: newItem.title,
+      dishId: newItem.id,
+      itemsInCategory: (
+        updatedCategories.find((c: any) => c.id === targetCatId)?.items || []
+      ).length,
+      willSave: !!onSaveToCloud,
+    });
     if (onSaveToCloud) {
       onSaveToCloud({ categories: updatedCategories, silent: true });
     }

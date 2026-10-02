@@ -635,11 +635,10 @@ export function MenuTab(props: MenuTabProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-1 sm:col-span-2">
                 <label className="block text-xs font-medium text-zinc-400 mb-1">
-                  图片 URL 或 上传本地图片 *
+                  图片 URL 或 上传本地图片（选填，可留空）
                 </label>
                 <div className="flex gap-2 mb-2">
                   <input
-                    required
                     type="text"
                     value={newDish.image}
                     onChange={(e) =>
