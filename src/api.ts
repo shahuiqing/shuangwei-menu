@@ -306,37 +306,19 @@ const triggerLocalOrdersChange = async (immediate = false) => {
     if (norm._id) mergedMap.set(String(norm._id), norm);
   });
 
-  // 2. Realtime broadcast orders held in memory
+  // 2. Realtime broadcast orders held in memory（仅补缺，不覆盖数据库权威状态）
   broadcastOrdersMemoryCache.forEach((bo) => {
     const norm = normalizeOrder(bo);
-    if (norm._id) {
-      const existing = mergedMap.get(String(norm._id));
-      if (!existing) {
-        mergedMap.set(String(norm._id), norm);
-      } else {
-        const existingTime = parseOrderTimestamp(existing.timestamp);
-        const normTime = parseOrderTimestamp(norm.timestamp);
-        if (normTime >= existingTime) {
-          mergedMap.set(String(norm._id), norm);
-        }
-      }
+    if (norm._id && !mergedMap.has(String(norm._id))) {
+      mergedMap.set(String(norm._id), norm);
     }
   });
 
-  // 3. Local storage orders
+  // 3. Local storage orders（仅补缺，不覆盖数据库权威状态）
   localOrders.forEach((lo: Record<string, unknown>) => {
     const norm = normalizeOrder(lo);
-    if (norm._id) {
-      const existing = mergedMap.get(String(norm._id));
-      if (!existing) {
-        mergedMap.set(String(norm._id), norm);
-      } else {
-        const existingTime = parseOrderTimestamp(existing.timestamp);
-        const normTime = parseOrderTimestamp(norm.timestamp);
-        if (normTime >= existingTime) {
-          mergedMap.set(String(norm._id), norm);
-        }
-      }
+    if (norm._id && !mergedMap.has(String(norm._id))) {
+      mergedMap.set(String(norm._id), norm);
     }
   });
 
@@ -926,17 +908,8 @@ export const api = {
       });
       localOrders.forEach((lo: Record<string, unknown>) => {
         const norm = normalizeOrder(lo);
-        if (norm._id) {
-          const existing = mergedMap.get(String(norm._id));
-          if (!existing) {
-            mergedMap.set(String(norm._id), norm);
-          } else {
-            const existingTime = new Date(existing.timestamp || 0).getTime();
-            const normTime = new Date(norm.timestamp || 0).getTime();
-            if (normTime > existingTime) {
-              mergedMap.set(String(norm._id), norm);
-            }
-          }
+        if (norm._id && !mergedMap.has(String(norm._id))) {
+          mergedMap.set(String(norm._id), norm);
         }
       });
 
