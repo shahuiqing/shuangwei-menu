@@ -274,6 +274,9 @@ export default function AdminPanel({
     handleDeleteCategory,
     handleDeleteDish,
     handleAddDish,
+    handleEditDish,
+    handleCancelEdit,
+    editingDishId,
     handleAITranslate,
     handleAIEnhanceImage,
     handleApiKeyChange,
@@ -1506,6 +1509,9 @@ export default function AdminPanel({
                   handleAddDish={handleAddDish}
                   handleDeleteCategory={handleDeleteCategory}
                   handleDeleteDish={handleDeleteDish}
+                  handleEditDish={handleEditDish}
+                  handleCancelEdit={handleCancelEdit}
+                  editingDishId={editingDishId}
                   handleMoveCategory={handleMoveCategory}
                   handleMoveDish={handleMoveDish}
                   handleExportJson={handleExportJson}

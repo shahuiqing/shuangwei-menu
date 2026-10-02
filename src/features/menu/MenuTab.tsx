@@ -48,6 +48,9 @@ interface MenuTabProps {
   handleAddDish: (e: FormEvent) => void;
   handleDeleteCategory: (idToRemove: string) => void;
   handleDeleteDish: (categoryId: string, dishId: string) => void;
+  handleEditDish: (categoryId: string, dishId: string) => void;
+  handleCancelEdit: () => void;
+  editingDishId?: string | null;
   handleMoveCategory: (catIdx: number, direction: "up" | "down") => void;
   handleMoveDish: (
     catId: string,
@@ -86,6 +89,9 @@ export function MenuTab(props: MenuTabProps) {
     handleAddDish,
     handleDeleteCategory,
     handleDeleteDish,
+    handleEditDish,
+    handleCancelEdit,
+    editingDishId,
     handleMoveCategory,
     handleMoveDish,
     handleExportJson,
@@ -541,6 +547,13 @@ export function MenuTab(props: MenuTabProps) {
                               <Database size={14} /> 改库存
                             </button>
                             <button
+                              onClick={() => handleEditDish(cat.id, item.id)}
+                              className="flex items-center gap-1 text-[10px] sm:text-xs px-2 py-1.5 bg-zinc-900 border border-orange-500/30 text-orange-400 hover:bg-orange-500 hover:text-white rounded-md transition-colors flex-shrink-0"
+                              title="编辑菜品（名称/描述/价格）"
+                            >
+                              <Edit2 size={14} /> 编辑
+                            </button>
+                            <button
                               onClick={() => handleDeleteDish(cat.id, item.id)}
                               className="flex items-center gap-1 text-[10px] sm:text-xs px-2 py-1.5 bg-zinc-900 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-md transition-colors flex-shrink-0"
                               title="Delete dish"
@@ -561,12 +574,14 @@ export function MenuTab(props: MenuTabProps) {
       <>
         {/* Add Dish Settings */}
         <form
+          data-menu-form
           onSubmit={handleAddDish}
           className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800/50"
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Plus size={20} className="text-orange-500" /> 添加新菜品
+              <Plus size={20} className="text-orange-500" />{" "}
+              {editingDishId ? "编辑菜品" : "添加新菜品"}
             </h3>
             <button
               type="button"
@@ -951,12 +966,23 @@ export function MenuTab(props: MenuTabProps) {
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl px-4 py-3 transition-colors mt-4"
-            >
-              确认添加菜品
-            </button>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="submit"
+                className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl px-4 py-3 transition-colors"
+              >
+                {editingDishId ? "保存修改" : "确认添加菜品"}
+              </button>
+              {editingDishId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold"
+                >
+                  取消
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </>

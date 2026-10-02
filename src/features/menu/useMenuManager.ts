@@ -95,6 +95,71 @@ export function useMenuManager(deps: MenuManagerDeps) {
     allergens: [] as string[],
     stock: "",
   });
+  const [editingDishId, setEditingDishId] = useState<string | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null,
+  );
+
+  const resetNewDish = () =>
+    setNewDish({
+      title: "",
+      enTitle: "",
+      frTitle: "",
+      arTitle: "",
+      maTitle: "",
+      description: "",
+      enDescription: "",
+      frDescription: "",
+      arDescription: "",
+      maDescription: "",
+      price: "",
+      image: "",
+      allergens: [] as string[],
+      stock: "",
+    });
+
+  const handleEditDish = (categoryId: string, dishId: string) => {
+    const cat: any = categories.find((c: any) => c.id === categoryId);
+    const item: any = (cat?.items || []).find((i: any) => i.id === dishId);
+    if (!item) return;
+    setEditingDishId(dishId);
+    setEditingCategoryId(categoryId);
+    setSelectedCategory(categoryId);
+    setNewDish({
+      title: item.title || "",
+      enTitle: item.enTitle || "",
+      frTitle: item.frTitle || "",
+      arTitle: item.arTitle || "",
+      maTitle: item.maTitle || "",
+      description: item.description || "",
+      enDescription: item.enDescription || "",
+      frDescription: item.frDescription || "",
+      arDescription: item.arDescription || "",
+      maDescription: item.maDescription || "",
+      price: String(item.price || "").replace(/[^\d.]/g, ""),
+      image: item.image || "",
+      allergens: Array.isArray(item.allergens) ? item.allergens : [],
+      stock:
+        item.stock !== undefined && item.stock !== null
+          ? String(item.stock)
+          : "",
+    });
+    setTimeout(() => {
+      try {
+        document
+          .querySelector("[data-menu-form]")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch {
+        /* ignore */
+      }
+    }, 60);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDishId(null);
+    setEditingCategoryId(null);
+    resetNewDish();
+  };
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [promptDialog, setPromptDialog] = useState<{
@@ -686,6 +751,49 @@ export function useMenuManager(deps: MenuManagerDeps) {
 
   const handleAddDish = (e: FormEvent) => {
     e.preventDefault();
+
+    // 编辑模式：更新现有菜品（可改名称/描述/价格等）
+    if (editingDishId && editingCategoryId) {
+      if (!newDish.title || !newDish.price) {
+        alert("请填写菜品名称和价格！(Title & price required)");
+        return;
+      }
+      const editPrice =
+        currency && currency !== "none"
+          ? `${newDish.price} ${currency}`
+          : newDish.price;
+      const editStockStr = String(newDish.stock ?? "").trim();
+      const editStock =
+        editStockStr === "" || isNaN(Number(editStockStr))
+          ? null
+          : Number(editStockStr);
+      const updatedCategories = categories.map((cat: any) =>
+        cat.id === editingCategoryId
+          ? {
+              ...cat,
+              items: (cat.items || []).map((i: any) =>
+                i.id === editingDishId
+                  ? {
+                      ...i,
+                      ...newDish,
+                      price: editPrice,
+                      stock: editStock,
+                      isSoldOut: editStock === 0 ? true : i.isSoldOut,
+                    }
+                  : i,
+              ),
+            }
+          : cat,
+      );
+      setCategories(updatedCategories);
+      if (onSaveToCloud) {
+        onSaveToCloud({ categories: updatedCategories, silent: true });
+      }
+      handleCancelEdit();
+      alert("菜品已更新！ Dish updated successfully!");
+      return;
+    }
+
     // 兜底：selectedCategory 失效时改用第一个分类，避免"静默失败、啥都没有"
     const targetCatId = categories.some((c: any) => c.id === selectedCategory)
       ? selectedCategory
@@ -724,22 +832,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
     if (!categories.some((c: any) => c.id === selectedCategory)) {
       setSelectedCategory(targetCatId);
     }
-    setNewDish({
-      title: "",
-      enTitle: "",
-      frTitle: "",
-      arTitle: "",
-      maTitle: "",
-      description: "",
-      enDescription: "",
-      frDescription: "",
-      arDescription: "",
-      maDescription: "",
-      price: "",
-      image: "",
-      allergens: [] as string[],
-      stock: "",
-    });
+    resetNewDish();
     if (onSaveToCloud) {
       onSaveToCloud({ categories: updatedCategories, silent: true });
     }
@@ -750,6 +843,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
     // State
     selectedCategory,
     setSelectedCategory,
+    editingDishId,
     newCategory,
     setNewCategory,
     newDish,
@@ -779,6 +873,8 @@ export function useMenuManager(deps: MenuManagerDeps) {
     handleDeleteCategory,
     handleDeleteDish,
     handleAddDish,
+    handleEditDish,
+    handleCancelEdit,
     handleAITranslate,
     handleAIEnhanceImage,
     handleApiKeyChange,
