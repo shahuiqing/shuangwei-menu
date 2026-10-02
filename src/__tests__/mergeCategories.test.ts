@@ -19,7 +19,7 @@ describe("mergeAndOrderCategories", () => {
     expect(r.map((c) => c.id)).toEqual(["c1", "c2"]);
   });
 
-  it("filters globally removed titles even from custom categories", () => {
+  it("preserves custom items whose title matches a globally-removed title", () => {
     const existing = [
       {
         id: "c1",
@@ -31,6 +31,23 @@ describe("mergeAndOrderCategories", () => {
       },
     ];
     const r = mergeAndOrderCategories(existing, initial, []);
+    const items = r.find((c) => c.id === "c1")!.items;
+    expect(items.find((i: any) => i.id === "x")).toBeTruthy();
+    expect(items.find((i: any) => i.id === "i1")).toBeTruthy();
+  });
+
+  it("still filters default items whose title is globally removed", () => {
+    const init = [
+      {
+        id: "c1",
+        name: "Cat1",
+        items: [
+          { id: "def", title: "香菇" },
+          { id: "i1", title: "One" },
+        ],
+      },
+    ];
+    const r = mergeAndOrderCategories([], init, []);
     const items = r.find((c) => c.id === "c1")!.items;
     expect(items.find((i: any) => i.title === "香菇")).toBeUndefined();
     expect(items.find((i: any) => i.id === "i1")).toBeTruthy();
