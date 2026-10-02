@@ -1222,7 +1222,7 @@ export default function AdminPanel({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4 font-sans">
-      <div className="bg-zinc-900 border-zinc-800 sm:border rounded-none sm:rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col h-[100dvh] sm:h-[90vh]">
+      <div className="bg-zinc-900 border-zinc-800 sm:border rounded-none sm:rounded-3xl w-full max-w-4xl lg:max-w-6xl overflow-hidden shadow-2xl relative flex flex-col h-[100dvh] sm:h-[90vh]">
         {/* Notifications Overlay */}
         {notifications.length > 0 && (
           <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-3 pointer-events-none w-[90%] sm:w-[500px]">
@@ -1403,7 +1403,7 @@ export default function AdminPanel({
               />
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 pb-16">
+            <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar flex-1 min-h-0 pb-16">
               {activeTab === "orders" && (
                 <>
                   <OrdersTab

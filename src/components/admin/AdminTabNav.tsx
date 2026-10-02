@@ -50,13 +50,13 @@ export function AdminTabNav({
       onWheel={(e) => {
         if (e.deltaY !== 0) e.currentTarget.scrollLeft += e.deltaY;
       }}
-      className="flex overflow-x-auto space-x-2 border-b border-zinc-800 pb-2 custom-scrollbar pr-8 hide-scrollbar cursor-grab active:cursor-grabbing"
+      className="flex sm:flex-wrap gap-2 overflow-x-auto sm:overflow-x-visible border-b border-zinc-800 pb-3 pr-2 touch-pan-x"
     >
       {TABS.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
           onClick={() => onChange(id)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${activeTab === id ? "bg-orange-600 text-white" : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"}`}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap shrink-0 ${activeTab === id ? "bg-orange-600 text-white" : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"}`}
         >
           <Icon size={16} />
           {label}
