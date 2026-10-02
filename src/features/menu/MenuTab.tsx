@@ -601,6 +601,22 @@ export function MenuTab(props: MenuTabProps) {
               </select>
             </div>
 
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">
+                菜品名称 (中) *
+              </label>
+              <input
+                required
+                type="text"
+                value={newDish.title}
+                onChange={(e) =>
+                  setNewDish({ ...newDish, title: e.target.value })
+                }
+                placeholder="例如：孜然羊肉"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white"
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-1 sm:col-span-2">
                 <label className="block text-xs font-medium text-zinc-400 mb-1">
@@ -673,20 +689,21 @@ export function MenuTab(props: MenuTabProps) {
                     AI 一键美化图片 (统一菜单风格)
                   </button>
                 )}
-                {newDish.image && (
-                  <div className="mt-3 relative w-full h-40 sm:h-48 rounded-xl border border-zinc-800 overflow-hidden bg-zinc-900 group">
-                    <img
-                      src={newDish.image}
-                      alt="Preview"
-                      className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3 pointer-events-none">
-                      <span className="text-[10px] sm:text-xs text-zinc-300 font-medium flex items-center gap-1.5">
-                        <ImageIcon size={14} /> 实时外观预览 (Preview)
-                      </span>
+                {newDish.image &&
+                  /^(https?:\/\/|data:image\/|\/|\.\/)/.test(newDish.image) && (
+                    <div className="mt-3 relative w-full h-40 sm:h-48 rounded-xl border border-zinc-800 overflow-hidden bg-zinc-900 group">
+                      <img
+                        src={newDish.image}
+                        alt="Preview"
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3 pointer-events-none">
+                        <span className="text-[10px] sm:text-xs text-zinc-300 font-medium flex items-center gap-1.5">
+                          <ImageIcon size={14} /> 实时外观预览 (Preview)
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">
@@ -777,20 +794,6 @@ export function MenuTab(props: MenuTabProps) {
 
               <div className="col-span-2 mt-2 border-t border-zinc-800 pt-2 text-xs font-bold text-zinc-500">
                 多语言内容 / Multi-language Content
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">
-                  菜品名称 (中) *
-                </label>
-                <input
-                  required
-                  type="text"
-                  value={newDish.title}
-                  onChange={(e) =>
-                    setNewDish({ ...newDish, title: e.target.value })
-                  }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white"
-                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">
