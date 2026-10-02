@@ -97,6 +97,19 @@ WHERE id = 'global' AND COALESCE("ownerPasswordHash", '') = '';
 DROP POLICY IF EXISTS "anon_read_settings" ON public.settings;
 CREATE POLICY "anon_read_settings" ON public.settings FOR SELECT USING (true);
 
+-- orders 的 anon 读/写策略（老板端只读、顾客端下单必需；幂等）
+-- 若缺失，订单虽然能写入却读不出来，老板端会一直是空的。
+DROP POLICY IF EXISTS "anon_read_orders" ON public.orders;
+CREATE POLICY "anon_read_orders" ON public.orders FOR SELECT USING (true);
+DROP POLICY IF EXISTS "anon_insert_orders" ON public.orders;
+CREATE POLICY "anon_insert_orders" ON public.orders FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "anon_update_orders" ON public.orders;
+CREATE POLICY "anon_update_orders" ON public.orders FOR UPDATE USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "anon_delete_orders" ON public.orders;
+CREATE POLICY "anon_delete_orders" ON public.orders FOR DELETE USING (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.orders TO anon, authenticated;
+GRANT SELECT ON public.settings TO anon, authenticated;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. 库存/配方/采购/流水 的 anon 访问策略（与现有 settings/orders 口径一致）
 --    ⚠️ 内部/低风险场景适用；更强隔离应改为后端 service_role
