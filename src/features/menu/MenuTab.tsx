@@ -776,20 +776,23 @@ export function MenuTab(props: MenuTabProps) {
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {ALLERGEN_OPTIONS.map((allergen) => {
-                    const isSelected = newDish.allergens.includes(allergen.id);
+                    const isSelected = (newDish.allergens || []).includes(
+                      allergen.id,
+                    );
                     return (
                       <button
                         type="button"
                         key={allergen.id}
                         onClick={() => {
-                          setNewDish((prev: any) => ({
-                            ...prev,
-                            allergens: isSelected
-                              ? prev.allergens.filter(
-                                  (a: any) => a !== allergen.id,
-                                )
-                              : [...prev.allergens, allergen.id],
-                          }));
+                          setNewDish((prev: any) => {
+                            const cur = prev.allergens || [];
+                            return {
+                              ...prev,
+                              allergens: isSelected
+                                ? cur.filter((a: any) => a !== allergen.id)
+                                : [...cur, allergen.id],
+                            };
+                          });
                         }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
                           isSelected
