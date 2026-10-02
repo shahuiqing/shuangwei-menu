@@ -322,6 +322,42 @@ export async function updateOrderStatus(
   return true;
 }
 
+/** 编辑订单可改字段（桌号/姓名/备注/金额/支付方式） */
+export async function updateOrderFields(
+  id: string,
+  patch: {
+    table_no?: string;
+    customer_name?: string;
+    customerName?: string;
+    notes?: string;
+    total?: number;
+    total_amount?: number;
+    paymentMethod?: string;
+  },
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("orders")
+    .update({ ...patch, timestamp: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.warn("[owner] updateOrderFields:", error.message);
+    return false;
+  }
+  return true;
+}
+
+/** 删除订单（谨慎：通常保留历史，仅用于误单清理） */
+export async function deleteOrder(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("orders").delete().eq("id", id);
+  if (error) {
+    console.warn("[owner] deleteOrder:", error.message);
+    return false;
+  }
+  return true;
+}
+
 /** 仅拉少量近况订单用于实时流 */
 export async function fetchRecentOrders(limit = 30): Promise<any[]> {
   if (!supabase) return [];

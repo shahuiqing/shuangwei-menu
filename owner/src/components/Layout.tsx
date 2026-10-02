@@ -24,6 +24,7 @@ export type OwnerTab =
   | "dashboard"
   | "orders"
   | "reports"
+  | "dishes"
   | "menu"
   | "procurement"
   | "inventory"
@@ -37,7 +38,8 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "dashboard", label: "经营看板", icon: LayoutDashboard },
   { id: "orders", label: "订单管理", icon: ReceiptText },
   { id: "reports", label: "销售报表", icon: BarChart3 },
-  { id: "menu", label: "菜单分析", icon: UtensilsCrossed },
+  { id: "dishes", label: "菜品管理", icon: UtensilsCrossed },
+  { id: "menu", label: "菜单分析", icon: BarChart3 },
   { id: "procurement", label: "采购管理", icon: ShoppingCart },
   { id: "inventory", label: "库存管理", icon: Boxes },
   { id: "recipe", label: "配方 BOM", icon: NotebookText },
@@ -57,7 +59,7 @@ const MOBILE_PRIMARY: OwnerTab[] = [
 
 // 移动端「更多」里的分组
 const MOBILE_GROUPS: { title: string; items: OwnerTab[] }[] = [
-  { title: "经营", items: ["reports", "menu"] },
+  { title: "经营", items: ["dishes", "reports", "menu"] },
   { title: "供应与成本", items: ["procurement", "inventory", "recipe"] },
   { title: "管理", items: ["staff", "settings"] },
 ];

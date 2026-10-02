@@ -31,6 +31,7 @@ const newLocalId = () =>
 
 export default function Procurement({ version = 0 }: { version?: number }) {
   const [list, setList] = useState<PurchaseOrder[]>([]);
+  const [q, setQ] = useState("");
   const [inv, setInv] = useState<InventoryItem[]>([]);
   const [boms, setBoms] = useState<RecipeBom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +80,20 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   }, [list, monthKey]);
 
   const restock = useMemo(() => restockSuggestions(inv), [inv]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter(
+      (p) =>
+        String(p.item_name || "")
+          .toLowerCase()
+          .includes(needle) ||
+        String(p.supplier || "")
+          .toLowerCase()
+          .includes(needle),
+    );
+  }, [list, q]);
 
   const impacts = useMemo(
     () =>
@@ -261,12 +276,18 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         >
           <Download size={16} /> 导出
         </button>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="搜索原料 / 供应商"
+          className="flex-1 min-w-[160px] bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+        />
       </div>
 
-      <ChartCard title="采购记录" subtitle={`共 ${list.length} 笔`}>
+      <ChartCard title="采购记录" subtitle={`共 ${filtered.length} 笔`}>
         {loading ? (
           <Skeleton className="h-40 w-full" />
-        ) : list.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <EmptyState text="暂无采购记录" />
         ) : (
           <div className="overflow-x-auto">
@@ -282,7 +303,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => (
+                {filtered.map((p) => (
                   <tr
                     key={p.id}
                     className="border-b border-zinc-800/50 hover:bg-zinc-800/30"

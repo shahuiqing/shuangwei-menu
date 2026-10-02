@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Save, UserCog, RefreshCw, Info } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Save,
+  UserCog,
+  RefreshCw,
+  Info,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
 import { fetchStaff, saveStaff, type Staff } from "../lib/data";
@@ -8,6 +17,7 @@ export default function StaffView() {
   const [list, setList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showPw, setShowPw] = useState<Record<number, boolean>>({});
 
   const load = async () => {
     setLoading(true);
@@ -25,15 +35,28 @@ export default function StaffView() {
       prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)),
     );
   const remove = (i: number) =>
-    setList((prev) => prev.filter((_, idx) => idx !== i));
+    setList((prev) =>
+      prev.length <= 1
+        ? [{ name: "", password: "" }]
+        : prev.filter((_, idx) => idx !== i),
+    );
   const add = () => setList((prev) => [...prev, { name: "", password: "" }]);
 
   const save = async () => {
+    // 校验：过滤空行；姓名/密码都必填；姓名不可重复
+    const filled = list.filter((s) => s.name.trim() || s.password.trim());
+    const invalid = filled.find((s) => !s.name.trim() || !s.password.trim());
+    if (invalid) return toast.error("有员工缺少姓名或密码，请补全后再保存");
+    const names = filled.map((s) => s.name.trim());
+    if (new Set(names).size !== names.length)
+      return toast.error("存在重名的员工，请修改后保存");
     setSaving(true);
-    const ok = await saveStaff(list);
+    const ok = await saveStaff(filled);
     setSaving(false);
-    if (ok) toast.success("已保存到云端");
-    else toast.error("保存失败（检查数据库权限）");
+    if (ok) {
+      toast.success(`已保存 ${filled.length} 名员工到云端`);
+      load();
+    } else toast.error("保存失败（检查数据库权限）");
   };
 
   const validCount = list.filter(
@@ -96,12 +119,22 @@ export default function StaffView() {
                   placeholder="姓名 / 工号"
                   className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
                 />
-                <input
-                  value={s.password}
-                  onChange={(e) => update(i, { password: e.target.value })}
-                  placeholder="登录密码"
-                  className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type={showPw[i] ? "text" : "password"}
+                    value={s.password}
+                    onChange={(e) => update(i, { password: e.target.value })}
+                    placeholder="登录密码"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl pl-3 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((p) => ({ ...p, [i]: !p[i] }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
+                  >
+                    {showPw[i] ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
                 <button
                   onClick={() => remove(i)}
                   className="shrink-0 px-3 py-2.5 text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-xl"

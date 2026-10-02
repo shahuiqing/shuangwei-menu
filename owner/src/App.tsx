@@ -4,6 +4,7 @@ import Login from "./views/Login";
 import Dashboard from "./views/Dashboard";
 import Orders from "./views/Orders";
 import Reports from "./views/Reports";
+import Dishes from "./views/Dishes";
 import MenuAnalysis from "./views/MenuAnalysis";
 import Procurement from "./views/Procurement";
 import Inventory from "./views/Inventory";
@@ -191,6 +192,7 @@ export default function App() {
           {tab === "reports" && (
             <Reports settings={settings} version={version} />
           )}
+          {tab === "dishes" && <Dishes version={version} />}
           {tab === "menu" && <MenuAnalysis version={version} />}
           {tab === "procurement" && <Procurement version={version} />}
           {tab === "inventory" && <Inventory version={version} />}

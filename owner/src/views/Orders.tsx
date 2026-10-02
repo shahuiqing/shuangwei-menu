@@ -8,6 +8,8 @@ import {
   Clock,
   CreditCard,
   Printer,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { EmptyState, Skeleton } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -24,6 +26,8 @@ import {
   rangeToIso,
   fetchOrdersPage,
   updateOrderStatus,
+  updateOrderFields,
+  deleteOrder,
   NEXT_STATUS,
 } from "../lib/aggregate";
 
@@ -77,6 +81,14 @@ export default function Orders({ version = 0 }: { version?: number }) {
   const [detail, setDetail] = useState<any | null>(null);
   const [qDebounced, setQDebounced] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState({
+    table_no: "",
+    customer_name: "",
+    total: "",
+    paymentMethod: "",
+    notes: "",
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q), 400);
@@ -109,6 +121,76 @@ export default function Orders({ version = 0 }: { version?: number }) {
 
   const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const resetPage = () => setPage(0);
+
+  const openDetail = (o: any) => {
+    setDetail(o);
+    setEditing(false);
+    setEditDraft({
+      table_no: String(o.table_no || o.tableNo || ""),
+      customer_name: String(o.customer_name || o.customerName || ""),
+      total: String(o.finalTotal ?? o.total ?? o.total_amount ?? ""),
+      paymentMethod: String(o.paymentMethod || ""),
+      notes: String(o.notes || ""),
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!detail) return;
+    const id = String(detail.id || detail._id);
+    const total = Number(editDraft.total) || 0;
+    setBusy(true);
+    const ok = await updateOrderFields(id, {
+      table_no: editDraft.table_no,
+      customer_name: editDraft.customer_name,
+      customerName: editDraft.customer_name,
+      notes: editDraft.notes,
+      total,
+      total_amount: total,
+      paymentMethod: editDraft.paymentMethod,
+    });
+    setBusy(false);
+    if (!ok) return toast.error("保存失败");
+    toast.success("订单已更新");
+    setDetail({
+      ...detail,
+      table_no: editDraft.table_no,
+      customer_name: editDraft.customer_name,
+      customerName: editDraft.customer_name,
+      notes: editDraft.notes,
+      total,
+      total_amount: total,
+      paymentMethod: editDraft.paymentMethod,
+    });
+    setRows((prev) =>
+      prev.map((o) =>
+        String(o.id || o._id) === id
+          ? {
+              ...o,
+              table_no: editDraft.table_no,
+              customer_name: editDraft.customer_name,
+              customerName: editDraft.customer_name,
+              total,
+              total_amount: total,
+            }
+          : o,
+      ),
+    );
+    setEditing(false);
+  };
+
+  const removeOrder = async () => {
+    if (!detail) return;
+    const id = String(detail.id || detail._id);
+    if (!confirm(`删除订单「${detail.orderNumber || id}」？此操作不可恢复。`))
+      return;
+    setBusy(true);
+    const ok = await deleteOrder(id);
+    setBusy(false);
+    if (!ok) return toast.error("删除失败");
+    toast.success("订单已删除");
+    setRows((prev) => prev.filter((o) => String(o.id || o._id) !== id));
+    setDetail(null);
+  };
 
   const changeStatus = async (s: string) => {
     if (!detail) return;
@@ -245,7 +327,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
               rows.map((o, i) => (
                 <button
                   key={o._id || o.id || i}
-                  onClick={() => setDetail(o)}
+                  onClick={() => openDetail(o)}
                   className="w-full text-left bg-zinc-900 border border-white/5 rounded-xl p-3 active:scale-[0.99] transition-transform"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -322,7 +404,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() => setDetail(o)}
+                            onClick={() => openDetail(o)}
                             className="text-zinc-400 hover:text-white inline-flex items-center gap-1"
                           >
                             <Clock size={14} /> 查看
@@ -455,18 +537,116 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 </div>
               )}
 
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() =>
+                    import("../lib/print-lite").then((m) =>
+                      m.printOrder(detail),
+                    )
+                  }
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
+                >
+                  <Printer size={16} /> 打印小票
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => setEditing((v) => !v)}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm disabled:opacity-50"
+                >
+                  <Pencil size={16} /> 编辑
+                </button>
+              </div>
+
               <button
-                onClick={() =>
-                  import("../lib/print-lite").then((m) => m.printOrder(detail))
-                }
-                className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
+                disabled={busy}
+                onClick={removeOrder}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm disabled:opacity-50"
               >
-                <Printer size={16} /> 打印小票
+                <Trash2 size={16} /> 删除订单
               </button>
+
+              {editing && (
+                <div className="mt-4 bg-zinc-950 border border-white/5 rounded-2xl p-4 space-y-3">
+                  <div className="text-sm font-semibold text-white">
+                    编辑订单
+                  </div>
+                  <OrderField
+                    label="桌号"
+                    value={editDraft.table_no}
+                    onChange={(v) =>
+                      setEditDraft({ ...editDraft, table_no: v })
+                    }
+                  />
+                  <OrderField
+                    label="顾客/姓名"
+                    value={editDraft.customer_name}
+                    onChange={(v) =>
+                      setEditDraft({ ...editDraft, customer_name: v })
+                    }
+                  />
+                  <OrderField
+                    label="金额"
+                    type="number"
+                    value={editDraft.total}
+                    onChange={(v) => setEditDraft({ ...editDraft, total: v })}
+                  />
+                  <OrderField
+                    label="支付方式"
+                    value={editDraft.paymentMethod}
+                    onChange={(v) =>
+                      setEditDraft({ ...editDraft, paymentMethod: v })
+                    }
+                  />
+                  <OrderField
+                    label="备注"
+                    value={editDraft.notes}
+                    onChange={(v) => setEditDraft({ ...editDraft, notes: v })}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      disabled={busy}
+                      onClick={saveEdit}
+                      className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold disabled:opacity-50"
+                    >
+                      保存修改
+                    </button>
+                    <button
+                      onClick={() => setEditing(false)}
+                      className="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-sm"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function OrderField({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs text-zinc-400">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full mt-1 bg-zinc-900 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+      />
+    </label>
   );
 }
