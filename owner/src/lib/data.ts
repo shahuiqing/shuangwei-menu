@@ -29,6 +29,21 @@ export async function fetchSettings(): Promise<any | null> {
   return data || null;
 }
 
+export async function saveSettingsField(
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("settings")
+    .update(patch)
+    .eq("id", "global");
+  if (error) {
+    console.warn("[owner] saveSettingsField:", error.message);
+    return false;
+  }
+  return true;
+}
+
 export async function fetchStaff(): Promise<Staff[]> {
   const s = await fetchSettings();
   const list = s?.devicePasswordsHash || s?.devicePasswords || [];

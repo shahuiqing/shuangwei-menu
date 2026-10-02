@@ -1,12 +1,28 @@
 import { useMemo, useState } from "react";
-import { Search, X, Clock, Eye } from "lucide-react";
 import {
-  dayKey,
-  fmtDateTime,
-  fmtMoney,
-  STATUS_TEXT,
+  Search,
+  X,
+  Eye,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  Printer,
+} from "lucide-react";
+import { EmptyState } from "../components/ui";
+import { toast } from "../components/Toast";
+import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
+import {
+  orderItems,
+  orderTime,
+  orderTotal,
+  rangeBounds,
   tableName,
-} from "../lib/format";
+  itemQty,
+  itemRevenue,
+  type RangeKey,
+} from "../lib/analytics";
 
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-orange-500/20 text-orange-400",
@@ -16,22 +32,49 @@ const STATUS_CLS: Record<string, string> = {
   cancelled: "bg-red-500/20 text-red-400",
 };
 
+const PAGE_SIZE = 50;
+
+function exportCsv(rows: any[]) {
+  const header = ["桌号", "时间", "状态", "菜品数", "金额", "支付方式", "单号"];
+  const body = rows.map((o) => [
+    tableName(o),
+    fmtDateTime(o.timestamp || o.created_at),
+    STATUS_TEXT[o.status || "pending"] || "",
+    orderItems(o).reduce((s, it) => s + itemQty(it), 0),
+    orderTotal(o),
+    o.paymentMethod || "",
+    o.orderNumber || o._id || o.id || "",
+  ]);
+  const csv =
+    "\uFEFF" +
+    [header, ...body]
+      .map((r) =>
+        r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","),
+      )
+      .join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export default function Orders({ orders }: { orders: any[] }) {
-  const [range, setRange] = useState<"today" | "7d" | "all">("today");
-  const [status, setStatus] = useState<string>("all");
+  const [range, setRange] = useState<RangeKey>("today");
+  const [status, setStatus] = useState("all");
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState<"time_desc" | "time_asc" | "amount_desc">(
+    "time_desc",
+  );
+  const [page, setPage] = useState(0);
   const [detail, setDetail] = useState<any | null>(null);
 
   const filtered = useMemo(() => {
-    const today = dayKey(Date.now());
-    const now = Date.now();
-    return orders.filter((o) => {
-      const k = dayKey(o.timestamp || o.created_at);
-      if (range === "today" && k !== today) return false;
-      if (range === "7d") {
-        const t = new Date(k + "T00:00:00").getTime();
-        if (now - t > 7 * 86400000) return false;
-      }
+    const b = rangeBounds(range);
+    let list = orders.filter((o) => {
+      const t = orderTime(o);
+      if (t < b.start || t > b.end) return false;
       if (status !== "all" && (o.status || "pending") !== status) return false;
       if (q.trim()) {
         const needle = q.trim().toLowerCase();
@@ -41,26 +84,45 @@ export default function Orders({ orders }: { orders: any[] }) {
       }
       return true;
     });
-  }, [orders, range, status, q]);
+    list = [...list].sort((a, b2) => {
+      if (sort === "time_desc") return orderTime(b2) - orderTime(a);
+      if (sort === "time_asc") return orderTime(a) - orderTime(b2);
+      return orderTotal(b2) - orderTotal(a);
+    });
+    return list;
+  }, [orders, range, status, q, sort]);
 
-  const totalRevenue = filtered
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(
+    pageClamped * PAGE_SIZE,
+    pageClamped * PAGE_SIZE + PAGE_SIZE,
+  );
+  const revenue = filtered
     .filter((o) => o.status === "completed")
-    .reduce((s, o) => s + Number(o.total || o.total_amount || 0), 0);
+    .reduce((s, o) => s + orderTotal(o), 0);
+
+  const resetPage = () => setPage(0);
 
   return (
     <div className="space-y-4">
+      {/* 筛选栏 */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
           {(
             [
               ["today", "今天"],
               ["7d", "近7天"],
+              ["30d", "近30天"],
               ["all", "全部"],
             ] as const
           ).map(([id, label]) => (
             <button
               key={id}
-              onClick={() => setRange(id)}
+              onClick={() => {
+                setRange(id);
+                resetPage();
+              }}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
             >
               {label}
@@ -70,7 +132,10 @@ export default function Orders({ orders }: { orders: any[] }) {
 
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            resetPage();
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
         >
           <option value="all">全部状态</option>
@@ -81,6 +146,16 @@ export default function Orders({ orders }: { orders: any[] }) {
           <option value="cancelled">已取消</option>
         </select>
 
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
+        >
+          <option value="time_desc">时间 ↓（新→旧）</option>
+          <option value="time_asc">时间 ↑（旧→新）</option>
+          <option value="amount_desc">金额 ↓</option>
+        </select>
+
         <div className="relative flex-1 min-w-[160px]">
           <Search
             size={16}
@@ -88,26 +163,38 @@ export default function Orders({ orders }: { orders: any[] }) {
           />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              resetPage();
+            }}
             placeholder="搜索桌号 / 单号 / 顾客"
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
           />
         </div>
 
-        <div className="text-sm text-zinc-400">
-          {filtered.length} 单 · 营收{" "}
-          <span className="text-orange-400 font-bold">
-            {fmtMoney(totalRevenue)}
-          </span>
-        </div>
+        <button
+          onClick={() => {
+            if (!filtered.length) return toast.error("没有可导出的数据");
+            exportCsv(filtered);
+            toast.success(`已导出 ${filtered.length} 条订单`);
+          }}
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+        >
+          <Download size={16} /> 导出 CSV
+        </button>
       </div>
 
-      {/* 手机端：卡片列表 */}
+      <div className="text-sm text-zinc-400">
+        {filtered.length} 单 · 营收{" "}
+        <span className="text-orange-400 font-bold">{fmtMoney(revenue)}</span>
+      </div>
+
+      {/* 手机卡片 */}
       <div className="sm:hidden space-y-2">
-        {filtered.length === 0 ? (
-          <p className="text-center text-zinc-500 py-10">暂无订单</p>
+        {pageRows.length === 0 ? (
+          <EmptyState text="暂无订单" />
         ) : (
-          filtered.slice(0, 200).map((o, i) => (
+          pageRows.map((o, i) => (
             <button
               key={o._id || o.id || i}
               onClick={() => setDetail(o)}
@@ -128,20 +215,15 @@ export default function Orders({ orders }: { orders: any[] }) {
                   {fmtDateTime(o.timestamp || o.created_at)}
                 </span>
                 <span className="text-orange-400 font-bold text-sm">
-                  {fmtMoney(Number(o.total || o.total_amount || 0))}
+                  {fmtMoney(orderTotal(o))}
                 </span>
               </div>
             </button>
           ))
         )}
-        {filtered.length > 200 && (
-          <p className="text-center text-xs text-zinc-500 py-2">
-            仅显示前 200 条，请用筛选缩小范围
-          </p>
-        )}
       </div>
 
-      {/* 桌面端：表格 */}
+      {/* 桌面表格 */}
       <div className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -156,14 +238,14 @@ export default function Orders({ orders }: { orders: any[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center text-zinc-500 py-10">
                     暂无订单
                   </td>
                 </tr>
               ) : (
-                filtered.slice(0, 300).map((o, i) => (
+                pageRows.map((o, i) => (
                   <tr
                     key={o._id || o.id || i}
                     className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
@@ -182,13 +264,10 @@ export default function Orders({ orders }: { orders: any[] }) {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-zinc-400">
-                      {(o.items || []).reduce(
-                        (s: number, it: any) => s + Number(it?.quantity || 1),
-                        0,
-                      )}
+                      {orderItems(o).reduce((s, it) => s + itemQty(it), 0)}
                     </td>
                     <td className="px-4 py-3 text-right text-orange-400 font-semibold">
-                      {fmtMoney(Number(o.total || o.total_amount || 0))}
+                      {fmtMoney(orderTotal(o))}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -204,28 +283,47 @@ export default function Orders({ orders }: { orders: any[] }) {
             </tbody>
           </table>
         </div>
-        {filtered.length > 300 && (
-          <div className="text-center text-xs text-zinc-500 py-2">
-            仅显示前 300 条，请用筛选缩小范围
-          </div>
-        )}
       </div>
 
+      {/* 分页 */}
+      {pageCount > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={pageClamped === 0}
+            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-40"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-sm text-zinc-400">
+            第 {pageClamped + 1} / {pageCount} 页
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={pageClamped >= pageCount - 1}
+            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-40"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* 详情抽屉 */}
       {detail && (
         <div
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end"
           onClick={() => setDetail(null)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+            className="bg-zinc-900 border-l border-zinc-800 w-full max-w-md h-full overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 sticky top-0 bg-zinc-900">
+            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 px-5 py-4 flex items-start justify-between">
               <div>
-                <div className="text-2xl font-black text-white">
+                <div className="text-3xl font-black text-white">
                   {tableName(detail)}
                 </div>
-                <div className="text-xs text-zinc-500 flex items-center gap-1 mt-1">
+                <div className="text-xs text-zinc-500 flex items-center gap-1.5 mt-1">
                   <Clock size={12} />
                   {fmtDateTime(detail.timestamp || detail.created_at)} · 单号{" "}
                   {detail.orderNumber || "N/A"}
@@ -238,27 +336,55 @@ export default function Orders({ orders }: { orders: any[] }) {
                 <X size={20} />
               </button>
             </div>
-            <div className="p-5 space-y-2">
-              {(detail.items || []).map((it: any, i: number) => (
-                <div
-                  key={i}
-                  className="flex justify-between items-center bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <span
+                  className={`text-xs px-2.5 py-1 rounded-full font-bold ${STATUS_CLS[detail.status || "pending"] || STATUS_CLS.pending}`}
                 >
-                  <span className="text-zinc-300">{it?.name || it?.title}</span>
-                  <span className="text-zinc-500">x{it?.quantity || 1}</span>
-                  <span className="text-zinc-300 w-16 text-right">
-                    {fmtMoney(
-                      Number(it?.price || 0) * Number(it?.quantity || 1),
-                    )}
+                  {STATUS_TEXT[detail.status || "pending"] || "待接单"}
+                </span>
+                {detail.paymentMethod && (
+                  <span className="flex items-center gap-1 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full">
+                    <CreditCard size={12} /> {detail.paymentMethod}
                   </span>
-                </div>
-              ))}
-              <div className="flex justify-between items-center pt-3 mt-2 border-t border-zinc-800">
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {orderItems(detail).map((it, i) => (
+                  <div
+                    key={i}
+                    className="flex justify-between items-center bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <span className="text-zinc-300 truncate mr-2">
+                      {it?.name || it?.title}
+                    </span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-zinc-500">x{itemQty(it)}</span>
+                      <span className="text-zinc-300 w-16 text-right">
+                        {fmtMoney(itemRevenue(it))}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center pt-4 mt-4 border-t border-zinc-800">
                 <span className="text-zinc-400">合计</span>
-                <span className="text-2xl font-black text-orange-400">
-                  {fmtMoney(Number(detail.total || detail.total_amount || 0))}
+                <span className="text-3xl font-black text-orange-400">
+                  {fmtMoney(orderTotal(detail))}
                 </span>
               </div>
+
+              <button
+                onClick={() =>
+                  import("../lib/print-lite").then((m) => m.printOrder(detail))
+                }
+                className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
+              >
+                <Printer size={16} /> 打印小票
+              </button>
             </div>
           </div>
         </div>
