@@ -4,11 +4,7 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": false,
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -19,15 +15,11 @@
     "allowJs": false,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@google/genai": [
-        "./src/types/genai-stub.d.ts"
-      ]
+      "@/*": ["./src/*"],
+      "@google/genai": ["./src/types/genai-stub.d.ts"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["scripts/migrations"]
+  "exclude": ["scripts/migrations", "owner"]
 }
