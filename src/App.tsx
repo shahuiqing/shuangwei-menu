@@ -1073,16 +1073,27 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [language, setLanguage] = useState<Language>(() => {
-    if (typeof navigator !== "undefined" && navigator.language) {
-      const sysLang = navigator.language.toLowerCase();
-      if (sysLang.startsWith("zh")) return "zh";
-      if (sysLang.startsWith("fr")) return "fr";
-      if (sysLang === "ar-ma") return "ma";
-      if (sysLang.startsWith("ar")) return "ar";
-      if (sysLang.startsWith("en")) return "en";
-      return "en"; // Default to English if not matched
+    // 1) 用户手动选过就沿用上次选择
+    const saved = safeGetItem("menuLanguage");
+    if (saved && ["zh", "en", "fr", "ar", "ma"].includes(saved)) {
+      return saved as Language;
     }
-    return "en";
+    // 2) 按手机系统语言自动适配（优先 navigator.languages 列表）
+    if (typeof navigator !== "undefined") {
+      const list =
+        navigator.languages && navigator.languages.length
+          ? navigator.languages
+          : [navigator.language || ""];
+      for (const raw of list) {
+        const l = String(raw || "").toLowerCase();
+        if (l.startsWith("zh")) return "zh";
+        if (l.startsWith("fr")) return "fr";
+        if (l === "ar-ma" || l.startsWith("ary")) return "ma";
+        if (l.startsWith("ar")) return "ar";
+        if (l.startsWith("en")) return "en";
+      }
+    }
+    return "fr"; // 未匹配默认法语（摩洛哥常用，想改默认告诉我）
   });
   const [showSplash, setShowSplash] = useState(true);
   const [isAdminAuthed, setIsAdminAuthed] = useState(() => readAdminAuthed());
@@ -2783,6 +2794,7 @@ export default function App() {
                     key={lang.id}
                     onClick={() => {
                       setLanguage(lang.id as Language);
+                      safeSetItem("menuLanguage", lang.id);
                       setIsLanguageOpen(false);
                     }}
                     className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
