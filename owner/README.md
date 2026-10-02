@@ -77,15 +77,17 @@ npm run build             # 产出 owner/dist
 - 首次登录后请立即在「系统设置」修改密码；云端改密用 `POST /api/auth/set-owner-password`（需 `ADMIN_SECRET`）。
 - 环境变量 `VITE_OWNER_PASSWORD` 仅作为**离线初始密码**回退，生产建议配合后端哈希使用。
 
-## 数据库脚本（均幂等，按顺序执行）
+## 数据库脚本
 
-1. `supabase_schema.sql`
-2. `supabase_setup.sql`
-3. `supabase_inventory_bom.sql`
-4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）
-5. `supabase_owner_inventory_rls.sql`
-6. `supabase_owner_quota.sql`
-7. `supabase_owner_auth.sql`
+**推荐：一次性执行 `supabase_owner_all.sql`**（仓库根目录）
+
+- 在 Supabase Dashboard → SQL Editor 粘贴整个文件运行即可；
+- 幂等、可重复执行，自动创建：库存相关表、`orders` 结账字段、RLS 策略、采购原子 RPC、BOM 扣减触发器、全部 `owner_*` 聚合函数，并刷新 PostgREST 缓存；
+- 执行后若页面仍提示缺函数，再跑一次 `NOTIFY pgrst, 'reload schema';`。
+
+如需分步（均幂等）：
+
+1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql` → 7. `supabase_owner_auth.sql`
 
 ## 注意事项
 

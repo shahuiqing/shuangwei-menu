@@ -44,24 +44,36 @@ export function rangeToIso(
   };
 }
 
-/* 数据库未初始化（聚合函数缺失）时的诊断通知 */
-let schemaErrorNotified = false;
-let schemaErrorListeners: (() => void)[] = [];
-export function onRpcSchemaError(cb: () => void): () => void {
+/* 数据库未初始化（聚合函数/列缺失）时的诊断通知 */
+export interface RpcSchemaError {
+  fn: string;
+  code?: string;
+  message: string;
+}
+
+let schemaError: RpcSchemaError | null = null;
+let schemaErrorListeners: ((e: RpcSchemaError) => void)[] = [];
+
+export function onRpcSchemaError(cb: (e: RpcSchemaError) => void): () => void {
   schemaErrorListeners.push(cb);
   return () => {
     schemaErrorListeners = schemaErrorListeners.filter((l) => l !== cb);
   };
 }
 
-function isMissingFunction(error: {
-  code?: string;
-  message?: string;
-}): boolean {
+export function getRpcSchemaError(): RpcSchemaError | null {
+  return schemaError;
+}
+
+/** 是否为「函数/列缺失」类错误（多为未执行 SQL 脚本） */
+function isSchemaError(error: { code?: string; message?: string }): boolean {
+  const msg = error.message || "";
   return (
-    error.code === "PGRST202" ||
-    /could not find the function|schema cache|does not exist/i.test(
-      error.message || "",
+    error.code === "PGRST202" || // function not found
+    error.code === "PGRST204" || // column not found
+    error.code === "42703" || // undefined_column
+    /could not find the function|schema cache|does not exist|function .*does not exist/i.test(
+      msg,
     )
   );
 }
@@ -74,10 +86,10 @@ const call = async <T>(
   if (!supabase) return fallback;
   const { data, error } = await supabase.rpc(fn, args);
   if (error) {
-    console.warn(`[owner] rpc ${fn}:`, error.message);
-    if (isMissingFunction(error) && !schemaErrorNotified) {
-      schemaErrorNotified = true;
-      schemaErrorListeners.forEach((cb) => cb());
+    console.warn(`[owner] rpc ${fn}:`, error.message, error.code);
+    if (isSchemaError(error)) {
+      schemaError = { fn, code: error.code, message: error.message };
+      schemaErrorListeners.forEach((cb) => cb(schemaError!));
     }
     return fallback;
   }

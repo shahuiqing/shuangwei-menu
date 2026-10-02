@@ -520,6 +520,36 @@ owner/src/lib/cost.ts              # 成本/毛利计算
 
 ---
 
+## 19. 一键初始化脚本 + 缺函数诊断（修复「缺少聚合函数」）
+
+### 19.1 背景
+
+老板端的库存/成本/报表依赖自建 SQL 对象（表、列、RLS、触发器、`owner_*` 聚合函数）。若 Supabase 数据库从未执行过这些脚本，前端调用 RPC 会报 `Could not find the function ... in the schema cache`。
+
+### 19.2 新增 `supabase_owner_all.sql`（仓库根目录）
+
+一次性、幂等、可独立执行的初始化脚本，包含：
+
+1. 库存四表 `CREATE TABLE IF NOT EXISTS`；
+2. `orders` 结账字段 + 索引；
+3. `settings.ownerPasswordHash`（初始 `123456`）+ settings anon 读；
+4. 库存四表 anon RLS + 表授权；
+5. 采购原子 RPC `owner_create_purchase`；
+6. BOM v2：`deduct_order_bom` / `apply_order_bom` + 触发器；
+7. 全部 `owner_*` 聚合 RPC（sales/daily/dish/hourly/consumption*/daily_profit/table_stats/prune）；
+8. `NOTIFY pgrst, 'reload schema';` 刷新 PostgREST 缓存 + 校验查询。
+
+### 19.3 前端诊断增强
+
+- `aggregate.ts`：`isSchemaError` 覆盖 `PGRST202/PGRST204/42703` 与 `does not exist`；记录失败函数名、错误码、原始消息。
+- `App.tsx`：改为**常驻红色横幅**（原为一次性 toast），显示具体 `owner_*` 函数与原始错误，指引执行 `supabase_owner_quota.sql` / `supabase_owner_all.sql`。
+
+### 19.4 使用
+
+Supabase Dashboard → SQL Editor → 粘贴 `supabase_owner_all.sql` → Run。若仍报缺函数，再执行一次 `NOTIFY pgrst, 'reload schema';`。
+
+---
+
 ## 16. 采购 ↔ 库存/成本联动（已实现）
 
 - **补货建议**：`restockSuggestions` 按安全库存缺口生成建议（数量、预估金额，按金额降序），采购页顶部展示，一键「补货」预填采购单。

@@ -13,12 +13,17 @@ import Consumption from "./views/Consumption";
 import StaffView from "./views/Staff";
 import Settings from "./views/Settings";
 import { Layout, type OwnerTab } from "./components/Layout";
-import { ToastHost, toast } from "./components/Toast";
+import { ToastHost } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isAuthed, clearAuthed } from "./lib/auth";
 import { isConfigured, STORE_NAME } from "./lib/supabase";
 import { fetchSettings } from "./lib/data";
-import { fetchRecentOrders, onRpcSchemaError } from "./lib/aggregate";
+import {
+  fetchRecentOrders,
+  onRpcSchemaError,
+  getRpcSchemaError,
+  type RpcSchemaError,
+} from "./lib/aggregate";
 import { subscribeOwner, type OrderChange } from "./lib/realtime";
 
 const RECENT_LIMIT = 30;
@@ -67,12 +72,11 @@ export default function App() {
     if (authed) load();
   }, [authed, load]);
 
-  // 数据库未初始化（聚合函数缺失）时给出明确指引
-  useEffect(() => {
-    return onRpcSchemaError(() => {
-      toast.error("数据库缺少聚合函数：请先执行 supabase_owner_quota.sql");
-    });
-  }, []);
+  // 数据库未初始化（聚合函数/列缺失）时常驻提示
+  const [schemaErr, setSchemaErr] = useState<RpcSchemaError | null>(() =>
+    getRpcSchemaError(),
+  );
+  useEffect(() => onRpcSchemaError(setSchemaErr), []);
 
   // 实时订阅：订单/设置变更即时反映，合并 20s 后统一刷新聚合
   useEffect(() => {
@@ -150,6 +154,28 @@ export default function App() {
               未配置 Supabase：请在 `.env` 填写 VITE_SUPABASE_URL 与
               VITE_SUPABASE_ANON_KEY 后重新构建。
             </span>
+          </div>
+        )}
+
+        {isConfigured && schemaErr && (
+          <div className="mb-4 flex items-start gap-2 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="font-semibold text-red-200">
+                数据库缺少聚合函数，报表/看板无法取数
+              </div>
+              <div className="mt-1">
+                请在目标 Supabase 项目的 SQL Editor 依次执行：
+                <code className="mx-1 px-1.5 py-0.5 rounded bg-black/30">
+                  supabase_owner_quota.sql
+                </code>
+                （及其它需要的脚本）后刷新页面。
+              </div>
+              <div className="mt-1 text-[11px] text-red-400/80 break-all">
+                调用失败：{schemaErr.fn} · {schemaErr.code || "ERR"} ·{" "}
+                {schemaErr.message}
+              </div>
+            </div>
           </div>
         )}
 
