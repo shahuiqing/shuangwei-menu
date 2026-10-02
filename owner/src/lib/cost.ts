@@ -7,6 +7,7 @@ import {
   isCompleted,
   isCancelled,
   type Bounds,
+  type MatrixQuad,
 } from "./analytics";
 import {
   num,
@@ -200,6 +201,51 @@ export function dishMargins(
 
 export function sumCost(margins: DishMargin[]): number {
   return margins.reduce((s, m) => s + m.cost, 0);
+}
+
+/* ============ 菜单工程矩阵（营收 / 毛利 口径） ============ */
+
+export type MenuMetric = "revenue" | "profit";
+
+export interface MenuPoint {
+  name: string;
+  qty: number;
+  unit: number; // 单价 或 单位毛利
+  value: number; // 营收 或 毛利
+  quad: MatrixQuad;
+  hasCost: boolean;
+}
+
+const meanVal = (xs: number[]) =>
+  xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+
+/** 依据销量与单位贡献做四象限分类（销量/单位贡献均取均值分界） */
+export function buildMenuPoints(
+  margins: DishMargin[],
+  metric: MenuMetric,
+): MenuPoint[] {
+  const base = margins
+    .filter((d) => d.qty > 0)
+    .map((d) => ({
+      name: d.name,
+      qty: d.qty,
+      unit: metric === "revenue" ? d.revenue / d.qty : d.profit / d.qty,
+      value: metric === "revenue" ? d.revenue : d.profit,
+      hasCost: d.hasCost,
+    }));
+  const avgQty = meanVal(base.map((b) => b.qty));
+  const avgUnit = meanVal(base.map((b) => b.unit));
+  const qualifies = (v: number, avg: number) => v > 0 && v >= avg;
+  return base.map((b) => ({
+    ...b,
+    quad: (qualifies(b.qty, avgQty)
+      ? qualifies(b.unit, avgUnit)
+        ? "star"
+        : "plowhorse"
+      : qualifies(b.unit, avgUnit)
+        ? "puzzle"
+        : "dog") as MatrixQuad,
+  }));
 }
 
 /* ============ 消耗 / 后厨用料 ============ */

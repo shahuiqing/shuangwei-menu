@@ -30,7 +30,13 @@ function downloadCsv(name: string, rows: (string | number)[][]) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function Reports({ settings }: { settings: any }) {
+export default function Reports({
+  settings,
+  version = 0,
+}: {
+  settings: any;
+  version?: number;
+}) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [dim, setDim] = useState<Dimension>("dish");
   const [dishes, setDishes] = useState<DishStat[]>([]);
@@ -54,7 +60,7 @@ export default function Reports({ settings }: { settings: any }) {
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, version]);
 
   const dishCatMap = useMemo(() => buildDishCategoryMap(settings), [settings]);
   const cats = useMemo(() => {

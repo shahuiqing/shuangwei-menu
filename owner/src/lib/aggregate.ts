@@ -44,6 +44,28 @@ export function rangeToIso(
   };
 }
 
+/* 数据库未初始化（聚合函数缺失）时的诊断通知 */
+let schemaErrorNotified = false;
+let schemaErrorListeners: (() => void)[] = [];
+export function onRpcSchemaError(cb: () => void): () => void {
+  schemaErrorListeners.push(cb);
+  return () => {
+    schemaErrorListeners = schemaErrorListeners.filter((l) => l !== cb);
+  };
+}
+
+function isMissingFunction(error: {
+  code?: string;
+  message?: string;
+}): boolean {
+  return (
+    error.code === "PGRST202" ||
+    /could not find the function|schema cache|does not exist/i.test(
+      error.message || "",
+    )
+  );
+}
+
 const call = async <T>(
   fn: string,
   args: Record<string, unknown>,
@@ -53,6 +75,10 @@ const call = async <T>(
   const { data, error } = await supabase.rpc(fn, args);
   if (error) {
     console.warn(`[owner] rpc ${fn}:`, error.message);
+    if (isMissingFunction(error) && !schemaErrorNotified) {
+      schemaErrorNotified = true;
+      schemaErrorListeners.forEach((cb) => cb());
+    }
     return fallback;
   }
   return (data ?? fallback) as T;
@@ -256,6 +282,32 @@ export async function fetchOrdersPage(opts: {
     return { rows: [], count: 0 };
   }
   return { rows: data || [], count: count || 0 };
+}
+
+/** 允许的订单状态流转 */
+export const NEXT_STATUS: Record<string, string[]> = {
+  pending: ["cooking", "cancelled"],
+  cooking: ["served", "cancelled"],
+  served: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
+/** 老板端修改订单状态（写库后由顾客端 postgres_changes 自动感知） */
+export async function updateOrderStatus(
+  id: string,
+  status: string,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = { status, timestamp: now };
+  if (status === "completed") patch.completedAt = now;
+  const { error } = await supabase.from("orders").update(patch).eq("id", id);
+  if (error) {
+    console.warn("[owner] updateOrderStatus:", error.message);
+    return false;
+  }
+  return true;
 }
 
 /** 仅拉少量近况订单用于实时流 */

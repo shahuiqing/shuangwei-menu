@@ -34,7 +34,7 @@ const EMPTY: Partial<InventoryItem> = {
   price: 0,
 };
 
-export default function Inventory() {
+export default function Inventory({ version = 0 }: { version?: number }) {
   const [list, setList] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<InventoryItem> | null>(null);
@@ -51,7 +51,7 @@ export default function Inventory() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const low = useMemo(() => lowStockItems(list), [list]);
   const categories = useMemo(

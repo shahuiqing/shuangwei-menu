@@ -38,7 +38,7 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-export default function CostReport() {
+export default function CostReport({ version = 0 }: { version?: number }) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [margins, setMargins] = useState<DishMargin[]>([]);
   const [revenue, setRevenue] = useState(0);
@@ -66,7 +66,7 @@ export default function CostReport() {
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, version]);
 
   const cogs = useMemo(() => sumCost(margins), [margins]);
   const profit = revenue - cogs;

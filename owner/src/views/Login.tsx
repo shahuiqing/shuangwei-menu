@@ -1,7 +1,11 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Lock, ShieldCheck } from "lucide-react";
-import { verifyOwnerPassword, markAuthed, setOwnerPassword } from "../lib/auth";
+import {
+  verifyOwnerPassword,
+  markAuthed,
+  setOwnerPasswordLocal,
+} from "../lib/auth";
 import { STORE_NAME } from "../lib/supabase";
 
 export default function Login({ onDone }: { onDone: () => void }) {
@@ -9,10 +13,14 @@ export default function Login({ onDone }: { onDone: () => void }) {
   const [err, setErr] = useState("");
   const [mode, setMode] = useState<"login" | "change">("login");
   const [newPw, setNewPw] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    if (verifyOwnerPassword(pw)) {
+    setBusy(true);
+    const ok = await verifyOwnerPassword(pw);
+    setBusy(false);
+    if (ok) {
       markAuthed();
       onDone();
     } else {
@@ -20,9 +28,12 @@ export default function Login({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const handleChange = (e: FormEvent) => {
+  const handleChange = async (e: FormEvent) => {
     e.preventDefault();
-    if (!verifyOwnerPassword(pw)) {
+    setBusy(true);
+    const ok = await verifyOwnerPassword(pw);
+    setBusy(false);
+    if (!ok) {
       setErr("当前密码错误 / Current password incorrect");
       return;
     }
@@ -30,7 +41,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
       setErr("新密码不能为空");
       return;
     }
-    setOwnerPassword(newPw.trim());
+    setOwnerPasswordLocal(newPw.trim());
     markAuthed();
     onDone();
   };
@@ -64,9 +75,10 @@ export default function Login({ onDone }: { onDone: () => void }) {
             {err && <p className="text-red-500 text-sm">{err}</p>}
             <button
               type="submit"
-              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl px-4 py-3 transition-colors"
+              disabled={busy}
+              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl px-4 py-3 transition-colors disabled:opacity-50"
             >
-              登 录
+              {busy ? "验证中…" : "登 录"}
             </button>
             <button
               type="button"
@@ -104,9 +116,10 @@ export default function Login({ onDone }: { onDone: () => void }) {
             {err && <p className="text-red-500 text-sm">{err}</p>}
             <button
               type="submit"
-              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl px-4 py-3 transition-colors flex items-center justify-center gap-2"
+              disabled={busy}
+              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl px-4 py-3 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <ShieldCheck size={18} /> 确认修改并登录
+              <ShieldCheck size={18} /> {busy ? "验证中…" : "确认修改并登录"}
             </button>
             <button
               type="button"

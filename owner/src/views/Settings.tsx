@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Store, KeyRound, CheckCircle2, HardDrive, Trash2 } from "lucide-react";
 import { ChartCard, Skeleton } from "../components/ui";
 import { toast } from "../components/Toast";
-import { setOwnerPassword, verifyOwnerPassword } from "../lib/auth";
+import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
 import { isConfigured, STORE_NAME } from "../lib/supabase";
 import { saveSettingsField } from "../lib/data";
 import { tableStats, prune, type TableStats } from "../lib/aggregate";
@@ -51,13 +51,15 @@ export default function Settings({
     }
   };
 
-  const changePw = () => {
-    if (!verifyOwnerPassword(curPw)) return toast.error("当前密码错误");
+  const changePw = async () => {
+    if (!(await verifyOwnerPassword(curPw))) return toast.error("当前密码错误");
     if (!newPw.trim()) return toast.error("新密码不能为空");
-    setOwnerPassword(newPw.trim());
+    setOwnerPasswordLocal(newPw.trim());
     setCurPw("");
     setNewPw("");
-    toast.success("密码已修改（存本机）");
+    toast.success(
+      "密码已修改（本机降级）；如需云端生效请用 /api/auth/set-owner-password",
+    );
   };
 
   const runPrune = async () => {

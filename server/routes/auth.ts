@@ -83,4 +83,54 @@ router.post("/hash", requireAdmin, async (req, res) => {
   res.json({ hash });
 });
 
+// POST /api/auth/verify-owner { password } -> { ok }
+// 校验老板端密码：settings.ownerPasswordHash（bcrypt）；未配置则可回退 ADMIN_SECRET。
+// 与顾客端管理员密码分离。每分钟每 IP 最多 10 次，防暴力破解。
+router.post("/verify-owner", rateLimit(60_000, 10), async (req, res) => {
+  const { password } = req.body as { password?: string };
+  if (!password)
+    return res.status(400).json({ ok: false, error: "password required" });
+  try {
+    if (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL) {
+      try {
+        const { data } = await (supabase as any)
+          .from("settings")
+          .select("ownerPasswordHash")
+          .eq("id", "global")
+          .maybeSingle();
+        const hash = data?.ownerPasswordHash || "";
+        if (hash && hash.startsWith("$2")) {
+          const ok = await bcrypt.compare(String(password), hash);
+          return res.json({ ok });
+        }
+      } catch {}
+    }
+    if (process.env.ADMIN_SECRET)
+      return res.json({ ok: password === process.env.ADMIN_SECRET });
+    return res.json({ ok: false, error: "owner password not configured" });
+  } catch (e: any) {
+    console.error("[auth] verify-owner error", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/auth/set-owner-password { password } (需 ADMIN_SECRET) -> { ok }
+// 设置/修改老板端密码（写 bcrypt 哈希）
+router.post("/set-owner-password", requireAdmin, async (req, res) => {
+  const { password } = req.body as { password?: string };
+  if (!password || String(password).length < 4)
+    return res.status(400).json({ ok: false, error: "password too short" });
+  try {
+    const hash = await bcrypt.hash(String(password), 10);
+    const { error } = await (supabase as any)
+      .from("settings")
+      .update({ ownerPasswordHash: hash })
+      .eq("id", "global");
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    return res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 export default router;

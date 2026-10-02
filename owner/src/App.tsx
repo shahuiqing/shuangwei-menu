@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 import Login from "./views/Login";
 import Dashboard from "./views/Dashboard";
@@ -13,11 +13,30 @@ import Consumption from "./views/Consumption";
 import StaffView from "./views/Staff";
 import Settings from "./views/Settings";
 import { Layout, type OwnerTab } from "./components/Layout";
-import { ToastHost } from "./components/Toast";
+import { ToastHost, toast } from "./components/Toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isAuthed, clearAuthed } from "./lib/auth";
 import { isConfigured, STORE_NAME } from "./lib/supabase";
 import { fetchSettings } from "./lib/data";
-import { fetchRecentOrders } from "./lib/aggregate";
+import { fetchRecentOrders, onRpcSchemaError } from "./lib/aggregate";
+import { subscribeOwner, type OrderChange } from "./lib/realtime";
+
+const RECENT_LIMIT = 30;
+
+/** 把实时变更合并进近况列表 */
+function mergeRecent(prev: any[], c: OrderChange): any[] {
+  const idOf = (o: any) => String(o?.id || o?._id || "");
+  if (c.eventType === "DELETE") {
+    const del = idOf(c.old);
+    return prev.filter((o) => idOf(o) !== del);
+  }
+  const rec = c.new;
+  if (!rec) return prev;
+  const recId = idOf(rec);
+  const next = prev.filter((o) => idOf(o) !== recId);
+  next.unshift(rec);
+  return next.slice(0, RECENT_LIMIT);
+}
 
 export default function App() {
   const [authed, setAuthed] = useState(() => isAuthed());
@@ -26,12 +45,18 @@ export default function App() {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [version, setVersion] = useState(0);
+  const [live, setLive] = useState(false);
+  const bumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 免费额度优化：只拉少量近况订单 + 设置；其余统计由各页 RPC 拉取
   const load = useCallback(async () => {
     if (!isConfigured) return;
     setLoading(true);
-    const [o, s] = await Promise.all([fetchRecentOrders(30), fetchSettings()]);
+    const [o, s] = await Promise.all([
+      fetchRecentOrders(RECENT_LIMIT),
+      fetchSettings(),
+    ]);
     setRecentOrders(o);
     setSettings(s);
     setLoading(false);
@@ -41,6 +66,37 @@ export default function App() {
   useEffect(() => {
     if (authed) load();
   }, [authed, load]);
+
+  // 数据库未初始化（聚合函数缺失）时给出明确指引
+  useEffect(() => {
+    return onRpcSchemaError(() => {
+      toast.error("数据库缺少聚合函数：请先执行 supabase_owner_quota.sql");
+    });
+  }, []);
+
+  // 实时订阅：订单/设置变更即时反映，合并 20s 后统一刷新聚合
+  useEffect(() => {
+    if (!authed || !isConfigured) return;
+    const scheduleBump = () => {
+      if (bumpTimer.current) clearTimeout(bumpTimer.current);
+      bumpTimer.current = setTimeout(() => setVersion((v) => v + 1), 20000);
+    };
+    const unsub = subscribeOwner({
+      onOrder: (c) => {
+        setRecentOrders((prev) => mergeRecent(prev, c));
+        scheduleBump();
+      },
+      onSettings: () => {
+        fetchSettings().then(setSettings);
+        scheduleBump();
+      },
+      onStatus: (s) => setLive(s === "SUBSCRIBED"),
+    });
+    return () => {
+      if (bumpTimer.current) clearTimeout(bumpTimer.current);
+      unsub();
+    };
+  }, [authed]);
 
   // 5 分钟兜底轮询；页面隐藏时暂停，减少请求与 egress
   useEffect(() => {
@@ -79,6 +135,7 @@ export default function App() {
         storeName={storeName}
         loading={loading}
         lastUpdated={lastUpdated}
+        live={live}
         onRefresh={load}
         onLogout={() => {
           clearAuthed();
@@ -96,19 +153,29 @@ export default function App() {
           </div>
         )}
 
-        {tab === "dashboard" && (
-          <Dashboard recentOrders={recentOrders} settings={settings} />
-        )}
-        {tab === "orders" && <Orders />}
-        {tab === "reports" && <Reports settings={settings} />}
-        {tab === "menu" && <MenuAnalysis />}
-        {tab === "procurement" && <Procurement />}
-        {tab === "inventory" && <Inventory />}
-        {tab === "recipe" && <Recipe settings={settings} />}
-        {tab === "cost" && <CostReport />}
-        {tab === "consumption" && <Consumption />}
-        {tab === "staff" && <StaffView />}
-        {tab === "settings" && <Settings settings={settings} onSaved={load} />}
+        <ErrorBoundary key={tab}>
+          {tab === "dashboard" && (
+            <Dashboard
+              recentOrders={recentOrders}
+              settings={settings}
+              version={version}
+            />
+          )}
+          {tab === "orders" && <Orders version={version} />}
+          {tab === "reports" && (
+            <Reports settings={settings} version={version} />
+          )}
+          {tab === "menu" && <MenuAnalysis version={version} />}
+          {tab === "procurement" && <Procurement version={version} />}
+          {tab === "inventory" && <Inventory version={version} />}
+          {tab === "recipe" && <Recipe settings={settings} version={version} />}
+          {tab === "cost" && <CostReport version={version} />}
+          {tab === "consumption" && <Consumption version={version} />}
+          {tab === "staff" && <StaffView />}
+          {tab === "settings" && (
+            <Settings settings={settings} onSaved={load} />
+          )}
+        </ErrorBoundary>
       </Layout>
       <ToastHost />
     </>

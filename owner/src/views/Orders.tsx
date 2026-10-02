@@ -20,7 +20,12 @@ import {
   itemRevenue,
   type RangeKey,
 } from "../lib/analytics";
-import { rangeToIso, fetchOrdersPage } from "../lib/aggregate";
+import {
+  rangeToIso,
+  fetchOrdersPage,
+  updateOrderStatus,
+  NEXT_STATUS,
+} from "../lib/aggregate";
 
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-orange-500/20 text-orange-400",
@@ -58,7 +63,7 @@ function exportCsv(rows: any[]) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function Orders() {
+export default function Orders({ version = 0 }: { version?: number }) {
   const [range, setRange] = useState<RangeKey>("today");
   const [status, setStatus] = useState("all");
   const [q, setQ] = useState("");
@@ -71,6 +76,7 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any | null>(null);
   const [qDebounced, setQDebounced] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q), 400);
@@ -99,10 +105,32 @@ export default function Orders() {
     return () => {
       alive = false;
     };
-  }, [range, status, sort, page, qDebounced]);
+  }, [range, status, sort, page, qDebounced, version]);
 
   const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const resetPage = () => setPage(0);
+
+  const changeStatus = async (s: string) => {
+    if (!detail) return;
+    if (
+      (s === "completed" || s === "cancelled") &&
+      !confirm(`确认将订单设为「${STATUS_TEXT[s]}」？`)
+    )
+      return;
+    setBusy(true);
+    const ok = await updateOrderStatus(String(detail.id || detail._id), s);
+    setBusy(false);
+    if (!ok) return toast.error("状态更新失败");
+    toast.success(`已更新为「${STATUS_TEXT[s]}」`);
+    setDetail({ ...detail, status: s });
+    setRows((prev) =>
+      prev.map((o) =>
+        String(o.id || o._id) === String(detail.id || detail._id)
+          ? { ...o, status: s }
+          : o,
+      ),
+    );
+  };
 
   const onExport = async () => {
     const b = rangeToIso(range);
@@ -402,11 +430,35 @@ export default function Orders() {
                 </span>
               </div>
 
+              {(NEXT_STATUS[detail.status || "pending"] || []).length > 0 && (
+                <div className="mt-4">
+                  <div className="text-xs text-zinc-500 mb-2">推进订单状态</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(NEXT_STATUS[detail.status || "pending"] || []).map(
+                      (s) => (
+                        <button
+                          key={s}
+                          disabled={busy}
+                          onClick={() => changeStatus(s)}
+                          className={`py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 ${
+                            s === "cancelled"
+                              ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                              : "bg-orange-600 hover:bg-orange-500 text-white"
+                          }`}
+                        >
+                          {STATUS_TEXT[s] || s}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={() =>
                   import("../lib/print-lite").then((m) => m.printOrder(detail))
                 }
-                className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
+                className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
               >
                 <Printer size={16} /> 打印小票
               </button>

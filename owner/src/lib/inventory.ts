@@ -210,8 +210,9 @@ export async function fetchPurchases(limit = 500): Promise<PurchaseOrder[]> {
 }
 
 /**
- * 新建采购单：写 purchase_orders + 库存增加 + purchase_in 流水。
- * 采购单价同时更新 inventory_items.price（作为最新成本价）。
+ * 新建采购单（原子 RPC）：一次事务内完成
+ *   ① 写 purchase_orders ② 库存增加并更新成本价 ③ 写 purchase_in 流水
+ * 对应 SQL 函数 owner_create_purchase（见 supabase_owner_inventory_rls.sql）。
  */
 export async function createPurchase(input: {
   supplier: string;
@@ -224,70 +225,21 @@ export async function createPurchase(input: {
   purchased_at?: string;
 }): Promise<boolean> {
   if (!supabase) return false;
-  const qty = num(input.quantity);
-  const price = num(input.unit_price);
-  const id = newId("PO");
-  const when = input.purchased_at || new Date().toISOString();
-
-  const { error } = await supabase.from("purchase_orders").insert({
-    id,
-    supplier: input.supplier || "",
-    item_id: input.inventory_item_id,
-    item_name: input.item_name,
-    quantity: qty,
-    unit: input.unit || "kg",
-    unit_price: price,
-    total_cost: qty * price,
-    purchased_at: when,
-    notes: input.notes || "",
-    created_at: when,
+  const { error } = await supabase.rpc("owner_create_purchase", {
+    p_id: newId("PO"),
+    p_supplier: input.supplier || "",
+    p_item_id: input.inventory_item_id,
+    p_item_name: input.item_name,
+    p_qty: num(input.quantity),
+    p_unit: input.unit || "kg",
+    p_unit_price: num(input.unit_price),
+    p_notes: input.notes || "",
+    p_purchased_at: input.purchased_at || new Date().toISOString(),
   });
   if (error) {
     console.warn("[owner] createPurchase:", error.message);
     return false;
   }
-
-  const { data: cur } = await supabase
-    .from("inventory_items")
-    .select("*")
-    .eq("id", input.inventory_item_id)
-    .maybeSingle();
-
-  if (cur) {
-    await supabase
-      .from("inventory_items")
-      .update({
-        stock: num(cur.stock) + qty,
-        price: price || num(cur.price),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", input.inventory_item_id);
-  } else {
-    await supabase.from("inventory_items").insert({
-      id: input.inventory_item_id,
-      name: input.item_name,
-      category: "食材",
-      stock: qty,
-      unit: input.unit || "kg",
-      safety_stock: 0,
-      price,
-      updated_at: new Date().toISOString(),
-    });
-  }
-
-  const { error: e3 } = await supabase.from("inventory_transactions").insert({
-    id: newId("TXN"),
-    item_id: input.inventory_item_id,
-    item_name: input.item_name,
-    type: "purchase_in",
-    quantity: qty,
-    unit: input.unit || "kg",
-    unit_cost: price,
-    reference: id,
-    notes: input.supplier ? `采购 · ${input.supplier}` : "采购入库",
-    created_at: when,
-  });
-  if (e3) console.warn("[owner] createPurchase txn:", e3.message);
   return true;
 }
 
@@ -322,4 +274,46 @@ export function lowStockItems(list: InventoryItem[]): InventoryItem[] {
 
 export function inventoryValue(list: InventoryItem[]): number {
   return list.reduce((s, i) => s + num(i.stock) * num(i.price), 0);
+}
+
+/** 补货建议：建议补至安全库存的差距与预估金额 */
+export interface RestockSuggestion extends InventoryItem {
+  gap: number;
+  estCost: number;
+}
+
+export function restockSuggestions(list: InventoryItem[]): RestockSuggestion[] {
+  return lowStockItems(list)
+    .map((i) => {
+      const gap = Math.max(0, num(i.safety_stock) - num(i.stock));
+      return { ...i, gap, estCost: gap * num(i.price) };
+    })
+    .sort((a, b) => b.estCost - a.estCost);
+}
+
+/** 采购价变动影响的菜品成本差额（用于采购前预览成本变化） */
+export interface CostImpact {
+  dish: string;
+  delta: number;
+}
+
+export function costImpactForPriceChange(
+  itemId: string,
+  newPrice: number,
+  boms: RecipeBom[],
+  inventory: InventoryItem[],
+): CostImpact[] {
+  const oldPrice = num(inventory.find((i) => i.id === itemId)?.price);
+  const diff = num(newPrice) - oldPrice;
+  if (!diff) return [];
+  const map = new Map<string, number>();
+  boms
+    .filter((b) => b.inventory_item_id === itemId)
+    .forEach((b) => {
+      const d = num(b.dosage) * diff;
+      map.set(b.menu_item_name, (map.get(b.menu_item_name) || 0) + d);
+    });
+  return Array.from(map.entries())
+    .map(([dish, delta]) => ({ dish, delta }))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 }

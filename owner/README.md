@@ -69,12 +69,26 @@ npm run build             # 产出 owner/dist
 
 > 也可以直接把 `owner/dist` 传到任意静态托管（Vercel / Netlify / 对象存储 + CDN）。
 
-## 登录
+## 登录（bcrypt 后端校验）
 
-- 默认密码 `123456`（或环境变量 `VITE_OWNER_PASSWORD`）
-- 登录后可在「系统设置」里修改密码，密码存本机浏览器，不依赖数据库
+- 密码以 **bcrypt 哈希**存于 `settings.ownerPasswordHash`，与顾客端管理员密码**分离**（执行 `supabase_owner_auth.sql`，初始密码 `123456`）。
+- 登录时调用后端 `POST /api/auth/verify-owner`（本地 Express 与 EdgeOne Pages Function 同路径，带限流防爆破）。
+- 本机只保存**会话令牌**（3 天），不再保存明文密码；后端不可达时回退本机哈希（离线可用）。
+- 首次登录后请立即在「系统设置」修改密码；云端改密用 `POST /api/auth/set-owner-password`（需 `ADMIN_SECRET`）。
+- 环境变量 `VITE_OWNER_PASSWORD` 仅作为**离线初始密码**回退，生产建议配合后端哈希使用。
+
+## 数据库脚本（均幂等，按顺序执行）
+
+1. `supabase_schema.sql`
+2. `supabase_setup.sql`
+3. `supabase_inventory_bom.sql`
+4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）
+5. `supabase_owner_inventory_rls.sql`
+6. `supabase_owner_quota.sql`
+7. `supabase_owner_auth.sql`
 
 ## 注意事项
 
-- 老板端**只读**订单/报表；只有「员工管理」「系统设置」会写 `settings`
-- 数据与顾客端共用同一个 Supabase 库；顾客端代码不受任何影响
+- 老板端对订单**只读现状**改为可**推进状态**（待接单→制作中→已上菜→结账/取消）；「员工管理」「系统设置」写 `settings`，采购/库存/配方写对应表。
+- 数据与顾客端共用同一个 Supabase 库；顾客端代码不受任何影响。
+- 免费额度友好：报表走服务端聚合 RPC、订单服务端分页、实时事件聚合防抖、5 分钟兜底轮询。

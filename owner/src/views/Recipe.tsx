@@ -27,7 +27,13 @@ function parsePrice(v: unknown): number {
   return m ? Number(m[0]) : 0;
 }
 
-export default function Recipe({ settings }: { settings: any }) {
+export default function Recipe({
+  settings,
+  version = 0,
+}: {
+  settings: any;
+  version?: number;
+}) {
   const [boms, setBoms] = useState<RecipeBom[]>([]);
   const [inv, setInv] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +54,7 @@ export default function Recipe({ settings }: { settings: any }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const dishes = useMemo(() => {
     const out: { name: string; price: number }[] = [];

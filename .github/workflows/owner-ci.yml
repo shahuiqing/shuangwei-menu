@@ -1,0 +1,33 @@
+name: Owner CI
+
+on:
+  push:
+    paths:
+      - "owner/**"
+      - "supabase_inventory_bom*.sql"
+      - "supabase_owner_*.sql"
+      - ".github/workflows/owner-ci.yml"
+  pull_request:
+    paths:
+      - "owner/**"
+      - ".github/workflows/owner-ci.yml"
+
+jobs:
+  owner:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: owner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: owner/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck & Build
+        run: npm run build
+      - name: Unit tests
+        run: npm test

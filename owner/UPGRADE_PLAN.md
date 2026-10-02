@@ -442,4 +442,134 @@ owner/src/lib/cost.ts              # 成本/毛利计算
 
 ### 11.5 部署顺序（全部幂等）
 
-1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_owner_inventory_rls.sql` → 5. `supabase_owner_quota.sql`
+1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（**对账式修复，必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql`
+
+> ⚠️ v2 修复：顾客端「加菜/合并」只追加 `orders.items` 不改 status，v1 触发器（`AFTER UPDATE OF status` + 按订单幂等）会**漏扣已结账订单的加菜**。v2 改为 `INSERT OR UPDATE` + 独立函数 `deduct_order_bom(order_id, items)` 对账式补差，兼容加菜/改单/合并/取消。见 §13。
+
+---
+
+## 12. 实时同步 + 订单状态流转 + 错误边界（已实现）
+
+### 12.1 Realtime
+
+- 新增 `owner/src/lib/realtime.ts`：独立频道 `owner-sync`，只订阅 `public.orders`、`public.settings` 的 `postgres_changes`；断线 3s 退避重建。
+- `App.tsx`：
+  - 订单事件实时合并进「近况列表」（INSERT 置顶 / UPDATE 替换 / DELETE 移除），无需重新拉取；
+  - 设置变更即时重载；
+  - 实时事件触发聚合刷新，但**20s 防抖合并**，避免每单一次 RPC（兼顾免费额度）；
+  - 保留 5 分钟兜底轮询 + 页面隐藏暂停；顶栏显示「实时同步中 / 更新于 …」。
+- 成本：每单 Realtime 消息约 1–2KB，远低于 5GB egress 与 200 万条/月上限。
+
+### 12.2 订单状态流转（老板端可操作）
+
+- `aggregate.ts` 新增 `NEXT_STATUS` 状态机与 `updateOrderStatus`：
+  `pending → cooking → served → completed`，`pending/cooking/served → cancelled`。
+- `Orders.tsx` 详情抽屉新增「推进订单状态」按钮，取消/结账二次确认，失败回滚，成功后本地即时更新。
+- 状态写入 DB 后，顾客端 `postgres_changes(orders)` 自动感知，无需额外广播。
+- ⚠️ 老板端把订单改为 `completed` 会触发 `apply_order_bom` 扣库存（与顾客端结账一致）。
+
+### 12.3 健壮性
+
+- 新增 `components/ErrorBoundary.tsx`，按 tab 包裹（`key={tab}`），单页崩溃不影响导航，可「重试」。
+- 各页接入 `version` 依赖：实时聚合刷新与手动刷新统一触发。
+
+### 12.4 仍待完善
+
+- 列表虚拟滚动（数据极大时）。
+
+---
+
+## 17. 登录安全升级（bcrypt 后端校验，已实现）
+
+### 17.1 问题
+
+老板端密码明文存 `localStorage`、默认 `123456`、纯前端比对，任何人清缓存即失守。
+
+### 17.2 方案
+
+- **独立密码**：新增 `settings.ownerPasswordHash`（bcrypt），与顾客端 `adminPasswordHash` 分离（见 `supabase_owner_auth.sql`，初始密码 `123456`）。
+- **后端校验**：
+  - 本地：`server/routes/auth.ts` 新增 `POST /api/auth/verify-owner`（rate limit 10/min，防爆破）与 `POST /api/auth/set-owner-password`（需 `ADMIN_SECRET`）。
+  - 生产边缘：`functions/api/auth/verify-owner.ts`（EdgeOne Pages Function，同路径）。
+- **前端**：`owner/src/lib/auth.ts`
+  - `verifyOwnerPassword` 改为 async：优先请求 `/api/auth/verify-owner`，**后端不可达时回退本地哈希**（离线/纯本地可用）；
+  - 本机只保存**会话令牌** `ownerAuthedUntil`（3 天），不再保存明文密码；
+  - 本地降级改密用 `setOwnerPasswordLocal`（bcrypt 哈希）。
+- `Login.tsx` 支持 async + 「验证中…」；`Settings.tsx` 改密提示「本机降级，云端请用 set-owner-password」。
+
+### 17.3 部署
+
+1. 执行 `supabase_owner_auth.sql`（写入初始哈希）。
+2. 确保 EdgeOne Pages 配置 `SUPABASE_SERVICE_ROLE_KEY` 或 `VITE_SUPABASE_*`（验密需读 settings）。
+3. 首次登录后立即在「设置」改密（或用 `POST /api/auth/set-owner-password` 写云端哈希）。
+
+---
+
+## 18. 缺陷修复轮（自审）
+
+| #   | 问题                                                           | 影响                              | 修复                                                                                   |
+| --- | -------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------- |
+| 1   | `owner` 未声明 `bcryptjs` 依赖，仅靠根 `node_modules` 构建通过 | **owner 独立 CI `npm ci` 必失败** | `owner/package.json` + lock 增加 `bcryptjs@^3.0.3`；`npm install` 落地                 |
+| 2   | `auth.ts` 在模块加载时 `bcrypt.hashSync`（cost 10）            | 首屏阻塞几十毫秒                  | 改惰性 `getDefaultHash()` 记忆化                                                       |
+| 3   | BOM 事务 ID `LEFT(...,100)` 截断 md5                           | 订单 ID 较长时主键碰撞、扣减错乱  | v2 SQL 改为 `'TXN-'                                                                    |     | md5(order | item | dish)`（36 字符，唯一） |
+| 4   | 采购入库 3 次独立写库                                          | 中途失败 → 采购单/库存/流水不一致 | 新增原子 RPC `owner_create_purchase`，前端改调 RPC                                     |
+| 5   | 未执行聚合 SQL 时页面静默空白                                  | 用户无从排查                      | `aggregate.ts` 检测 `PGRST202`/函数缺失，App 弹提示「请执行 supabase_owner_quota.sql」 |
+| 6   | owner README 登录/脚本说明过期                                 | 部署困惑                          | 更新登录说明与 7 步 SQL 顺序                                                           |
+
+验证：owner `npm run build` 通过、`npm test` 18/18；根项目 `npm run lint`（tsc + eslint）通过。
+
+---
+
+## 16. 采购 ↔ 库存/成本联动（已实现）
+
+- **补货建议**：`restockSuggestions` 按安全库存缺口生成建议（数量、预估金额，按金额降序），采购页顶部展示，一键「补货」预填采购单。
+- **成本影响预览**：采购弹窗内根据 `recipe_boms.dosage` 实时预览「本次采购价变动」对相关菜品成本的影响（+/- 金额），避免拍脑袋定价。
+- 纯函数 `costImpactForPriceChange` 抽到 `lib/inventory.ts`，新增 `inventory.test.ts` 覆盖（补货建议、库存金额、成本影响、边界）。
+- 测试总数 18 项，全过。
+
+---
+
+## 15. 菜单工程矩阵升级为成本/毛利口径（已实现）
+
+- 原矩阵「销量 × 单价 × 营收」→ 现支持 **按毛利 / 按营收** 一键切换：
+  - 按毛利：横轴销量、纵轴单位毛利、气泡毛利额；
+  - 按营收：横轴销量、纵轴单价、气泡营收。
+- 四象限（明星/金牛/问题/瘦狗）按「销量均值 × 单位贡献均值」自动分类，统一走纯函数 `buildMenuPoints`（`lib/cost.ts`，可测）。
+- 未配配方菜品在按毛利口径下高亮提示，并给出「去配方 BOM 补全」引导。
+- 新增 `menuPoints.test.ts` 覆盖四象限分类、口径切换、零销量过滤。测试 13 项全过。
+
+---
+
+## 14. 测试与 CI（已实现）
+
+- owner 引入 Vitest（`vitest.config.ts`，node 环境，`src/**/*.test.ts`）。
+- 单测覆盖关键纯逻辑：
+  - `cost.test.ts`：多原料成本累加、未知配方按 0、毛利/毛利率、未配配方标记、总成本汇总。
+  - `aggregate.test.ts`：`rangeToIso` 环比区间等长紧邻、`all` 起点、自定义区间本地日界；状态机 `NEXT_STATUS`。
+- `owner/package.json`：`npm test` = `vitest run --passWithNoTests`。
+- `owner/tsconfig.json` 排除测试文件，构建（`tsc --noEmit`）不受影响。
+- 新增 `.github/workflows/owner-ci.yml`：仅当 `owner/**` 或相关 SQL 变更时触发，执行 `npm ci` → `npm run build` → `npm test`。
+
+---
+
+## 13. BOM 扣减 v2（对账式，修复加菜漏扣）
+
+### 13.1 缺陷
+
+顾客端加菜/合并把菜品追加进 `orders.items`，**status 不变**（`src/api.ts:1250`、`OrderBoard.tsx:143,166`）。v1 触发器 `AFTER UPDATE OF status` + 按订单幂等 → 已结账订单加菜**永不扣库存**。
+
+### 13.2 方案（`supabase_inventory_bom_v2.sql`）
+
+- 抽出纯函数 `deduct_order_bom(p_order_id, p_items)`：
+  - 以「应扣量 vs 已扣量」对账，只把差额写回库存；
+  - 重写该订单的 `order_out` 明细（按 原料×菜品 维度，保留按菜品消耗统计）。
+- 触发器 `AFTER INSERT OR UPDATE ON orders`，仅在：
+  - 进入 `completed` 且 `items` 变化（首次结账 / 加菜改单），或
+  - 从 `completed` 离开（作废，传空 items 全额回补）
+    时调用。
+- 特性：幂等、兼容加菜/改单/合并/取消回补/重复结账；同订单行锁天然串行。
+- 附历史回填（幂等，默认注释）：`SELECT deduct_order_bom(id, items) FROM orders WHERE status='completed';`
+
+### 13.3 影响
+
+- 无需改顾客端；老板端「成本毛利/用料消耗」自动反映加菜。

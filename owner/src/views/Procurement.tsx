@@ -7,25 +7,32 @@ import {
   Wallet,
   Truck,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
+  costImpactForPriceChange,
   createPurchase,
+  fetchBoms,
   fetchInventory,
   fetchPurchases,
   num,
+  restockSuggestions,
   type InventoryItem,
   type PurchaseOrder,
+  type RecipeBom,
+  type RestockSuggestion,
 } from "../lib/inventory";
 
 const newLocalId = () =>
   `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-export default function Procurement() {
+export default function Procurement({ version = 0 }: { version?: number }) {
   const [list, setList] = useState<PurchaseOrder[]>([]);
   const [inv, setInv] = useState<InventoryItem[]>([]);
+  const [boms, setBoms] = useState<RecipeBom[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
 
@@ -43,15 +50,20 @@ export default function Procurement() {
 
   const load = async () => {
     setLoading(true);
-    const [p, i] = await Promise.all([fetchPurchases(), fetchInventory()]);
+    const [p, i, b] = await Promise.all([
+      fetchPurchases(),
+      fetchInventory(),
+      fetchBoms(),
+    ]);
     setList(p);
     setInv(i);
+    setBoms(b);
     setLoading(false);
   };
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const monthKey = new Date().toISOString().slice(0, 7);
   const stats = useMemo(() => {
@@ -65,6 +77,27 @@ export default function Procurement() {
     const suppliers = new Set(list.map((p) => p.supplier).filter(Boolean)).size;
     return { total, month, suppliers };
   }, [list, monthKey]);
+
+  const restock = useMemo(() => restockSuggestions(inv), [inv]);
+
+  const impacts = useMemo(
+    () =>
+      !isNew && form.itemId
+        ? costImpactForPriceChange(form.itemId, num(form.unit_price), boms, inv)
+        : [],
+    [isNew, form.itemId, form.unit_price, boms, inv],
+  );
+
+  const preselect = (item: RestockSuggestion) => {
+    setIsNew(false);
+    setForm((f) => ({
+      ...f,
+      itemId: item.id,
+      quantity: String(item.gap > 0 ? item.gap : "1"),
+      unit_price: String(item.price || ""),
+    }));
+    setOpen(true);
+  };
 
   const submit = async () => {
     const name = isNew
@@ -170,6 +203,44 @@ export default function Procurement() {
           bg="bg-teal-500/10"
         />
       </div>
+
+      {restock.length > 0 && (
+        <ChartCard
+          title="补货建议"
+          subtitle="低于安全库存的原料，一键补货"
+          action={<AlertTriangle size={18} className="text-amber-400" />}
+        >
+          <div className="space-y-1.5">
+            {restock.map((i) => (
+              <div
+                key={i.id}
+                className="flex items-center justify-between bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <span className="text-zinc-200">{i.name}</span>
+                  <span className="text-zinc-500 text-xs ml-2">
+                    现存 {num(i.stock)}
+                    {i.unit} / 安全 {num(i.safety_stock)}
+                    {i.unit}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-zinc-400 text-xs">
+                    建议补 {i.gap}
+                    {i.unit} · 约 {fmtMoney(i.estCost)}
+                  </span>
+                  <button
+                    onClick={() => preselect(i)}
+                    className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold"
+                  >
+                    补货
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -348,6 +419,34 @@ export default function Procurement() {
                   {fmtMoney(num(form.quantity) * num(form.unit_price))}
                 </span>
               </div>
+
+              {impacts.length > 0 && (
+                <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl px-3 py-2.5">
+                  <div className="text-[11px] text-amber-400 mb-1">
+                    采购价变动会影响以下菜品成本：
+                  </div>
+                  <div className="space-y-1">
+                    {impacts.slice(0, 6).map((c) => (
+                      <div
+                        key={c.dish}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <span className="text-zinc-300 truncate mr-2">
+                          {c.dish}
+                        </span>
+                        <span
+                          className={
+                            c.delta >= 0 ? "text-red-400" : "text-green-400"
+                          }
+                        >
+                          {c.delta >= 0 ? "+" : ""}
+                          {fmtMoney(c.delta)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <button

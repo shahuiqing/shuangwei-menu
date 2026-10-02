@@ -60,9 +60,11 @@ const pct = (cur: number, prev: number) =>
 export default function Dashboard({
   recentOrders,
   settings,
+  version = 0,
 }: {
   recentOrders: any[];
   settings: any;
+  version?: number;
 }) {
   const [range, setRange] = useState<RangeKey>("today");
   const [loading, setLoading] = useState(true);
@@ -111,7 +113,7 @@ export default function Dashboard({
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, version]);
 
   const dishCatMap = useMemo(() => buildDishCategoryMap(settings), [settings]);
   const cats = useMemo(() => {

@@ -30,7 +30,7 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-export default function Consumption() {
+export default function Consumption({ version = 0 }: { version?: number }) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [byItem, setByItem] = useState<ConsStat[]>([]);
   const [byDish, setByDish] = useState<ConsStat[]>([]);
@@ -61,7 +61,7 @@ export default function Consumption() {
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, version]);
 
   const totalCost = useMemo(
     () => byItem.reduce((s, x) => s + num(x.cost), 0),

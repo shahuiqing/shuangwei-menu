@@ -60,6 +60,7 @@ export function Layout({
   storeName,
   loading,
   lastUpdated,
+  live,
   onRefresh,
   onLogout,
   configured,
@@ -70,6 +71,7 @@ export function Layout({
   storeName: string;
   loading: boolean;
   lastUpdated: string;
+  live?: boolean;
   onRefresh: () => void;
   onLogout: () => void;
   configured: boolean;
@@ -148,8 +150,15 @@ export function Layout({
             </div>
             <div className="flex items-center gap-2">
               <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-500">
-                <Wifi size={13} className="text-green-500" />
-                {lastUpdated ? `更新于 ${lastUpdated}` : "同步中…"}
+                <Wifi
+                  size={13}
+                  className={live ? "text-green-500" : "text-zinc-500"}
+                />
+                {live
+                  ? "实时同步中"
+                  : lastUpdated
+                    ? `更新于 ${lastUpdated}`
+                    : "同步中…"}
               </span>
               <button
                 onClick={onRefresh}
