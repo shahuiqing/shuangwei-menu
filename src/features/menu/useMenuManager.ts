@@ -9,6 +9,15 @@ import type {
   ReceiptSettings,
 } from "../../types/menu";
 
+// 从“已删除名单”里剔除指定 key（重新添加同名菜品时，避免被 merge 再次过滤）
+function clearDeleted(
+  list: string[] | undefined,
+  keys: (string | undefined | null)[],
+) {
+  const kill = new Set(keys.filter(Boolean).map((k) => String(k)));
+  return (Array.isArray(list) ? list : []).filter((x) => !kill.has(String(x)));
+}
+
 interface MenuManagerDeps {
   categories: MenuCategory[];
   setCategories: (c: MenuCategory[]) => void;
@@ -832,6 +841,13 @@ export function useMenuManager(deps: MenuManagerDeps) {
     if (!categories.some((c: any) => c.id === selectedCategory)) {
       setSelectedCategory(targetCatId);
     }
+    // 重新添加同名菜品时，把它从“已删除名单”移除，避免被 merge 再次过滤掉
+    const newDeletedIds = clearDeleted(deletedItemIds, [
+      (newItem as any).title,
+      (newItem as any).name,
+      newItem.id,
+    ]);
+    if (setDeletedItemIds) setDeletedItemIds(newDeletedIds);
     resetNewDish();
     console.log("[添加菜品]", {
       category: targetCatId,
@@ -843,7 +859,11 @@ export function useMenuManager(deps: MenuManagerDeps) {
       willSave: !!onSaveToCloud,
     });
     if (onSaveToCloud) {
-      onSaveToCloud({ categories: updatedCategories, silent: true });
+      onSaveToCloud({
+        categories: updatedCategories,
+        deletedItemIds: newDeletedIds,
+        silent: true,
+      });
     }
     alert("菜品添加成功！ Dish added successfully!");
   };
@@ -892,8 +912,18 @@ export function useMenuManager(deps: MenuManagerDeps) {
         : cat,
     );
     setCategories(updatedCategories);
+    // 重新添加同名菜品时，把它从“已删除名单”移除，避免被 merge 再次过滤掉
+    const newDeletedIds = clearDeleted(deletedItemIds, [
+      newItem.title,
+      newItem.id,
+    ]);
+    if (setDeletedItemIds) setDeletedItemIds(newDeletedIds);
     if (onSaveToCloud)
-      onSaveToCloud({ categories: updatedCategories, silent: true });
+      onSaveToCloud({
+        categories: updatedCategories,
+        deletedItemIds: newDeletedIds,
+        silent: true,
+      });
   };
 
   return {

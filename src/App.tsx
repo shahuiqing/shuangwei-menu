@@ -751,8 +751,14 @@ export default function App() {
     try {
       setSyncProgress("正在保存...");
 
-      const updatedDeletedItemIds = Array.from(
-        new Set([...deletedItemIds, ...(overrides?.deletedItemIds || [])]),
+      // 若显式传入 deletedItemIds（含“重新添加菜品”时的剔除结果），以它为准；
+      // 否则沿用当前值。随后再由下方自动检测补齐“缺失的默认菜品”。
+      const updatedDeletedItemIds: any[] = Array.from(
+        new Set<any>(
+          overrides?.deletedItemIds !== undefined
+            ? overrides.deletedItemIds
+            : deletedItemIds,
+        ),
       );
       const catsToSave = overrides?.categories || categories;
 
