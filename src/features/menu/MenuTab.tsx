@@ -1,4 +1,4 @@
-import type { FormEvent, ChangeEvent } from "react";
+import type { FormEvent } from "react";
 import {
   Settings,
   Plus,
@@ -17,11 +17,7 @@ import {
 } from "lucide-react";
 import { compressImage } from "../../utils/image";
 import { uploadBase64ToStorage } from "../../utils/storage";
-import type {
-  MenuCategory,
-  Promotion,
-  ReceiptSettings,
-} from "../../types/menu";
+import type { MenuCategory } from "../../types/menu";
 
 const ALLERGEN_OPTIONS = [
   { id: "gluten", label: "麸质", en: "Gluten", icon: "🌾" },
@@ -62,7 +58,6 @@ interface MenuTabProps {
   handleExportCsv: () => void;
   handleAITranslate: () => Promise<void>;
   handleAIEnhanceImage: () => Promise<void>;
-  handleApiKeyChange: (e: ChangeEvent<HTMLInputElement>) => void;
   setCurrency: (v: string) => void;
   setIsUploading: (v: boolean) => void;
   setUploadingItemId: (v: string | null) => void;
@@ -71,33 +66,9 @@ interface MenuTabProps {
   setSelectedCategory: (v: string) => void;
   setSortingCategoryId: (v: string | null) => void;
   currency: string;
-  restaurantName: string;
-  welcomeMessage: string;
-  bgUrl: string;
-  logoUrl: string;
-  layoutStyle: string;
-  theme: string;
-  soundEnabled: boolean;
-  receiptSettings: ReceiptSettings;
-  promotions: Promotion[];
-  setPromotions?: (p: Promotion[]) => void;
-  deletedItemIds?: string[];
-  setDeletedItemIds?: (ids: string[]) => void;
-  setRestaurantName?: (v: string) => void;
-  setWelcomeMessage?: (v: string) => void;
-  setBgUrl?: (v: string) => void;
-  setLogoUrl?: (v: string) => void;
-  setLayoutStyle?: (v: "grid" | "list" | "bento") => void;
-  setTheme?: (v: "midnight" | "light") => void;
-  setSoundEnabled?: (v: boolean) => void;
   isUploading: boolean;
-  promptValue: string;
-  promptDialog: any;
   uploadingItemId: string | null;
   selectedCategory: string;
-  sortingCategoryId: string | null;
-  isOptimizing: boolean;
-  optimizationProgress: string;
   onSaveToCloud?: (overrides?: any) => void;
   isTranslating: boolean;
   isEnhancing: boolean;

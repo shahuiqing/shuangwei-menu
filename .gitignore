@@ -14,5 +14,7 @@ kv-data/
 blob-data/
 .opencode/
 cf-test.ts
-cf-test.ts
 workspace/
+.npm-cache/
+*.zip
+cart-hub.json

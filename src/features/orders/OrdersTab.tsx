@@ -170,7 +170,7 @@ export function OrdersTab({
                             已上菜 (Served)
                           </span>
                         )}
-                        {order?.status === "preparing" && (
+                        {order?.status === "cooking" && (
                           <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-500 rounded font-bold">
                             制作中 (Preparing)
                           </span>
@@ -210,7 +210,7 @@ export function OrdersTab({
                                   try {
                                     await api.updateOrderStatus(
                                       order._id,
-                                      "preparing",
+                                      "cooking",
                                     );
                                   } catch {
                                     alert("操作失败 (Failed to update status)");
@@ -221,7 +221,7 @@ export function OrdersTab({
                                 接单 (Accept)
                               </button>
                             )}
-                            {order?.status === "preparing" && (
+                            {order?.status === "cooking" && (
                               <button
                                 onClick={async () => {
                                   try {

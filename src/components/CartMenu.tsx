@@ -357,7 +357,7 @@ export default function CartMenu({
                       </span>
                     </div>
                   )}
-                  {activeOrder.status === "preparing" && (
+                  {activeOrder.status === "cooking" && (
                     <div className="flex items-center gap-2 text-blue-400 bg-blue-500/10 px-3 py-1.5 rounded-lg w-full border border-blue-500/20">
                       <ChefHat size={16} className="animate-bounce" />
                       <span className="font-bold text-sm">

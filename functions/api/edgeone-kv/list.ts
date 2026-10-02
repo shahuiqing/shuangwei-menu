@@ -1,8 +1,13 @@
-import { json, kvListKeys } from "../../_lib/helpers";
+import { json, kvListKeys, checkAdmin } from "../../_lib/helpers";
 
-/** GET /api/edgeone-kv/list?prefix=&limit=&cursor= */
-export async function onRequest(context: { request: Request; env: any }): Promise<Response> {
+/** GET /api/edgeone-kv/list?prefix=&limit=&cursor=（需 admin，避免键枚举泄露） */
+export async function onRequest(context: {
+  request: Request;
+  env: any;
+}): Promise<Response> {
   try {
+    if (!checkAdmin(context.request, context.env))
+      return json({ error: "Unauthorized", code: "E_AUTH" }, 401);
     const url = new URL(context.request.url);
     const prefix = url.searchParams.get("prefix") || "";
     const limit = parseInt(url.searchParams.get("limit") || "256", 10) || 256;

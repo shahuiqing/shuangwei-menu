@@ -330,6 +330,14 @@ export default function App() {
       };
     }
   });
+  // 小票设置自动持久化到本地，刷新不丢失（云端保存是额外一层）
+  useEffect(() => {
+    try {
+      safeSetItem("menuReceiptSettings", JSON.stringify(receiptSettings));
+    } catch {
+      /* ignore */
+    }
+  }, [receiptSettings]);
   const [isSynced, setIsSynced] = useState(false);
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
   const [syncProgress, setSyncProgress] = useState("");
@@ -1051,10 +1059,6 @@ export default function App() {
 
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const isSettingsOpenRef = useRef(isSettingsOpen);
-  useEffect(() => {
-    isSettingsOpenRef.current = isSettingsOpen;
-  }, [isSettingsOpen]);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [shareFormat] = useState<"standard" | "stand">("standard");
   const [shareQrFgColor, setShareQrFgColor] = useState("");

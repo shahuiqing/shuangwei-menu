@@ -128,12 +128,15 @@ CREATE TABLE IF NOT EXISTS public.settings (
     "soundEnabled" BOOLEAN DEFAULT true,
     "layoutStyle" TEXT DEFAULT 'grid',
     "receiptSettings" JSONB DEFAULT '{}'::jsonb,
+    "deletedItemIds" JSONB DEFAULT '[]'::jsonb,
     "theme" TEXT DEFAULT 'dark'
 );
 -- P0-2 迁移：已存在表补列（幂等）
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS "adminPasswordHash" TEXT DEFAULT '';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS "devicePasswordsHash" JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS "securityAnswerHash" TEXT DEFAULT '';
+-- 前端会写入 deletedItemIds（软删除菜品），此前 schema 缺列导致云端保存报 column does not exist
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS "deletedItemIds" JSONB DEFAULT '[]'::jsonb;
 
 -- 插入默认设置记录 (如果未存在)
 INSERT INTO public.settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING;
@@ -155,6 +158,8 @@ DROP POLICY IF EXISTS "anon_read_categories" ON public.categories;
 DROP POLICY IF EXISTS "anon_read_menu_items" ON public.menu_items;
 DROP POLICY IF EXISTS "anon_read_orders" ON public.orders;
 DROP POLICY IF EXISTS "anon_insert_orders" ON public.orders;
+DROP POLICY IF EXISTS "anon_update_orders" ON public.orders;
+DROP POLICY IF EXISTS "anon_delete_orders" ON public.orders;
 DROP POLICY IF EXISTS "anon_read_tables" ON public.tables;
 DROP POLICY IF EXISTS "anon_read_settings" ON public.settings;
 DROP POLICY IF EXISTS "anon_read_settings_public" ON public.settings;
@@ -184,9 +189,14 @@ CREATE POLICY "anon_read_tables" ON public.tables FOR SELECT USING (true);
 -- 设置：A1 修复 - 移除 anon 直读 settings 表，匿名仅可读视图 settings_public；表本身仅 service_role 可全操作
 -- 旧 anon_read_settings 已删除，避免 403 误杀前先确保视图就绪（见下）
 CREATE POLICY "service_all_settings" ON public.settings FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
--- 订单：匿名可创建 + 可读，更新/删除仅 service_role（后厨需鉴权）
+-- 订单：匿名可创建 + 可读 + 可更新/删除（后厨改单/删单走浏览器直连，无 Supabase Auth 可用）
+-- ⚠️ 安全提示：UPDATE/DELETE 放开给 anon 是「纯静态前端 + Supabase 直连」架构下的妥协，
+--    任何持有 anon key 的客户端都能改/删订单，仅适用于内部/低风险场景。
+--    更安全方案：订单写操作改由后端（service_role）边缘函数执行，前端只读。
 CREATE POLICY "anon_insert_orders" ON public.orders FOR INSERT WITH CHECK (true);
 CREATE POLICY "anon_read_orders" ON public.orders FOR SELECT USING (true);
+CREATE POLICY "anon_update_orders" ON public.orders FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "anon_delete_orders" ON public.orders FOR DELETE USING (true);
 CREATE POLICY "service_all_orders" ON public.orders FOR UPDATE USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 CREATE POLICY "service_delete_orders" ON public.orders FOR DELETE USING (auth.role() = 'service_role');
 -- 库存/BOM：仅 authenticated（后台登录）可读写
@@ -228,6 +238,10 @@ GRANT SELECT ON public.settings_public TO anon, authenticated;
 -- =============================================================
 
 -- ─── 1. RLS：允许 anon 读写 settings（浏览器端直连必需）───
+-- ⚠️ 安全提示：以下策略会让任何持有 anon key 的客户端读取并改写 settings 全表，
+--    包括 adminPasswordHash / devicePasswordsHash / securityAnswerHash 等哈希字段。
+--    这是「纯静态前端 + Supabase 直连」架构下的妥协，仅适用于内部/低风险场景。
+--    更安全方案：settings 写入改由后端（service_role）执行，前端只读 settings_public 视图。
 DROP POLICY IF EXISTS "anon_read_settings" ON public.settings;
 CREATE POLICY "anon_read_settings" ON public.settings
   FOR SELECT USING (true);
@@ -268,7 +282,7 @@ END $$;
 --     Supabase Dashboard → Storage → Settings → Image Transformations → Enable
 
 -- ─── 5. 管理员密码初始化（123）───
+-- 注意：明文列 "adminPassword" 已在 schema 中删除，此处只写哈希
 UPDATE public.settings SET
-  "adminPassword" = '123',
   "adminPasswordHash" = '$2b$10$ogK6ffrwzpJQPwfdWc5dI.zwSvQ5hfwZavD.iaYQKwkguL23e.Hp6'
 WHERE id = 'global';

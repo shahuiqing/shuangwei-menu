@@ -50,46 +50,6 @@ class BlobStorageManager {
   }
 
   /**
-   * EdgeOne Pages Blob / KV Store 直接访问封装
-   */
-  async setEdgeOneBlob(
-    key: string,
-    value: string | Blob | ArrayBuffer,
-    storeName = "my-store",
-  ): Promise<boolean> {
-    try {
-      const response = await fetch("/api/edgeone-blob/set", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, value, storeName }),
-      });
-      return response.ok;
-    } catch (e) {
-      console.warn("[EdgeOne Blob] set failed:", e);
-      return false;
-    }
-  }
-
-  async getEdgeOneBlob(
-    key: string,
-    consistency: "strong" | "eventual" = "eventual",
-    storeName = "my-store",
-  ): Promise<string | null> {
-    try {
-      const res = await fetch(
-        `/api/edgeone-blob/get?key=${encodeURIComponent(key)}&storeName=${encodeURIComponent(storeName)}&consistency=${consistency}`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        return data.value;
-      }
-    } catch (e) {
-      console.warn("[EdgeOne Blob] get failed:", e);
-    }
-    return null;
-  }
-
-  /**
    * 上传 Base64 或 File 图片
    * 首选 Supabase Storage Bucket（图片主要存储于此），其次独立 COS/EdgeOne Endpoint，最后降级返回安全 Base64
    */
@@ -204,18 +164,7 @@ class BlobStorageManager {
       }
     }
 
-    // 3. EdgeOne Blob 本地缓存（可选兜底，非公网 URL，不返回）
-    if (typeof fileOrBase64 === "string") {
-      try {
-        await this.setEdgeOneBlob(
-          fileName,
-          fileOrBase64,
-          config.bucketName || "my-store",
-        );
-      } catch {}
-    }
-
-    // 4. 兜底方案：如果是 Base64 字符串则直接返回，避免阻断上传
+    // 3. 兜底方案：如果是 Base64 字符串则直接返回，避免阻断上传
     if (typeof fileOrBase64 === "string") {
       return fileOrBase64;
     }

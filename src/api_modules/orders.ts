@@ -56,7 +56,7 @@ export const normalizeTableString = (s: unknown): string =>
 export const parseOrderTimestamp = (v: unknown): number => {
   if (!v) return 0;
   if (typeof v === "number") return v;
-  let str = String(v).trim().replace(" ", "T");
+  let str = String(v).trim().replace(/\s+/, "T");
   const hasTZ = /Z$/i.test(str) || /[+-]\d{2}(:?\d{2})?$/.test(str);
   if (!hasTZ) str += "Z";
   const t = new Date(str).getTime();
@@ -336,10 +336,17 @@ export async function updateOrder(
           ? (q as any).eq("_id", orderId)
           : (q as any).eq("id", orderId)
       ) as any;
-      const { error } = await q;
+      const { data, error } = await q.select();
       if (error) {
         logger.error("orders", "updateOrder Supabase", error, ERR.ORDERS_WRITE);
         handleSupabaseWriteError(error, "updateOrder");
+      } else if (Array.isArray(data) && data.length === 0) {
+        logger.warn(
+          "orders",
+          "updateOrder affected 0 rows (RLS blocked?) - cloud not updated",
+          { id: orderId },
+          ERR.ORDERS_WRITE,
+        );
       } else logger.info("orders", "updateOrder success", { id: orderId });
     }
   } catch (e) {
@@ -375,10 +382,17 @@ export async function deleteOrder(orderId: string) {
           ? (q as any).eq("_id", orderId)
           : (q as any).eq("id", orderId)
       ) as any;
-      const { error } = await q;
+      const { data, error } = await q.select();
       if (error) {
         logger.error("orders", "deleteOrder Supabase", error, ERR.ORDERS_WRITE);
         handleSupabaseWriteError(error, "deleteOrder");
+      } else if (Array.isArray(data) && data.length === 0) {
+        logger.warn(
+          "orders",
+          "deleteOrder affected 0 rows (RLS blocked?) - cloud not updated",
+          { id: orderId },
+          ERR.ORDERS_WRITE,
+        );
       } else logger.info("orders", "deleteOrder success", { id: orderId });
     }
   } catch (e) {
@@ -415,8 +429,15 @@ export async function clearOrders(status?: string) {
             : (q as any).neq("_id", "keep-none")
         ) as any;
       }
-      const { error } = await q;
+      const { data, error } = await q.select();
       if (error) handleSupabaseWriteError(error, "clearOrders");
+      else if (Array.isArray(data) && data.length === 0)
+        logger.warn(
+          "orders",
+          "clearOrders affected 0 rows (RLS blocked?) - cloud not updated",
+          { status },
+          ERR.ORDERS_WRITE,
+        );
     }
   } catch (e) {
     handleSupabaseWriteError(e, "clearOrders");

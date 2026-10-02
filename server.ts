@@ -10,44 +10,9 @@ import authRouter from "./server/routes/auth";
 import { requireAdmin } from "./server/middleware/auth";
 import { rateLimit } from "./server/middleware/rateLimit";
 import * as cartHub from "./server/services/cartHub";
-import crypto from "crypto";
-
-// P1-10 SSRF 校验：仅允许 https 外发至白名单或 workers.dev
-function isSafePrintUrl(u: string): boolean {
-  try {
-    const url = new URL(u);
-    if (url.protocol !== "https:") return false;
-    if (["localhost", "127.0.0.1", "::1"].includes(url.hostname)) return false;
-    if (
-      /^10\./.test(url.hostname) ||
-      /^192\.168\./.test(url.hostname) ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(url.hostname)
-    )
-      return false;
-    // 额外白名单：可配 PRINT_WORKER_ALLOWLIST=host1,host2
-    const allow = (process.env.PRINT_WORKER_ALLOWLIST || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (
-      allow.length &&
-      !allow.includes(url.hostname) &&
-      !url.hostname.endsWith(".workers.dev")
-    )
-      return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-// P0-5 原子写
-function writeFileAtomic(filePath: string, data: string) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const tmp = filePath + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
-  fs.writeFileSync(tmp, data, "utf-8");
-  fs.renameSync(tmp, filePath);
-}
+import { queryD1, isD1Configured } from "./server/services/d1";
+import { writeFileAtomic } from "./server/utils/atomicWrite";
+import { isSafePrintUrl } from "./server/utils/safeUrl";
 
 dotenv.config();
 
@@ -83,48 +48,12 @@ app.use(requestLogger);
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/auth", authRouter);
 
-const CF_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-const CF_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
-const CF_D1_DB_ID = process.env.CLOUDFLARE_D1_DB_ID;
-
 const LOCAL_DB_FILE = path.join(process.cwd(), "local-settings.json");
-
-async function queryD1(sql: string, params: any[] = []) {
-  if (!CF_API_TOKEN || !CF_ACCOUNT_ID || !CF_D1_DB_ID) {
-    throw new Error("Cloudflare configuration is missing.");
-  }
-
-  const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/d1/database/${CF_D1_DB_ID}/query`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${CF_API_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ sql, params }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("D1 Query Error:", errText);
-    throw new Error(
-      `D1 query failed: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const data = await response.json();
-  if (!data.success) {
-    console.error("D1 Error details:", JSON.stringify(data.errors));
-    throw new Error("D1 query returned unsuccessful result.");
-  }
-
-  return data.result[0];
-}
 
 // Ensure the table exists
 app.post("/api/init-db", requireAdmin, async (req, res) => {
   try {
-    if (CF_API_TOKEN && CF_ACCOUNT_ID && CF_D1_DB_ID) {
+    if (isD1Configured()) {
       const result = await queryD1(
         "CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT)",
       );
@@ -140,7 +69,7 @@ app.post("/api/init-db", requireAdmin, async (req, res) => {
 // Check DB Status
 app.get("/api/db-status", async (req, res) => {
   try {
-    if (CF_API_TOKEN && CF_ACCOUNT_ID && CF_D1_DB_ID) {
+    if (isD1Configured()) {
       // Test query
       await queryD1("SELECT 1");
       res.json({ connected: true, type: "cloudflare-d1" });
@@ -155,7 +84,7 @@ app.get("/api/db-status", async (req, res) => {
 // Get settings
 app.get("/api/settings", async (req, res) => {
   try {
-    if (CF_API_TOKEN && CF_ACCOUNT_ID && CF_D1_DB_ID) {
+    if (isD1Configured()) {
       const result = await queryD1("SELECT data FROM settings WHERE id = ?", [
         "global",
       ]);
@@ -185,7 +114,7 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
     const payload = req.body;
     const dataStr = JSON.stringify(payload);
 
-    if (CF_API_TOKEN && CF_ACCOUNT_ID && CF_D1_DB_ID) {
+    if (isD1Configured()) {
       // Insert or Replace (Upsert)
       await queryD1(
         "INSERT INTO settings (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
@@ -227,12 +156,25 @@ function writeOrdersSafely(filePath: string, orders: any[]) {
 app.post("/api/orders", rateLimit(60_000, 20), async (req, res) => {
   try {
     const payload = req.body;
+    // 基本字段校验：必须是对象且含非空 items 数组，避免垃圾数据落盘/转发
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      !Array.isArray(payload.items) ||
+      payload.items.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ error: "items required", code: "E_ORDERS_VALIDATE" });
+    }
     payload.timestamp = new Date().toISOString();
     if (!payload.orderNumber) {
       payload.orderNumber = "ORD-" + Math.floor(Math.random() * 1000000);
     }
-    // Log the order received
-    console.log("Received local order:", payload);
+    // 不打印完整订单负载（含顾客信息），仅记录必要摘要
+    console.log(
+      `[orders] received ${payload.orderNumber} table=${payload.table_no || payload.customerName || "?"} items=${Array.isArray(payload.items) ? payload.items.length : 0}`,
+    );
 
     // Save to local-orders.json safely
     let orders = [];
@@ -301,7 +243,9 @@ app.post("/api/webhooks/orders", rateLimit(60_000, 30), async (req, res) => {
   }
   try {
     const payload = req.body;
-    console.log("Received Webhook Order:", payload);
+    console.log(
+      `[webhooks/orders] received table=${payload.table_no || payload.customerName || "?"} items=${Array.isArray(payload.items) ? payload.items.length : 0}`,
+    );
 
     const order = {
       orderNumber: payload.orderNumber || "EXT-" + Date.now(),
@@ -396,7 +340,7 @@ app.post("/api/edgeone-kv/put", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/edgeone-kv/get", async (req, res) => {
+app.get("/api/edgeone-kv/get", requireAdmin, async (req, res) => {
   try {
     const key = req.query.key as string;
     const type = (req.query.type as string) || "text";
@@ -479,7 +423,7 @@ app.delete("/api/edgeone-kv/delete", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/edgeone-kv/list", async (req, res) => {
+app.get("/api/edgeone-kv/list", requireAdmin, async (req, res) => {
   try {
     const prefix = (req.query.prefix as string) || "";
     const limit = parseInt((req.query.limit as string) || "256", 10);
@@ -557,7 +501,7 @@ app.post("/api/edgeone-blob/set", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/edgeone-blob/get", async (req, res) => {
+app.get("/api/edgeone-blob/get", requireAdmin, async (req, res) => {
   try {
     const key = req.query.key as string;
     const storeName = (req.query.storeName as string) || "my-store";
@@ -593,23 +537,7 @@ app.get("/api/edgeone-blob/get", async (req, res) => {
   }
 });
 
-app.use(errorHandler);
-
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
   // V1 切 cartHub 统一（消内存直写）
   const { clients, tableCarts } = cartHub;
 
@@ -636,8 +564,44 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // 未匹配的 /api/* 返回 JSON 404，避免被下方前端兜底吞成 index.html
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "Not Found", code: "E_NOT_FOUND" });
+  });
+
+  // 错误处理必须在所有 API 路由之后注册
+  app.use(errorHandler);
+
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    // Express 5 已不再接受裸通配符 "*"（会抛 Missing parameter name），改用中间件兜底 SPA 路由
+    app.use((req, res, next) => {
+      if (req.method !== "GET" && req.method !== "HEAD") return next();
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // 端口占用等启动错误不应以未捕获异常方式让进程裸崩
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        `[fatal] 端口 ${PORT} 已被占用，请停止占用进程或修改 PORT 后重试。`,
+      );
+    } else {
+      console.error("[fatal] HTTP 服务器启动失败:", err);
+    }
+    process.exit(1);
   });
 
   const wss = new WebSocketServer({ server });
@@ -709,4 +673,7 @@ async function startServer() {
   // Keep server cached orders intact; orders should only be removed when managed or cleared by administrator.
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("[fatal] 服务器启动失败:", err);
+  process.exit(1);
+});

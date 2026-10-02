@@ -27,10 +27,7 @@ interface MenuManagerDeps {
   layoutStyle: string;
   theme: string;
   soundEnabled: boolean;
-  adminPassword: string;
-  devicePasswords: { name: string; password: string }[];
   securityQuestion: string;
-  securityAnswer: string;
   promotions: Promotion[];
   setPromotions?: (p: Promotion[]) => void;
   receiptSettings: ReceiptSettings;
@@ -56,10 +53,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
     layoutStyle,
     theme,
     soundEnabled,
-    adminPassword,
-    devicePasswords,
     securityQuestion,
-    securityAnswer,
     promotions,
     setExportedJsonStr,
     setShowExportModal,
@@ -240,11 +234,11 @@ export function useMenuManager(deps: MenuManagerDeps) {
         layoutStyle,
         theme,
         soundEnabled,
-        adminPassword,
-        devicePasswords,
         securityQuestion,
-        securityAnswer,
         exportDate: new Date().toISOString(),
+        // 出于安全：备份不导出任何凭据（管理员密码/服务员密码/密保答案）
+        _securityNote:
+          "本备份不包含密码与密保答案；如需迁移凭据请在后台安全设置中重新配置。",
       };
       const jsonStr = JSON.stringify(backupObj, null, 2);
       setExportedJsonStr(jsonStr);
@@ -688,16 +682,20 @@ export function useMenuManager(deps: MenuManagerDeps) {
       currency && currency !== "none"
         ? `${newDish.price} ${currency}`
         : newDish.price;
+    // 库存：空字符串=不限量(null)；非法数字也按不限量处理，避免存入 NaN
+    const stockStr = String(newDish.stock ?? "").trim();
+    const stockNum =
+      stockStr === "" || isNaN(Number(stockStr)) ? null : Number(stockStr);
     const updatedCategories = categories.map((cat: any) => {
       if (cat.id === selectedCategory) {
         return {
           ...cat,
           items: [
-            ...cat.items,
+            ...(cat.items || []),
             {
               ...newDish,
               price: finalPrice,
-              stock: newDish.stock.trim() === "" ? null : Number(newDish.stock),
+              stock: stockNum,
               id: Math.random().toString(36).substr(2, 9),
             },
           ],

@@ -48,12 +48,8 @@ export const SupabaseSetupModal: React.FC<SupabaseSetupModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      const savedUrl =
-        localStorage.getItem("custom_supabase_url") || supabaseUrl || "";
-      const savedKey =
-        localStorage.getItem("custom_supabase_anon_key") ||
-        supabaseAnonKey ||
-        "";
+      const savedUrl = supabaseUrl || "";
+      const savedKey = supabaseAnonKey || "";
       const savedKvEp =
         localStorage.getItem("custom_tencent_kv_endpoint") || "";
       const savedKvTok = localStorage.getItem("custom_tencent_kv_token") || "";
@@ -131,7 +127,7 @@ export const SupabaseSetupModal: React.FC<SupabaseSetupModalProps> = ({
         setTestResult({
           success: true,
           message: `✅ Supabase 云数据库连接完美！${storageOk ? "且 Blob 存储桶 (" + (blobBucket.trim() || "menu-assets") + ") 访问正常！" : "提示：未检测到 Storage 桶，建议在 Supabase 后台创建并将桶名设为 Public。"}`,
-          tablesFound: ["settings", "orders", "inventory_items"],
+          tablesFound: ["settings", "orders"],
           blobBucketOk: storageOk,
         });
       }
@@ -154,12 +150,14 @@ export const SupabaseSetupModal: React.FC<SupabaseSetupModalProps> = ({
     const cleanBlobBkt = blobBucket.trim();
     const cleanBlobTok = blobToken.trim();
 
-    if (cleanUrl) localStorage.setItem("custom_supabase_url", cleanUrl);
-    else localStorage.removeItem("custom_supabase_url");
+    // Supabase 凭证出于安全考虑仅从环境变量 (.env / 部署平台) 读取，绝不落 localStorage，
+    // 避免 XSS 篡改 supabase 地址劫持数据。这里仅提供 .env 片段复制。
+    if (cleanUrl && cleanKey) {
+      const envText = `VITE_SUPABASE_URL=${cleanUrl}\nVITE_SUPABASE_ANON_KEY=${cleanKey}`;
+      navigator.clipboard?.writeText(envText).catch(() => {});
+    }
 
-    if (cleanKey) localStorage.setItem("custom_supabase_anon_key", cleanKey);
-    else localStorage.removeItem("custom_supabase_anon_key");
-
+    // KV / Blob 自定义配置会被前端缓存/存储层直接读取，持久化到 localStorage 生效
     if (cleanKvEp)
       localStorage.setItem("custom_tencent_kv_endpoint", cleanKvEp);
     else localStorage.removeItem("custom_tencent_kv_endpoint");
@@ -177,7 +175,9 @@ export const SupabaseSetupModal: React.FC<SupabaseSetupModalProps> = ({
     else localStorage.removeItem("custom_blob_token");
 
     if (onSuccess) onSuccess();
-    window.location.reload();
+    alert(
+      "KV / Blob 自定义配置已保存。\nSupabase 凭证出于安全仅从 .env 读取，已复制到剪贴板，请填入 .env（或部署平台环境变量）后重新构建/重启生效。",
+    );
   };
 
   const handleClearCustomConfig = () => {
@@ -208,138 +208,16 @@ export const SupabaseSetupModal: React.FC<SupabaseSetupModalProps> = ({
     setTimeout(() => setCopiedEnv(false), 3000);
   };
 
-  const sqlCode = `-- ======================================================================
--- 餐饮点餐系统 (Customer Menu) + POS 后厨管理 + 库存管理系统 (Inventory POS)
--- 共用 Supabase 数据库统一初始化 SQL 脚本 (supabase_schema.sql)
--- ======================================================================
-
-CREATE TABLE IF NOT EXISTS public.categories (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name VARCHAR(100) NOT NULL UNIQUE,
-  sort_order INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.menu_items (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
-  name VARCHAR(100) NOT NULL,
-  price DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  image_url TEXT,
-  description TEXT,
-  is_available BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.orders (
-  id VARCHAR(100) PRIMARY KEY,
-  _id VARCHAR(100),
-  table_no VARCHAR(50) NOT NULL DEFAULT 'A1',
-  customer_name VARCHAR(100),
-  type VARCHAR(20) DEFAULT 'dine_in',
-  status VARCHAR(20) DEFAULT 'pending',
-  total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  total DECIMAL(10, 2) DEFAULT 0,
-  items JSONB DEFAULT '[]'::jsonb,
-  notes TEXT DEFAULT '',
-  "unprintedNewOrder" BOOLEAN DEFAULT false,
-  "unprintedAdditions" JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.order_items (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  order_id VARCHAR(100) REFERENCES public.orders(id) ON DELETE CASCADE,
-  menu_item_id UUID REFERENCES public.menu_items(id) ON DELETE SET NULL,
-  name VARCHAR(100) NOT NULL,
-  quantity INT NOT NULL DEFAULT 1,
-  unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  subtotal DECIMAL(10, 2) NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS public.inventory_items (
-  id VARCHAR(50) PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  category VARCHAR(50) NOT NULL DEFAULT '常规物料',
-  stock DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  unit VARCHAR(20) NOT NULL DEFAULT 'kg',
-  safety_stock DECIMAL(10, 2) NOT NULL DEFAULT 5,
-  price DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.recipe_boms (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  menu_item_name VARCHAR(100) NOT NULL,
-  inventory_item_id VARCHAR(50) REFERENCES public.inventory_items(id) ON DELETE CASCADE,
-  dosage DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  unit VARCHAR(20) NOT NULL DEFAULT 'kg'
-);
-
--- 采购记录表 (采购/经营盈亏)
-CREATE TABLE IF NOT EXISTS public.purchase_orders (
-  id VARCHAR(100) PRIMARY KEY,
-  supplier VARCHAR(100) DEFAULT '',
-  item_id VARCHAR(50) NOT NULL,
-  item_name VARCHAR(100) NOT NULL,
-  quantity DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  unit VARCHAR(20) NOT NULL DEFAULT 'kg',
-  unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  total_cost DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  purchased_at TIMESTAMPTZ DEFAULT NOW(),
-  notes TEXT DEFAULT '',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 库存流水表 (损耗测算)
-CREATE TABLE IF NOT EXISTS public.inventory_transactions (
-  id VARCHAR(100) PRIMARY KEY,
-  item_id VARCHAR(50) NOT NULL,
-  item_name VARCHAR(100) NOT NULL,
-  type VARCHAR(20) NOT NULL DEFAULT 'adjustment'
-    CHECK (type IN ('purchase_in', 'order_out', 'adjustment', 'waste')),
-  quantity DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  unit VARCHAR(20) NOT NULL DEFAULT 'kg',
-  unit_cost DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  reference VARCHAR(200) DEFAULT '',
-  notes TEXT DEFAULT '',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.settings (
-    id TEXT PRIMARY KEY DEFAULT 'global',
-    categories JSONB DEFAULT '[]'::jsonb,
-    promotions JSONB DEFAULT '[]'::jsonb,
-    "bgUrl" TEXT DEFAULT '',
-    "restaurantName" TEXT DEFAULT '',
-    "welcomeMessage" TEXT DEFAULT '',
-    "logoUrl" TEXT DEFAULT '',
-    "adminPassword" TEXT DEFAULT 'admin123',
-    "soundEnabled" BOOLEAN DEFAULT true,
-    "layoutStyle" TEXT DEFAULT 'grid'
-);
-INSERT INTO public.settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING;
-
--- 关闭 RLS 确保两端程序读写无阻碍
-ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.menu_items DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.order_items DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory_items DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.recipe_boms DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.purchase_orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory_transactions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.settings DISABLE ROW LEVEL SECURITY;
-
--- 开启 Realtime 实时变动订阅
-ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.recipe_boms;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.purchase_orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory_transactions;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.menu_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
+  const sqlCode = `-- 安全提示：请勿使用旧版 "DISABLE ROW LEVEL SECURITY" 脚本（会让数据库对公网完全开放）。
+--
+-- 建表步骤：
+-- 1. 打开 Supabase 控制台 -> SQL Editor -> New query
+-- 2. 将仓库根目录的 supabase_schema.sql 全选粘贴并执行 Run
+--    （该脚本已启用 RLS 最小权限策略：匿名仅可读菜单/创建订单）
+-- 3. 若浏览器端仍需匿名读写 settings，再按需执行仓库中的 supabase_setup.sql
+--    （这会放宽 settings 写权限，请自行评估风险）
+--
+-- 本弹窗不再内置建表 SQL，避免与仓库 schema 不一致而建出缺表/缺列/不安全的数据库。
 `;
 
   const handleCopySql = () => {
@@ -411,12 +289,15 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
               <code className="bg-zinc-800 px-1 py-0.5 rounded text-amber-300">
                 New query
               </code>
-              ，粘贴下方一键复制的 SQL 脚本并点击 Run 执行。
+              ，执行仓库根目录的 supabase_schema.sql（见下方说明）并点击 Run。
             </li>
 
             <li className="leading-relaxed">
               <strong>双端绑定相同凭证</strong>:
-              将该凭证在此弹窗填入并点击【测试连接】。成功后点击【保存配置】，另外一台程序也填入相同凭证，即可秒级实时全自动联动！
+              将该凭证在此弹窗填入并点击【测试连接】。Supabase 凭证出于安全仅从
+              .env（或部署平台环境变量）读取，点击【保存 KV/Blob 配置并复制
+              .env】会复制 .env
+              片段，请填入后重新构建/重启；另一台程序填入相同凭证即可实时联动！
             </li>
           </ol>
         </div>
@@ -553,7 +434,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
               className="w-full sm:w-auto bg-orange-600 hover:bg-orange-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-orange-600/20 flex items-center justify-center gap-2"
             >
               <CheckCircle2 size={16} />
-              保存配置并更新应用
+              保存 KV/Blob 配置并复制 .env
             </button>
           </div>
 
@@ -578,7 +459,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                 <p className="font-semibold">{testResult.message}</p>
                 {testResult.tablesFound && (
                   <p className="text-xs text-emerald-400/80">
-                    数据表验证正常，支持实时订单推播与 BOM 库存自动扣减功能！
+                    数据表验证正常，支持实时订单推播功能！
                   </p>
                 )}
               </div>
@@ -591,7 +472,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold text-zinc-300 flex items-center gap-2">
               <FileCode size={15} className="text-amber-400" />
-              数据库建表 SQL 脚本 (supabase_schema.sql)
+              数据库建表说明 (supabase_schema.sql)
             </h4>
 
             <div className="flex items-center gap-2">
@@ -616,7 +497,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
                 className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-md shadow-amber-600/20"
               >
                 {copiedSql ? <Check size={13} /> : <Copy size={13} />}
-                {copiedSql ? "已复制建表 SQL" : "一键复制建表 SQL"}
+                {copiedSql ? "已复制建表说明" : "复制建表说明"}
               </button>
             </div>
           </div>

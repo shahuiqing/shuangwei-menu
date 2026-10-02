@@ -1,14 +1,23 @@
 // P1-8 修复：打印前转义，防止顾客名/备注 XSS 注入 innerHTML
-function escHtml(s: any){ return String(s??'').replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] as string)); }
+function escHtml(s: any) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ] as string,
+  );
+}
 export const printReceipt = (
   order: any,
   currency: string = "MAD",
   receiptSettings?: any,
   isKitchenTicket?: boolean,
-  ticketType?: "kitchen" | "addition" | "receipt"
+  ticketType?: "kitchen" | "addition" | "receipt",
 ) => {
   const isAddition = ticketType === "addition";
-  const actualIsKitchen = isKitchenTicket || ticketType === "kitchen" || isAddition;
+  const actualIsKitchen =
+    isKitchenTicket || ticketType === "kitchen" || isAddition;
   const dateStr = order.timestamp
     ? new Date(order.timestamp).toLocaleString()
     : new Date().toLocaleString();
@@ -28,9 +37,9 @@ export const printReceipt = (
       items.forEach((item: any) => {
         const identifier = item.id || item.name;
         if (groupedItems[identifier]) {
-          groupedItems[identifier].quantity += (item.quantity || 1);
+          groupedItems[identifier].quantity += item.quantity || 1;
         } else {
-          groupedItems[identifier] = { ...item, quantity: (item.quantity || 1) };
+          groupedItems[identifier] = { ...item, quantity: item.quantity || 1 };
         }
       });
 
@@ -240,7 +249,8 @@ export const printReceipt = (
     <body>
       <div class="receipt">
         ${
-          receiptSettings?.topLogoUrl && /^https:\/\/|^data:image\//.test(receiptSettings.topLogoUrl)
+          receiptSettings?.topLogoUrl &&
+          /^https:\/\/|^data:image\//.test(receiptSettings.topLogoUrl)
             ? `<img src="${escHtml(receiptSettings.topLogoUrl)}" class="top-logo" alt="Top Logo" />`
             : ""
         }
@@ -272,12 +282,12 @@ export const printReceipt = (
           !actualIsKitchen
             ? `
         <div class="total-section">
-          <div><strong>原价 (Original):</strong> ${currency}${order.total || 0}</div>
-          ${order.discountAmount ? `<div><strong>折扣 (Discount):</strong> -${currency}${order.discountAmount}</div>` : ""}
-          ${order.finalTotal !== undefined ? `<div style="font-size: 1.1em; font-weight: bold; margin-top: 1mm;"><strong>应收 (Total):</strong> ${currency}${order.finalTotal}</div>` : ""}
-          ${order.paymentMethod ? `<div style="margin-top: 1mm;"><strong>支付方式 (Payment):</strong> ${order.paymentMethod}</div>` : ""}
-          ${order.receivedAmount !== undefined ? `<div><strong>实收 (Received):</strong> ${currency}${order.receivedAmount}</div>` : ""}
-          ${order.changeAmount !== undefined && order.changeAmount > 0 ? `<div><strong>找零 (Change):</strong> ${currency}${order.changeAmount}</div>` : ""}
+          <div><strong>原价 (Original):</strong> ${escHtml(currency)}${escHtml(order.total || 0)}</div>
+          ${order.discountAmount ? `<div><strong>折扣 (Discount):</strong> -${escHtml(currency)}${escHtml(order.discountAmount)}</div>` : ""}
+          ${order.finalTotal !== undefined ? `<div style="font-size: 1.1em; font-weight: bold; margin-top: 1mm;"><strong>应收 (Total):</strong> ${escHtml(currency)}${escHtml(order.finalTotal)}</div>` : ""}
+          ${order.paymentMethod ? `<div style="margin-top: 1mm;"><strong>支付方式 (Payment):</strong> ${escHtml(order.paymentMethod)}</div>` : ""}
+          ${order.receivedAmount !== undefined ? `<div><strong>实收 (Received):</strong> ${escHtml(currency)}${escHtml(order.receivedAmount)}</div>` : ""}
+          ${order.changeAmount !== undefined && order.changeAmount > 0 ? `<div><strong>找零 (Change):</strong> ${escHtml(currency)}${escHtml(order.changeAmount)}</div>` : ""}
         </div>
         `
             : ""
@@ -297,7 +307,8 @@ export const printReceipt = (
               : ""
           }
           ${
-            receiptSettings?.bottomLogoUrl && /^https:\/\/|^data:image\//.test(receiptSettings.bottomLogoUrl)
+            receiptSettings?.bottomLogoUrl &&
+            /^https:\/\/|^data:image\//.test(receiptSettings.bottomLogoUrl)
               ? `<img src="${escHtml(receiptSettings.bottomLogoUrl)}" class="bottom-logo" alt="Bottom Logo" />`
               : ""
           }

@@ -2,20 +2,40 @@
 -- Supabase 完整功能设置（在 supabase_schema.sql 执行后补充）
 -- =============================================================
 
+-- ─── 0. 补列：前端会写入 deletedItemIds（软删除菜品）───
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS "deletedItemIds" JSONB DEFAULT '[]'::jsonb;
+
 -- ─── 1. RLS 调整：允许 anon 读写 settings（浏览器端直连必需）───
--- 注意：adminPasswordHash 等敏感字段虽可读，但前端不渲染；如需更强隔离可改读视图
+-- ⚠️ 安全提示：以下策略会让任何持有 anon key 的客户端读取并改写 settings 全表，
+--    包括 adminPasswordHash / devicePasswordsHash / securityAnswerHash 等哈希字段。
+--    这是「纯静态前端 + Supabase 直连」架构下的妥协，仅适用于内部/低风险场景。
+--    更安全方案：settings 写入改由后端（service_role）执行，前端只读 settings_public 视图。
+-- 注意：敏感字段虽可被读取，但前端不渲染。
 
 -- 允许匿名读取 settings（菜单/分类/外观等公开数据）
 DROP POLICY IF EXISTS "anon_read_settings" ON public.settings;
 CREATE POLICY "anon_read_settings" ON public.settings
   FOR SELECT USING (true);
 
--- 允许匿名写入 settings（后台保存菜单/外观/库存设置）
+-- 允许匿名写入 settings（后台保存菜单/外观等设置）
 DROP POLICY IF EXISTS "anon_upsert_settings" ON public.settings;
 CREATE POLICY "anon_upsert_settings" ON public.settings
   FOR INSERT WITH CHECK (true);
 CREATE POLICY "anon_upsert_settings_update" ON public.settings
   FOR UPDATE USING (true) WITH CHECK (true);
+
+-- ─── 1.5. RLS 调整：允许 anon 更新/删除 orders（后厨改单/删单直连必需）───
+-- ⚠️ 安全提示：同 settings，UPDATE/DELETE 放开给 anon 是「纯静态前端 + Supabase 直连」
+--    架构下的妥协，任何持有 anon key 的客户端都能改/删订单，仅适用于内部/低风险场景。
+--    更安全方案：订单写操作改由后端（service_role）执行，前端只读。
+--    未加此策略时，前端改单/删单会被 RLS 静默过滤（0 行命中且不报错），导致云端状态不更新。
+DROP POLICY IF EXISTS "anon_update_orders" ON public.orders;
+CREATE POLICY "anon_update_orders" ON public.orders
+  FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "anon_delete_orders" ON public.orders;
+CREATE POLICY "anon_delete_orders" ON public.orders
+  FOR DELETE USING (true);
 
 -- ─── 2. Storage 存储桶：menu-assets（图片上传/展示）───
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -57,7 +77,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
 --     然后在代码中已实现 ?width=&quality=80 参数
 
 -- ─── 6. 更新管理员密码哈希（初始密码 123） ───
+-- 注意：明文列 "adminPassword" 已在 supabase_schema.sql 中删除，此处只写哈希，避免报 column does not exist
 UPDATE public.settings SET
-  "adminPassword" = '123',
   "adminPasswordHash" = '$2b$10$ogK6ffrwzpJQPwfdWc5dI.zwSvQ5hfwZavD.iaYQKwkguL23e.Hp6'
 WHERE id = 'global';

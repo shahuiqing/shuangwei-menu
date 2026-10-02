@@ -24,28 +24,33 @@ function initAudio() {
 
 export function playPageTurnSound(isMuted: boolean) {
   if (isMuted) return;
-  const ctx = initAudio();
-  if (ctx.state === "suspended") {
-    ctx.resume().catch((err) => console.warn("Audio resume blocked", err));
+  try {
+    const ctx = initAudio();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch((err) => console.warn("Audio resume blocked", err));
+    }
+
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1200, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.15);
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0.0, ctx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+
+    noiseSource.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    noiseSource.start();
+    noiseSource.stop(ctx.currentTime + 0.15);
+  } catch (err) {
+    // 浏览器不支持 AudioContext 或音频被策略阻止时，不应影响页面逻辑
+    console.warn("Audio unavailable", err);
   }
-
-  const noiseSource = ctx.createBufferSource();
-  noiseSource.buffer = noiseBuffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(1200, ctx.currentTime);
-  filter.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.15);
-
-  const gainNode = ctx.createGain();
-  gainNode.gain.setValueAtTime(0.0, ctx.currentTime);
-  gainNode.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.02);
-  gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-
-  noiseSource.connect(filter);
-  filter.connect(gainNode);
-  gainNode.connect(ctx.destination);
-
-  noiseSource.start();
-  noiseSource.stop(ctx.currentTime + 0.15);
 }

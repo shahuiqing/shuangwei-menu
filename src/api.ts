@@ -9,7 +9,6 @@ import { lanSync } from "./services/lanSync";
 import { compressBase64Image } from "./utils/image";
 import { readLocalJSON } from "./utils/safeParse";
 import type { Order } from "./types/order";
-import type { InventoryItem, RecipeBom } from "./types/inventory";
 
 const SETTINGS_DOC_ID = "global";
 
@@ -64,17 +63,6 @@ const KNOWN_COLUMNS: Record<string, string[]> = {
     "created_at",
   ],
   tables: ["tableNo", "key", "active", "createdAt"],
-  inventory_items: [
-    "id",
-    "name",
-    "category",
-    "stock",
-    "unit",
-    "safety_stock",
-    "price",
-    "updated_at",
-  ],
-  recipe_boms: ["id", "menu_item_name", "inventory_item_id", "dosage", "unit"],
   categories: ["id", "name", "sort_order", "created_at"],
   menu_items: [
     "id",
@@ -193,8 +181,8 @@ export const normalizeOrder = (o: any): Order => {
 export const normalizeTableString = (str: unknown): string => {
   if (!str) return "";
   return String(str)
-    .replace(/^(桌号|table|号桌|桌)s*/i, "")
-    .replace(/s*(桌号|table|号桌|桌)$/i, "")
+    .replace(/^(桌号|table|号桌|桌)\s*/i, "")
+    .replace(/\s*(桌号|table|号桌|桌)$/i, "")
     .trim()
     .toLowerCase();
 };
@@ -382,7 +370,6 @@ let customerOrderListeners: {
   callback: (order: any) => void;
   fetchAndCallback: () => void;
 }[] = [];
-let inventoryListeners: (() => void)[] = [];
 
 // EdgeOne 部署：购物车实时同步 + 管理员通知（Supabase Realtime broadcast，替代原 WebSocket cartHub）
 let cartListeners: {
@@ -390,10 +377,6 @@ let cartListeners: {
   callback: (cart: Record<string, number>) => void;
 }[] = [];
 let adminNotificationListeners: ((payload: any) => void)[] = [];
-
-export const triggerLocalInventoryChange = () => {
-  inventoryListeners.forEach((cb) => cb());
-};
 
 let globalSyncChannel: any = null;
 let syncChannelRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -482,14 +465,6 @@ export const ensureSyncChannel = () => {
           }
           if (ordersListeners.length > 0) {
             triggerLocalOrdersChange();
-          }
-
-          if (
-            payload.eventType === "INSERT" &&
-            payload.new &&
-            payload.new.items
-          ) {
-            api.deductInventoryForOrderItems(payload.new.items);
           }
 
           customerOrderListeners.forEach((listener) => {
@@ -619,11 +594,6 @@ export const ensureSyncChannel = () => {
           triggerLocalTablesChange();
         }
       })
-      .on("broadcast", { event: "inventory_changed" }, () => {
-        kvCache.invalidate("inventory_items");
-        kvCache.invalidate("recipe_boms");
-        triggerLocalInventoryChange();
-      })
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tables" },
@@ -631,22 +601,6 @@ export const ensureSyncChannel = () => {
           if (tablesListeners.length > 0) {
             triggerLocalTablesChange();
           }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "inventory_items" },
-        () => {
-          kvCache.invalidate("inventory_items");
-          triggerLocalInventoryChange();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "recipe_boms" },
-        () => {
-          kvCache.invalidate("recipe_boms");
-          triggerLocalInventoryChange();
         },
       )
       // ——— EdgeOne 部署：购物车实时同步（替代原 WebSocket cartHub） ———
@@ -1191,7 +1145,6 @@ export const api = {
     try {
       if (lanSync.isLanMode()) lanSync.sendOrder(fullOrder);
     } catch {}
-    api.deductInventoryForOrderItems(order.items as Record<string, unknown>[]);
     return fullOrder;
   },
 
@@ -1286,9 +1239,6 @@ export const api = {
     });
 
     await api.updateOrder(sId, updatePayload, fullOrder);
-    api.deductInventoryForOrderItems(
-      orderData.items as Record<string, unknown>[],
-    );
 
     return fullOrder;
   },
@@ -1335,8 +1285,13 @@ export const api = {
         } else {
           queryBuilder = queryBuilder.eq("id", orderId);
         }
-        const { error } = await queryBuilder;
+        const { data, error } = await queryBuilder.select();
         if (error) handleSupabaseError(error, "updateOrder");
+        else if (Array.isArray(data) && data.length === 0)
+          handleSupabaseError(
+            new Error("RLS blocked? 0 rows affected - cloud not updated"),
+            "updateOrder",
+          );
       }
     } catch (e) {
       handleSupabaseError(e, "updateOrder");
@@ -1385,8 +1340,13 @@ export const api = {
             queryBuilder = queryBuilder.neq("_id", "keep-none");
           }
         }
-        const { error } = await queryBuilder;
+        const { data, error } = await queryBuilder.select();
         if (error) handleSupabaseError(error, "clearOrders");
+        else if (Array.isArray(data) && data.length === 0)
+          handleSupabaseError(
+            new Error("RLS blocked? 0 rows affected - cloud not updated"),
+            "clearOrders",
+          );
       }
     } catch (e) {
       handleSupabaseError(e, "clearOrders");
@@ -1492,8 +1452,13 @@ export const api = {
         } else {
           queryBuilder = queryBuilder.eq("id", orderId);
         }
-        const { error } = await queryBuilder;
+        const { data, error } = await queryBuilder.select();
         if (error) handleSupabaseError(error, "deleteOrder");
+        else if (Array.isArray(data) && data.length === 0)
+          handleSupabaseError(
+            new Error("RLS blocked? 0 rows affected - cloud not updated"),
+            "deleteOrder",
+          );
       }
     } catch (e) {
       handleSupabaseError(e, "deleteOrder");
@@ -2285,258 +2250,6 @@ export const api = {
     };
   },
 
-  // ==========================================
-  // 库存物料 & BOM配方 API 接口
-  // ==========================================
-  getInventoryItems: async (): Promise<InventoryItem[]> => {
-    // 尝试从 KV 读取
-    const cachedKv = await kvCache.get<any[]>("inventory_items");
-    if (cachedKv) return cachedKv;
-
-    try {
-      if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { data, error } = await supabase
-          .from("inventory_items")
-          .select("*")
-          .order("id", { ascending: true });
-        if (error) throw error;
-        if (data && data.length > 0) {
-          kvCache.set("inventory_items", data, 300);
-          return data;
-        }
-      }
-    } catch (e) {
-      handleSupabaseReadError(e, "getInventoryItems");
-    }
-
-    const localStr = localStorage.getItem("local_inventory_items");
-    if (localStr) {
-      return readLocalJSON<InventoryItem[]>("local_inventory_items", []);
-    }
-    localStorage.setItem(
-      "local_inventory_items",
-      JSON.stringify(DEFAULT_INVENTORY_ITEMS),
-    );
-    return DEFAULT_INVENTORY_ITEMS;
-  },
-
-  saveInventoryItem: async (
-    item: Partial<InventoryItem> & Pick<InventoryItem, "id" | "name">,
-  ) => {
-    const payload = await filterPayloadByTable("inventory_items", {
-      ...item,
-      updated_at: new Date().toISOString(),
-    });
-
-    try {
-      if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { error } = await supabase
-          .from("inventory_items")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-        triggerBroadcast("inventory_changed");
-      }
-    } catch (e) {
-      handleSupabaseError(e, "saveInventoryItem");
-    }
-
-    const localItems: InventoryItem[] = readLocalJSON<InventoryItem[]>(
-      "local_inventory_items",
-      [...DEFAULT_INVENTORY_ITEMS],
-    );
-    const idx = localItems.findIndex((i: InventoryItem) => i.id === item.id);
-    if (idx !== -1) {
-      localItems[idx] = { ...localItems[idx], ...payload } as InventoryItem;
-    } else {
-      localItems.push(payload as unknown as InventoryItem);
-    }
-    localStorage.setItem("local_inventory_items", JSON.stringify(localItems));
-    kvCache.invalidate("inventory_items");
-    triggerLocalInventoryChange();
-    triggerBroadcast("inventory_changed");
-  },
-
-  deleteInventoryItem: async (id: string) => {
-    try {
-      if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { error } = await supabase
-          .from("inventory_items")
-          .delete()
-          .eq("id", id);
-        if (error) throw error;
-        triggerBroadcast("inventory_changed");
-      }
-    } catch (e) {
-      handleSupabaseError(e, "deleteInventoryItem");
-    }
-
-    kvCache.invalidate("inventory_items");
-    const localStr = localStorage.getItem("local_inventory_items");
-    if (localStr) {
-      let localItems: InventoryItem[] = readLocalJSON<InventoryItem[]>(
-        "local_inventory_items",
-        [],
-      );
-      localItems = localItems.filter((i: InventoryItem) => i.id !== id);
-      localStorage.setItem("local_inventory_items", JSON.stringify(localItems));
-      triggerLocalInventoryChange();
-      triggerBroadcast("inventory_changed");
-    }
-  },
-
-  getRecipeBoms: async (): Promise<RecipeBom[]> => {
-    // 尝试从 KV 缓存中快速读取 BOM 配方
-    const cachedBoms = await kvCache.get<any[]>("recipe_boms");
-    if (cachedBoms) return cachedBoms;
-
-    try {
-      if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { data, error } = await supabase.from("recipe_boms").select("*");
-        if (error) throw error;
-        if (data && data.length > 0) {
-          kvCache.set("recipe_boms", data, 300);
-          return data;
-        }
-      }
-    } catch (e) {
-      handleSupabaseReadError(e, "getRecipeBoms");
-    }
-
-    const localStr = localStorage.getItem("local_recipe_boms");
-    if (localStr) {
-      return readLocalJSON<RecipeBom[]>("local_recipe_boms", []);
-    }
-    localStorage.setItem(
-      "local_recipe_boms",
-      JSON.stringify(DEFAULT_RECIPE_BOMS),
-    );
-    return DEFAULT_RECIPE_BOMS;
-  },
-
-  saveRecipeBom: async (bom: RecipeBom) => {
-    const payload = await filterPayloadByTable("recipe_boms", {
-      ...bom,
-      id: bom.id || "BOM-" + Math.random().toString(36).substring(2, 9),
-    });
-
-    try {
-      if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { error } = await supabase
-          .from("recipe_boms")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-        triggerBroadcast("inventory_changed");
-      }
-    } catch (e) {
-      handleSupabaseError(e, "saveRecipeBom");
-    }
-
-    kvCache.invalidate("recipe_boms");
-    const localBoms: RecipeBom[] = readLocalJSON<RecipeBom[]>(
-      "local_recipe_boms",
-      [...DEFAULT_RECIPE_BOMS],
-    );
-    const idx = localBoms.findIndex((b: RecipeBom) => b.id === payload.id);
-    if (idx !== -1) {
-      localBoms[idx] = { ...localBoms[idx], ...payload } as RecipeBom;
-    } else {
-      localBoms.push(payload as unknown as RecipeBom);
-    }
-    localStorage.setItem("local_recipe_boms", JSON.stringify(localBoms));
-    triggerLocalInventoryChange();
-    triggerBroadcast("inventory_changed");
-  },
-
-  deleteRecipeBom: async (id: string) => {
-    try {
-      if (supabase && isSupabaseConfigured && isSupabaseHealthy) {
-        const { error } = await supabase
-          .from("recipe_boms")
-          .delete()
-          .eq("id", id);
-        if (error) throw error;
-        triggerBroadcast("inventory_changed");
-      }
-    } catch (e) {
-      handleSupabaseError(e, "deleteRecipeBom");
-    }
-
-    kvCache.invalidate("recipe_boms");
-    const localStr = localStorage.getItem("local_recipe_boms");
-    if (localStr) {
-      let localBoms: RecipeBom[] = readLocalJSON<RecipeBom[]>(
-        "local_recipe_boms",
-        [],
-      );
-      localBoms = localBoms.filter((b: RecipeBom) => b.id !== id);
-      localStorage.setItem("local_recipe_boms", JSON.stringify(localBoms));
-      triggerLocalInventoryChange();
-      triggerBroadcast("inventory_changed");
-    }
-  },
-
-  subscribeToInventory: (callback: () => void) => {
-    inventoryListeners.push(callback);
-    ensureSyncChannel();
-    return () => {
-      inventoryListeners = inventoryListeners.filter((l) => l !== callback);
-    };
-  },
-
-  deductInventoryForOrderItems: async (items: Record<string, unknown>[]) => {
-    if (!items || !Array.isArray(items) || items.length === 0) return;
-
-    try {
-      const inventory = await api.getInventoryItems();
-      const boms = await api.getRecipeBoms();
-
-      if (!inventory.length || !boms.length) return;
-
-      const updatedMap = new Map<string, InventoryItem>();
-      inventory.forEach((item) => updatedMap.set(item.id, { ...item }));
-
-      let inventoryChanged = false;
-
-      for (const orderItem of items) {
-        const itemName = orderItem.title || orderItem.name;
-        const qty = Number(orderItem.quantity || orderItem.count || 1);
-        if (!itemName || isNaN(qty) || qty <= 0) continue;
-
-        // Match BOMs by menu item name
-        const matchingBoms = boms.filter(
-          (b: RecipeBom) =>
-            b.menu_item_name &&
-            String(b.menu_item_name).trim().toLowerCase() ===
-              String(itemName).trim().toLowerCase(),
-        );
-
-        for (const bom of matchingBoms) {
-          const targetInv = updatedMap.get(bom.inventory_item_id);
-          if (targetInv) {
-            const deduction = Number(bom.dosage) * qty;
-            const currentStock = Number(targetInv.stock || 0);
-            const newStock = Math.max(
-              0,
-              Number((currentStock - deduction).toFixed(2)),
-            );
-            targetInv.stock = newStock;
-            targetInv.updated_at = new Date().toISOString();
-            updatedMap.set(bom.inventory_item_id, targetInv);
-            inventoryChanged = true;
-          }
-        }
-      }
-
-      if (inventoryChanged) {
-        for (const [, invItem] of updatedMap) {
-          await api.saveInventoryItem(invItem);
-        }
-      }
-    } catch (err) {
-      console.warn("Failed automatic BOM deduction:", err);
-    }
-  },
-
   syncCategoriesAndMenuItemsToSupabase: async (
     categories: Record<string, unknown>[],
   ) => {
@@ -2684,8 +2397,6 @@ export const api = {
       "settings",
       "categories",
       "menu_items",
-      "inventory_items",
-      "recipe_boms",
       "tables",
       "orders",
     ];
@@ -2758,72 +2469,27 @@ export const api = {
           INITIAL_MENU_CATEGORIES,
           existingSettings.deletedItemIds || [],
         );
-        if (
-          JSON.stringify(categoriesToSync) !==
-          JSON.stringify(existingSettings.categories)
-        ) {
-          await supabase
-            .from("settings")
-            .update({ categories: categoriesToSync })
-            .eq("id", SETTINGS_DOC_ID);
-          logs.push("✅ settings 表已同步更新最新的菜单分类与新菜品排序");
-        } else {
-          logs.push("ℹ️ settings 表已包含最新设置数据");
-        }
+        // 客户端读取时本就会 mergeAndOrderCategories，无需每次加载都回写 settings（避免无谓写库/覆盖）
+        logs.push("ℹ️ settings 表已包含最新设置数据");
       }
 
-      // 2. 同步 categories 和 menu_items 关系表
-      try {
-        await api.syncCategoriesAndMenuItemsToSupabase(categoriesToSync);
-        logs.push(
-          `✅ 已成功同步 ${categoriesToSync.length} 个分类及相关菜品至 categories / menu_items 表`,
-        );
-      } catch (e) {
-        logs.push(
-          `⚠️ categories / menu_items 同步通知: ${(e as Error)?.message || e}`,
-        );
-      }
-
-      // 3. inventory_items 原材料库存表初始化
-      const { count: invCount } = await supabase
-        .from("inventory_items")
+      // 2. 仅在 categories 关系表为空（或强制/手动）时才同步，避免每次加载都写全量菜品
+      const { count: catCount } = await supabase
+        .from("categories")
         .select("*", { count: "exact", head: true });
-      if (
-        (invCount === 0 || invCount === null || force) &&
-        DEFAULT_INVENTORY_ITEMS.length > 0
-      ) {
-        for (const item of DEFAULT_INVENTORY_ITEMS) {
-          await supabase.from("inventory_items").upsert(
-            {
-              ...item,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "id" },
+      if (catCount === 0 || catCount === null || force) {
+        try {
+          await api.syncCategoriesAndMenuItemsToSupabase(categoriesToSync);
+          logs.push(
+            `✅ 已成功同步 ${categoriesToSync.length} 个分类及相关菜品至 categories / menu_items 表`,
+          );
+        } catch (e) {
+          logs.push(
+            `⚠️ categories / menu_items 同步通知: ${(e as Error)?.message || e}`,
           );
         }
-        logs.push(
-          `✅ inventory_items 库存表已成功初始化 (${DEFAULT_INVENTORY_ITEMS.length} 种物料)`,
-        );
       } else {
-        logs.push(`ℹ️ inventory_items 表当前包含 ${invCount ?? 0} 条物料记录`);
-      }
-
-      // 4. recipe_boms BOM配方表初始化
-      const { count: bomCount } = await supabase
-        .from("recipe_boms")
-        .select("*", { count: "exact", head: true });
-      if (
-        (bomCount === 0 || bomCount === null || force) &&
-        DEFAULT_RECIPE_BOMS.length > 0
-      ) {
-        for (const bom of DEFAULT_RECIPE_BOMS) {
-          await supabase.from("recipe_boms").upsert(bom, { onConflict: "id" });
-        }
-        logs.push(
-          `✅ recipe_boms 配方表已成功初始化 (${DEFAULT_RECIPE_BOMS.length} 条 BOM 配方)`,
-        );
-      } else {
-        logs.push(`ℹ️ recipe_boms 表当前包含 ${bomCount ?? 0} 条配方记录`);
+        logs.push(`ℹ️ categories 表已有 ${catCount} 条记录，跳过全量同步`);
       }
 
       // 5. tables 二维码餐桌表初始化
@@ -2865,11 +2531,8 @@ export const api = {
 
       // 刷新缓存
       kvCache.invalidate("app_settings");
-      kvCache.invalidate("inventory_items");
-      kvCache.invalidate("recipe_boms");
 
       triggerBroadcast("settings_changed");
-      triggerBroadcast("inventory_changed");
       triggerBroadcast("tables_changed");
 
       return { success: true, logs };
@@ -2915,153 +2578,3 @@ export const api = {
     };
   },
 };
-
-export const DEFAULT_INVENTORY_ITEMS = [
-  {
-    id: "INV-101",
-    name: "特级雪花牛肉",
-    category: "肉类与海鲜",
-    stock: 50.0,
-    unit: "kg",
-    safety_stock: 5.0,
-    price: 80.0,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "INV-102",
-    name: "精选清真牛肉馅",
-    category: "肉类与海鲜",
-    stock: 40.0,
-    unit: "kg",
-    safety_stock: 4.0,
-    price: 40.0,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "INV-103",
-    name: "农家鲜土鸡",
-    category: "肉类与海鲜",
-    stock: 30.0,
-    unit: "kg",
-    safety_stock: 3.0,
-    price: 35.0,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "INV-104",
-    name: "饺子皮面粉",
-    category: "粮油面粉",
-    stock: 80.0,
-    unit: "kg",
-    safety_stock: 8.0,
-    price: 8.0,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "INV-105",
-    name: "重庆特级朝天椒",
-    category: "调料香料",
-    stock: 15.0,
-    unit: "kg",
-    safety_stock: 2.0,
-    price: 25.0,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "INV-106",
-    name: "香浓高汤原汁",
-    category: "汤底底料",
-    stock: 60.0,
-    unit: "L",
-    safety_stock: 10.0,
-    price: 12.0,
-    updated_at: new Date().toISOString(),
-  },
-];
-
-export const DEFAULT_RECIPE_BOMS = [
-  {
-    id: "BOM-101",
-    menu_item_name: "清汤锅底",
-    inventory_item_id: "INV-103",
-    dosage: 0.3,
-    unit: "kg",
-  },
-  {
-    id: "BOM-102",
-    menu_item_name: "清汤锅底",
-    inventory_item_id: "INV-106",
-    dosage: 1.5,
-    unit: "L",
-  },
-  {
-    id: "BOM-103",
-    menu_item_name: "干饺 (大份)",
-    inventory_item_id: "INV-102",
-    dosage: 0.25,
-    unit: "kg",
-  },
-  {
-    id: "BOM-104",
-    menu_item_name: "干饺 (大份)",
-    inventory_item_id: "INV-104",
-    dosage: 0.15,
-    unit: "kg",
-  },
-  {
-    id: "BOM-105",
-    menu_item_name: "干饺 (大份)",
-    inventory_item_id: "INV-106",
-    dosage: 0.5,
-    unit: "L",
-  },
-  {
-    id: "BOM-106",
-    menu_item_name: "干饺 (小份)",
-    inventory_item_id: "INV-102",
-    dosage: 0.18,
-    unit: "kg",
-  },
-  {
-    id: "BOM-107",
-    menu_item_name: "干饺 (小份)",
-    inventory_item_id: "INV-104",
-    dosage: 0.1,
-    unit: "kg",
-  },
-  {
-    id: "BOM-108",
-    menu_item_name: "干饺 (小份)",
-    inventory_item_id: "INV-106",
-    dosage: 0.35,
-    unit: "L",
-  },
-  {
-    id: "BOM-109",
-    menu_item_name: "煎饺 (大份)",
-    inventory_item_id: "INV-102",
-    dosage: 0.25,
-    unit: "kg",
-  },
-  {
-    id: "BOM-110",
-    menu_item_name: "煎饺 (大份)",
-    inventory_item_id: "INV-104",
-    dosage: 0.15,
-    unit: "kg",
-  },
-  {
-    id: "BOM-111",
-    menu_item_name: "煎饺 (小份)",
-    inventory_item_id: "INV-102",
-    dosage: 0.18,
-    unit: "kg",
-  },
-  {
-    id: "BOM-112",
-    menu_item_name: "煎饺 (小份)",
-    inventory_item_id: "INV-104",
-    dosage: 0.1,
-    unit: "kg",
-  },
-];

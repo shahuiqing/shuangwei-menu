@@ -41,17 +41,6 @@ export const KNOWN_COLUMNS: Record<string, string[]> = {
     "created_at",
   ],
   tables: ["tableNo", "key", "active", "createdAt"],
-  inventory_items: [
-    "id",
-    "name",
-    "category",
-    "stock",
-    "unit",
-    "safety_stock",
-    "price",
-    "updated_at",
-  ],
-  recipe_boms: ["id", "menu_item_name", "inventory_item_id", "dosage", "unit"],
   categories: ["id", "name", "sort_order", "created_at"],
   menu_items: [
     "id",
@@ -71,31 +60,6 @@ export const KNOWN_COLUMNS: Record<string, string[]> = {
     "quantity",
     "unit_price",
     "subtotal",
-  ],
-  purchase_orders: [
-    "id",
-    "supplier",
-    "item_id",
-    "item_name",
-    "quantity",
-    "unit",
-    "unit_price",
-    "total_cost",
-    "purchased_at",
-    "notes",
-    "created_at",
-  ],
-  inventory_transactions: [
-    "id",
-    "item_id",
-    "item_name",
-    "type",
-    "quantity",
-    "unit",
-    "unit_cost",
-    "reference",
-    "notes",
-    "created_at",
   ],
 };
 
@@ -136,21 +100,6 @@ export async function filterPayloadByTable(
     if (columns.includes(k)) filtered[k] = payload[k];
   return filtered;
 }
-
-export let isQuotaExceeded = false;
-let quotaListeners: (() => void)[] = [];
-export const setQuotaExceeded = (v: boolean) => {
-  if (isQuotaExceeded !== v) {
-    isQuotaExceeded = v;
-    quotaListeners.forEach((cb) => cb());
-  }
-};
-export const onQuotaExceededChange = (cb: () => void) => {
-  quotaListeners.push(cb);
-  return () => {
-    quotaListeners = quotaListeners.filter((l) => l !== cb);
-  };
-};
 
 export function handleSupabaseReadError(err: any, ctx: string) {
   console.warn(`[Supabase read ${ctx}]:`, err);
