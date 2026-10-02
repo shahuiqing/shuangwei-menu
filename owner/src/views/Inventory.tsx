@@ -9,9 +9,9 @@ import {
   Layers,
   Pencil,
   Save,
-  X,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { Sheet, SheetField } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
 import {
@@ -245,50 +245,37 @@ export default function Inventory({ version = 0 }: { version?: number }) {
       </ChartCard>
 
       {/* 编辑原料 */}
-      {editing && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setEditing(null)}
-        >
-          <div
-            className="bg-zinc-900 border border-white/5 rounded-2xl w-full max-w-md p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-semibold">
-                {editing.id ? "编辑原料" : "新增原料"}
-              </h3>
-              <button
-                onClick={() => setEditing(null)}
-                className="text-zinc-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
+      <Sheet
+        open={!!editing}
+        title={editing?.id ? "编辑原料" : "新增原料"}
+        onClose={() => setEditing(null)}
+      >
+        {editing && (
+          <>
             <div className="grid grid-cols-2 gap-3">
-              <Field
+              <SheetField
                 label="名称"
                 value={editing.name || ""}
                 onChange={(v) => setEditing({ ...editing, name: v })}
                 className="col-span-2"
               />
-              <Field
+              <SheetField
                 label="分类"
                 value={editing.category || ""}
                 onChange={(v) => setEditing({ ...editing, category: v })}
               />
-              <Field
+              <SheetField
                 label="单位"
                 value={editing.unit || ""}
                 onChange={(v) => setEditing({ ...editing, unit: v })}
               />
-              <Field
+              <SheetField
                 label="现存量"
                 type="number"
                 value={editing.stock}
                 onChange={(v) => setEditing({ ...editing, stock: num(v) })}
               />
-              <Field
+              <SheetField
                 label="安全库存"
                 type="number"
                 value={editing.safety_stock}
@@ -296,7 +283,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                   setEditing({ ...editing, safety_stock: num(v) })
                 }
               />
-              <Field
+              <SheetField
                 label="单价(成本)"
                 type="number"
                 value={editing.price}
@@ -306,81 +293,48 @@ export default function Inventory({ version = 0 }: { version?: number }) {
             </div>
             <button
               onClick={submitEdit}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold"
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold active:scale-[0.98] transition-transform"
             >
               <Save size={16} /> 保存
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Sheet>
 
       {/* 调整库存 */}
-      {adjusting && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setAdjusting(null)}
-        >
-          <div
-            className="bg-zinc-900 border border-white/5 rounded-2xl w-full max-w-sm p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-white font-semibold">
-                调整库存 · {adjusting.name}
-              </h3>
-              <button
-                onClick={() => setAdjusting(null)}
-                className="text-zinc-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <p className="text-xs text-zinc-500 mb-4">
-              当前 {num(adjusting.stock)} {adjusting.unit} · 正数入库、负数出库
-            </p>
-            <Field
+      <Sheet
+        open={!!adjusting}
+        title={`调整库存 · ${adjusting?.name ?? ""}`}
+        subtitle={
+          adjusting
+            ? `当前 ${num(adjusting.stock)} ${adjusting.unit} · 正数入库、负数出库`
+            : ""
+        }
+        onClose={() => setAdjusting(null)}
+      >
+        {adjusting && (
+          <>
+            <SheetField
               label="调整数量"
               type="number"
               value={delta}
               onChange={setDelta}
             />
             <div className="h-3" />
-            <Field label="备注" value={adjustNote} onChange={setAdjustNote} />
+            <SheetField
+              label="备注"
+              value={adjustNote}
+              onChange={setAdjustNote}
+            />
             <button
               onClick={submitAdjust}
-              className="mt-4 w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-semibold"
+              className="mt-4 w-full py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-semibold active:scale-[0.98] transition-transform"
             >
               确认调整
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Sheet>
     </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  className = "",
-}: {
-  label: string;
-  value: string | number | undefined;
-  onChange: (v: string) => void;
-  type?: string;
-  className?: string;
-}) {
-  return (
-    <label className={className}>
-      <span className="text-xs text-zinc-400">{label}</span>
-      <input
-        type={type}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full mt-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-      />
-    </label>
   );
 }

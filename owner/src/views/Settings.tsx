@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Store, KeyRound, CheckCircle2, HardDrive, Trash2 } from "lucide-react";
+import {
+  Store,
+  KeyRound,
+  CheckCircle2,
+  HardDrive,
+  Trash2,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+} from "lucide-react";
 import { ChartCard, Skeleton } from "../components/ui";
 import { toast } from "../components/Toast";
 import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
@@ -21,6 +30,7 @@ export default function Settings({
 
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
 
   const [stats, setStats] = useState<TableStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -98,7 +108,7 @@ export default function Settings({
         <button
           onClick={saveStore}
           disabled={savingStore}
-          className="mt-3 w-full py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50"
+          className="mt-3 w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
         >
           {savingStore ? "保存中…" : "保存店铺名称"}
         </button>
@@ -110,22 +120,31 @@ export default function Settings({
         action={<KeyRound size={18} className="text-orange-500" />}
       >
         <label className="text-sm text-zinc-400">当前密码</label>
-        <input
-          type="password"
-          value={curPw}
-          onChange={(e) => setCurPw(e.target.value)}
-          className="w-full mt-1.5 mb-3 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
-        />
+        <div className="relative mb-3">
+          <input
+            type={showPw ? "text" : "password"}
+            value={curPw}
+            onChange={(e) => setCurPw(e.target.value)}
+            className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 pr-11 text-white focus:outline-none focus:border-orange-500"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPw((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
+          >
+            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
         <label className="text-sm text-zinc-400">新密码</label>
         <input
-          type="password"
+          type={showPw ? "text" : "password"}
           value={newPw}
           onChange={(e) => setNewPw(e.target.value)}
           className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
         />
         <button
           onClick={changePw}
-          className="mt-3 w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-semibold"
+          className="mt-3 w-full py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-semibold active:scale-[0.98] transition-transform"
         >
           修改密码
         </button>
@@ -164,10 +183,15 @@ export default function Settings({
               </div>
             </div>
 
-            <div className="mt-5 border-t border-white/5 pt-4">
+            <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-300 mb-1">
+                <AlertTriangle size={16} className="text-red-400" /> 危险操作
+              </div>
+              <p className="text-[11px] text-red-400/70 mb-3">
+                手动清理旧数据以释放配额，删除后不可恢复。
+              </p>
               <div className="flex items-center gap-2 text-sm text-zinc-300 mb-3">
-                <Trash2 size={16} className="text-red-400" />{" "}
-                手动清理（释放配额，不可恢复）
+                <Trash2 size={16} className="text-red-400" /> 手动清理
               </div>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="text-xs text-zinc-400">

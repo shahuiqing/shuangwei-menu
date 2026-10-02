@@ -6,10 +6,10 @@ import {
   Download,
   Wallet,
   Truck,
-  X,
   AlertTriangle,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, Skeleton } from "../components/ui";
+import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
@@ -332,153 +332,130 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         )}
       </ChartCard>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="bg-zinc-900 border border-white/5 rounded-2xl w-full max-w-md p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-semibold">新建采购入库</h3>
-              <button
-                onClick={() => setOpen(false)}
-                className="text-zinc-400 hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-xs text-zinc-400">
-                <input
-                  type="checkbox"
-                  checked={isNew}
-                  onChange={(e) => setIsNew(e.target.checked)}
-                />
-                新原料（库存中不存在）
-              </div>
-
-              {isNew ? (
-                <>
-                  <input
-                    placeholder="原料名称"
-                    value={form.itemName}
-                    onChange={(e) =>
-                      setForm({ ...form, itemName: e.target.value })
-                    }
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-                  />
-                  <input
-                    placeholder="单位（如 kg / 个 / 包）"
-                    value={form.unit}
-                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-                  />
-                </>
-              ) : (
-                <select
-                  value={form.itemId}
-                  onChange={(e) => setForm({ ...form, itemId: e.target.value })}
-                  className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-                >
-                  <option value="">选择原料…</option>
-                  {inv.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name}（现存 {num(i.stock)}
-                      {i.unit}）
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <input
-                placeholder="供应商（选填）"
-                value={form.supplier}
-                onChange={(e) => setForm({ ...form, supplier: e.target.value })}
-                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="number"
-                  placeholder="数量"
-                  value={form.quantity}
-                  onChange={(e) =>
-                    setForm({ ...form, quantity: e.target.value })
-                  }
-                  className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-                />
-                <input
-                  type="number"
-                  placeholder="单价(成本)"
-                  value={form.unit_price}
-                  onChange={(e) =>
-                    setForm({ ...form, unit_price: e.target.value })
-                  }
-                  className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-                />
-              </div>
-              <input
-                type="date"
-                value={form.purchased_at}
-                onChange={(e) =>
-                  setForm({ ...form, purchased_at: e.target.value })
-                }
-                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-              />
-              <input
-                placeholder="备注（选填）"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
-              />
-              <div className="text-right text-sm text-zinc-400">
-                合计{" "}
-                <span className="text-orange-400 font-bold">
-                  {fmtMoney(num(form.quantity) * num(form.unit_price))}
-                </span>
-              </div>
-
-              {impacts.length > 0 && (
-                <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl px-3 py-2.5">
-                  <div className="text-[11px] text-amber-400 mb-1">
-                    采购价变动会影响以下菜品成本：
-                  </div>
-                  <div className="space-y-1">
-                    {impacts.slice(0, 6).map((c) => (
-                      <div
-                        key={c.dish}
-                        className="flex items-center justify-between text-xs"
-                      >
-                        <span className="text-zinc-300 truncate mr-2">
-                          {c.dish}
-                        </span>
-                        <span
-                          className={
-                            c.delta >= 0 ? "text-red-400" : "text-green-400"
-                          }
-                        >
-                          {c.delta >= 0 ? "+" : ""}
-                          {fmtMoney(c.delta)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={submit}
-              className="mt-4 w-full py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold"
-            >
-              保存并入库
-            </button>
+      <Sheet
+        open={open}
+        title="新建采购入库"
+        subtitle="保存后自动增加库存并写入成本流水"
+        onClose={() => setOpen(false)}
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <input
+              type="checkbox"
+              checked={isNew}
+              onChange={(e) => setIsNew(e.target.checked)}
+            />
+            新原料（库存中不存在）
           </div>
+
+          {isNew ? (
+            <>
+              <input
+                placeholder="原料名称"
+                value={form.itemName}
+                onChange={(e) => setForm({ ...form, itemName: e.target.value })}
+                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+              />
+              <input
+                placeholder="单位（如 kg / 个 / 包）"
+                value={form.unit}
+                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+              />
+            </>
+          ) : (
+            <select
+              value={form.itemId}
+              onChange={(e) => setForm({ ...form, itemId: e.target.value })}
+              className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+            >
+              <option value="">选择原料…</option>
+              {inv.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}（现存 {num(i.stock)}
+                  {i.unit}）
+                </option>
+              ))}
+            </select>
+          )}
+
+          <input
+            placeholder="供应商（选填）"
+            value={form.supplier}
+            onChange={(e) => setForm({ ...form, supplier: e.target.value })}
+            className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="number"
+              placeholder="数量"
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+              className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+            />
+            <input
+              type="number"
+              placeholder="单价(成本)"
+              value={form.unit_price}
+              onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+              className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+            />
+          </div>
+          <input
+            type="date"
+            value={form.purchased_at}
+            onChange={(e) => setForm({ ...form, purchased_at: e.target.value })}
+            className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+          />
+          <input
+            placeholder="备注（选填）"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+          />
+          <div className="text-right text-sm text-zinc-400">
+            合计{" "}
+            <span className="text-orange-400 font-bold">
+              {fmtMoney(num(form.quantity) * num(form.unit_price))}
+            </span>
+          </div>
+
+          {impacts.length > 0 && (
+            <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl px-3 py-2.5">
+              <div className="text-[11px] text-amber-400 mb-1">
+                采购价变动会影响以下菜品成本：
+              </div>
+              <div className="space-y-1">
+                {impacts.slice(0, 6).map((c) => (
+                  <div
+                    key={c.dish}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <span className="text-zinc-300 truncate mr-2">
+                      {c.dish}
+                    </span>
+                    <span
+                      className={
+                        c.delta >= 0 ? "text-red-400" : "text-green-400"
+                      }
+                    >
+                      {c.delta >= 0 ? "+" : ""}
+                      {fmtMoney(c.delta)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+
+        <button
+          onClick={submit}
+          className="mt-4 w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold active:scale-[0.98] transition-transform"
+        >
+          保存并入库
+        </button>
+      </Sheet>
     </div>
   );
 }

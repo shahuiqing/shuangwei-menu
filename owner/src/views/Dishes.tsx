@@ -4,7 +4,6 @@ import {
   RefreshCw,
   Trash2,
   Pencil,
-  X,
   Save,
   FolderPlus,
   Search,
@@ -12,6 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { ChartCard, EmptyState, Skeleton } from "../components/ui";
+import { Sheet, SheetField } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
 import {
@@ -308,171 +308,120 @@ export default function Dishes({ version = 0 }: { version?: number }) {
       )}
 
       {/* 分类弹窗 */}
-      {catModal && (
-        <Modal
-          title={catModal.id ? "重命名分类" : "新建分类"}
-          onClose={() => setCatModal(null)}
-        >
-          <Field
-            label="分类名称"
-            value={catModal.name}
-            onChange={(v) => setCatModal({ ...catModal, name: v })}
-          />
-          <button
-            disabled={busy}
-            onClick={submitCat}
-            className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50"
-          >
-            <Save size={16} /> 保存
-          </button>
-        </Modal>
-      )}
+      <Sheet
+        open={!!catModal}
+        title={catModal?.id ? "重命名分类" : "新建分类"}
+        onClose={() => setCatModal(null)}
+      >
+        {catModal && (
+          <>
+            <SheetField
+              label="分类名称"
+              value={catModal.name}
+              onChange={(v) => setCatModal({ ...catModal, name: v })}
+            />
+            <button
+              disabled={busy}
+              onClick={submitCat}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              <Save size={16} /> 保存
+            </button>
+          </>
+        )}
+      </Sheet>
 
       {/* 菜品弹窗 */}
-      {dishModal && (
-        <Modal
-          title={dishModal.dishId ? "编辑菜品" : "新增菜品"}
-          onClose={() => setDishModal(null)}
-        >
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="菜品名称"
-              className="col-span-2"
-              value={dishModal.draft.title || ""}
-              onChange={(v) =>
-                setDishModal({
-                  ...dishModal,
-                  draft: { ...dishModal.draft, title: v },
-                })
-              }
-            />
-            <Field
-              label="价格"
-              type="number"
-              value={dishModal.draft.price || ""}
-              onChange={(v) =>
-                setDishModal({
-                  ...dishModal,
-                  draft: { ...dishModal.draft, price: v },
-                })
-              }
-            />
-            <Field
-              label="库存(空=不限)"
-              type="number"
-              value={(dishModal.draft.stock as any) ?? ""}
-              onChange={(v) =>
-                setDishModal({
-                  ...dishModal,
-                  draft: { ...dishModal.draft, stock: v },
-                })
-              }
-            />
-            <Field
-              label="图片 URL"
-              className="col-span-2"
-              value={dishModal.draft.image || ""}
-              onChange={(v) =>
-                setDishModal({
-                  ...dishModal,
-                  draft: { ...dishModal.draft, image: v },
-                })
-              }
-            />
-            <Field
-              label="描述"
-              className="col-span-2"
-              value={dishModal.draft.description || ""}
-              onChange={(v) =>
-                setDishModal({
-                  ...dishModal,
-                  draft: { ...dishModal.draft, description: v },
-                })
-              }
-            />
-            <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300">
-              <input
-                type="checkbox"
-                checked={!!dishModal.draft.isSoldOut}
-                onChange={(e) =>
+      <Sheet
+        open={!!dishModal}
+        title={dishModal?.dishId ? "编辑菜品" : "新增菜品"}
+        onClose={() => setDishModal(null)}
+      >
+        {dishModal && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <SheetField
+                label="菜品名称"
+                className="col-span-2"
+                value={dishModal.draft.title || ""}
+                onChange={(v) =>
                   setDishModal({
                     ...dishModal,
-                    draft: { ...dishModal.draft, isSoldOut: e.target.checked },
+                    draft: { ...dishModal.draft, title: v },
                   })
                 }
               />
-              标记为售罄
-            </label>
-          </div>
-          <button
-            disabled={busy}
-            onClick={submitDish}
-            className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50"
-          >
-            <Save size={16} /> 保存
-          </button>
-        </Modal>
-      )}
+              <SheetField
+                label="价格"
+                type="number"
+                value={dishModal.draft.price || ""}
+                onChange={(v) =>
+                  setDishModal({
+                    ...dishModal,
+                    draft: { ...dishModal.draft, price: v },
+                  })
+                }
+              />
+              <SheetField
+                label="库存(空=不限)"
+                type="number"
+                value={(dishModal.draft.stock as any) ?? ""}
+                onChange={(v) =>
+                  setDishModal({
+                    ...dishModal,
+                    draft: { ...dishModal.draft, stock: v },
+                  })
+                }
+              />
+              <SheetField
+                label="图片 URL"
+                className="col-span-2"
+                value={dishModal.draft.image || ""}
+                onChange={(v) =>
+                  setDishModal({
+                    ...dishModal,
+                    draft: { ...dishModal.draft, image: v },
+                  })
+                }
+              />
+              <SheetField
+                label="描述"
+                className="col-span-2"
+                value={dishModal.draft.description || ""}
+                onChange={(v) =>
+                  setDishModal({
+                    ...dishModal,
+                    draft: { ...dishModal.draft, description: v },
+                  })
+                }
+              />
+              <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={!!dishModal.draft.isSoldOut}
+                  onChange={(e) =>
+                    setDishModal({
+                      ...dishModal,
+                      draft: {
+                        ...dishModal.draft,
+                        isSoldOut: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                标记为售罄
+              </label>
+            </div>
+            <button
+              disabled={busy}
+              onClick={submitDish}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              <Save size={16} /> 保存
+            </button>
+          </>
+        )}
+      </Sheet>
     </div>
-  );
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-zinc-900 border border-white/10 rounded-t-[28px] sm:rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto safe-bottom animate-[slideUp_.22s_cubic-bezier(.2,.8,.2,1)] p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sm:hidden mx-auto mb-3 h-1.5 w-10 rounded-full bg-zinc-700" />
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/5 text-zinc-400 flex items-center justify-center"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  className = "",
-}: {
-  label: string;
-  value: string | number;
-  onChange: (v: string) => void;
-  type?: string;
-  className?: string;
-}) {
-  return (
-    <label className={className}>
-      <span className="text-xs text-zinc-400">{label}</span>
-      <input
-        type={type}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full mt-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-      />
-    </label>
   );
 }
