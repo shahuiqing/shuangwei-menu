@@ -245,7 +245,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
         </button>
@@ -257,7 +257,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         </button>
         <button
           onClick={exportCsv}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <Download size={16} /> 导出
         </button>
@@ -272,7 +272,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-zinc-500 text-left border-b border-zinc-800">
+                <tr className="text-zinc-500 text-left border-b border-white/5">
                   <th className="px-3 py-2 font-medium">时间</th>
                   <th className="px-3 py-2 font-medium">供应商</th>
                   <th className="px-3 py-2 font-medium">原料</th>
@@ -317,7 +317,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-5"
+            className="bg-zinc-900 border border-white/5 rounded-2xl w-full max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
@@ -348,20 +348,20 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                     onChange={(e) =>
                       setForm({ ...form, itemName: e.target.value })
                     }
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
                   />
                   <input
                     placeholder="单位（如 kg / 个 / 包）"
                     value={form.unit}
                     onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
                   />
                 </>
               ) : (
                 <select
                   value={form.itemId}
                   onChange={(e) => setForm({ ...form, itemId: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                  className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
                 >
                   <option value="">选择原料…</option>
                   {inv.map((i) => (
@@ -377,7 +377,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                 placeholder="供应商（选填）"
                 value={form.supplier}
                 onChange={(e) => setForm({ ...form, supplier: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -387,7 +387,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                   onChange={(e) =>
                     setForm({ ...form, quantity: e.target.value })
                   }
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                  className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
                 />
                 <input
                   type="number"
@@ -396,7 +396,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                   onChange={(e) =>
                     setForm({ ...form, unit_price: e.target.value })
                   }
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                  className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
                 />
               </div>
               <input
@@ -405,13 +405,13 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                 onChange={(e) =>
                   setForm({ ...form, purchased_at: e.target.value })
                 }
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
               />
               <input
                 placeholder="备注（选填）"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white"
+                className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
               />
               <div className="text-right text-sm text-zinc-400">
                 合计{" "}

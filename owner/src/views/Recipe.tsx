@@ -107,7 +107,7 @@ export default function Recipe({
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
         </button>
@@ -159,13 +159,13 @@ export default function Recipe({
                 }
               >
                 {adding === d.name && (
-                  <div className="mb-3 bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2">
+                  <div className="mb-3 bg-zinc-950 border border-white/5 rounded-xl p-3 space-y-2">
                     <select
                       value={form.inventory_item_id}
                       onChange={(e) =>
                         setForm({ ...form, inventory_item_id: e.target.value })
                       }
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"
+                      className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-2 text-sm text-white"
                     >
                       <option value="">选择原料…</option>
                       {inv.map((i) => (
@@ -182,7 +182,7 @@ export default function Recipe({
                         onChange={(e) =>
                           setForm({ ...form, dosage: e.target.value })
                         }
-                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"
+                        className="flex-1 bg-zinc-900 border border-white/5 rounded-lg px-3 py-2 text-sm text-white"
                       />
                       <input
                         placeholder="档口(选填)"
@@ -190,7 +190,7 @@ export default function Recipe({
                         onChange={(e) =>
                           setForm({ ...form, station: e.target.value })
                         }
-                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"
+                        className="flex-1 bg-zinc-900 border border-white/5 rounded-lg px-3 py-2 text-sm text-white"
                       />
                     </div>
                     <div className="flex gap-2">

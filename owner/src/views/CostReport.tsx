@@ -89,7 +89,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
           {(
             [
               ["today", "今天"],
@@ -209,7 +209,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-zinc-500 text-left border-b border-zinc-800">
+                <tr className="text-zinc-500 text-left border-b border-white/5">
                   <th className="px-3 py-2 font-medium">菜品</th>
                   <th className="px-3 py-2 font-medium text-right">销量</th>
                   <th className="px-3 py-2 font-medium text-right">营收</th>

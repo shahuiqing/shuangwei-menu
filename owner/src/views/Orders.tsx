@@ -151,9 +151,9 @@ export default function Orders({ version = 0 }: { version?: number }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+    <div className="space-y-3.5 sm:space-y-4">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full">
           {(
             [
               ["today", "今天"],
@@ -168,7 +168,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 setRange(id);
                 resetPage();
               }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
             >
               {label}
             </button>
@@ -181,7 +181,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
             setStatus(e.target.value);
             resetPage();
           }}
-          className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
+          className="bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
         >
           <option value="all">全部状态</option>
           <option value="pending">待接单</option>
@@ -197,7 +197,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
             setSort(e.target.value as typeof sort);
             resetPage();
           }}
-          className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
+          className="bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
         >
           <option value="time_desc">时间 ↓（新→旧）</option>
           <option value="time_asc">时间 ↑（旧→新）</option>
@@ -216,13 +216,13 @@ export default function Orders({ version = 0 }: { version?: number }) {
               resetPage();
             }}
             placeholder="搜索桌号 / 姓名 / 单号"
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
           />
         </div>
 
         <button
           onClick={onExport}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <Download size={16} /> 导出 CSV
         </button>
@@ -246,7 +246,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 <button
                   key={o._id || o.id || i}
                   onClick={() => setDetail(o)}
-                  className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-xl p-3 active:scale-[0.99] transition-transform"
+                  className="w-full text-left bg-zinc-900 border border-white/5 rounded-xl p-3 active:scale-[0.99] transition-transform"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-lg font-black text-white">
@@ -272,11 +272,11 @@ export default function Orders({ version = 0 }: { version?: number }) {
           </div>
 
           {/* 桌面表格 */}
-          <div className="hidden sm:block bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <div className="hidden sm:block bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-zinc-500 text-left border-b border-zinc-800">
+                  <tr className="text-zinc-500 text-left border-b border-white/5">
                     <th className="px-4 py-3 font-medium">桌号</th>
                     <th className="px-4 py-3 font-medium">时间</th>
                     <th className="px-4 py-3 font-medium">状态</th>
@@ -344,7 +344,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-40"
+            className="p-2 rounded-lg bg-zinc-900 border border-white/5 text-zinc-300 disabled:opacity-40"
           >
             <ChevronLeft size={16} />
           </button>
@@ -354,7 +354,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
           <button
             onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
             disabled={page >= pageCount - 1}
-            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-40"
+            className="p-2 rounded-lg bg-zinc-900 border border-white/5 text-zinc-300 disabled:opacity-40"
           >
             <ChevronRight size={16} />
           </button>
@@ -364,14 +364,15 @@ export default function Orders({ version = 0 }: { version?: number }) {
       {/* 详情抽屉 */}
       {detail && (
         <div
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end"
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end items-end sm:items-stretch"
           onClick={() => setDetail(null)}
         >
           <div
-            className="bg-zinc-900 border-l border-zinc-800 w-full max-w-md h-full overflow-y-auto"
+            className="bg-zinc-900 border-l border-white/10 rounded-t-[28px] sm:rounded-none w-full max-w-md max-h-[92vh] sm:max-h-none sm:h-full overflow-y-auto safe-bottom animate-[slideUp_.22s_cubic-bezier(.2,.8,.2,1)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 px-5 py-4 flex items-start justify-between">
+            <div className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-zinc-700" />
+            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-white/5 px-5 py-4 flex items-start justify-between">
               <div>
                 <div className="text-3xl font-black text-white">
                   {tableName(detail)}
@@ -423,7 +424,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 ))}
               </div>
 
-              <div className="flex justify-between items-center pt-4 mt-4 border-t border-zinc-800">
+              <div className="flex justify-between items-center pt-4 mt-4 border-t border-white/5">
                 <span className="text-zinc-400">合计</span>
                 <span className="text-3xl font-black text-orange-400">
                   {fmtMoney(detail.finalTotal ?? orderTotal(detail))}

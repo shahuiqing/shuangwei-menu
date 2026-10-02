@@ -45,7 +45,7 @@ export default function StaffView() {
       <div className="flex items-center flex-wrap gap-3">
         <button
           onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
         </button>
@@ -64,7 +64,7 @@ export default function StaffView() {
         </button>
       </div>
 
-      <div className="flex items-start gap-2 text-xs text-zinc-500 bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-2 text-xs text-zinc-500 bg-zinc-900/60 border border-white/5 rounded-xl px-4 py-3">
         <Info size={15} className="shrink-0 mt-0.5 text-orange-500" />
         <span>
           员工密码用于顾客端「服务员模式」解锁点单。保存后同步到云端 settings
@@ -94,13 +94,13 @@ export default function StaffView() {
                   value={s.name}
                   onChange={(e) => update(i, { name: e.target.value })}
                   placeholder="姓名 / 工号"
-                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                  className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
                 />
                 <input
                   value={s.password}
                   onChange={(e) => update(i, { password: e.target.value })}
                   placeholder="登录密码"
-                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                  className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
                 />
                 <button
                   onClick={() => remove(i)}

@@ -134,7 +134,7 @@ export default function Reports({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
           {(
             [
               ["today", "今天"],
@@ -154,7 +154,7 @@ export default function Reports({
         </div>
         <button
           onClick={onExport}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <Download size={16} /> 导出
         </button>
@@ -164,7 +164,7 @@ export default function Reports({
         title="销售报表"
         subtitle={`共 ${rows.length} 项 · 合计 ${fmtMoney(total)}`}
         action={
-          <div className="flex bg-zinc-950 rounded-xl p-1 border border-zinc-800">
+          <div className="flex bg-zinc-950 rounded-xl p-1 border border-white/5">
             {(
               [
                 ["dish", "按菜品"],

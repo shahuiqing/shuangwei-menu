@@ -11,13 +11,51 @@ body,
   height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   margin: 0;
   background-color: #09090b;
   color: #fafafa;
   font-family: var(--font-sans);
+  overscroll-behavior-y: none;
 }
 
+/* 移动端安全区（刘海屏 / 底部横条） */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-top {
+  padding-top: var(--sat);
+  height: calc(3.5rem + var(--sat));
+}
+@media (min-width: 1024px) {
+  .safe-top {
+    height: calc(4rem + var(--sat));
+    padding-top: 0;
+  }
+}
+
+.safe-bottom {
+  padding-bottom: var(--sab);
+}
+
+/* 内容区为底部固定导航预留高度（含安全区） */
+.mobile-safe-bottom {
+  padding-bottom: calc(5.25rem + var(--sab));
+}
+@media (min-width: 1024px) {
+  .mobile-safe-bottom {
+    padding-bottom: 1.5rem;
+  }
+}
+
+/* 滚动条（桌面） */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -28,4 +66,35 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* 触摸端隐藏滚动条，更清爽 */
+@media (hover: none) {
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+/* 抽屉动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* 数字等宽，KPI 对齐更稳 */
+.tnum {
+  font-variant-numeric: tabular-nums;
 }

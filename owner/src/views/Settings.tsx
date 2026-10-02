@@ -93,7 +93,7 @@ export default function Settings({
         <input
           value={storeName}
           onChange={(e) => setStoreName(e.target.value)}
-          className="w-full mt-1.5 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+          className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
         />
         <button
           onClick={saveStore}
@@ -114,14 +114,14 @@ export default function Settings({
           type="password"
           value={curPw}
           onChange={(e) => setCurPw(e.target.value)}
-          className="w-full mt-1.5 mb-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+          className="w-full mt-1.5 mb-3 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
         />
         <label className="text-sm text-zinc-400">新密码</label>
         <input
           type="password"
           value={newPw}
           onChange={(e) => setNewPw(e.target.value)}
-          className="w-full mt-1.5 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+          className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
         />
         <button
           onClick={changePw}
@@ -164,7 +164,7 @@ export default function Settings({
               </div>
             </div>
 
-            <div className="mt-5 border-t border-zinc-800 pt-4">
+            <div className="mt-5 border-t border-white/5 pt-4">
               <div className="flex items-center gap-2 text-sm text-zinc-300 mb-3">
                 <Trash2 size={16} className="text-red-400" />{" "}
                 手动清理（释放配额，不可恢复）
@@ -176,7 +176,7 @@ export default function Settings({
                     type="number"
                     value={ordersDays}
                     onChange={(e) => setOrdersDays(Number(e.target.value))}
-                    className="block mt-1 w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"
+                    className="block mt-1 w-24 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2 text-sm text-white"
                   />
                 </label>
                 <label className="text-xs text-zinc-400">
@@ -185,7 +185,7 @@ export default function Settings({
                     type="number"
                     value={txnsDays}
                     onChange={(e) => setTxnsDays(Number(e.target.value))}
-                    className="block mt-1 w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"
+                    className="block mt-1 w-24 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2 text-sm text-white"
                   />
                 </label>
                 <button

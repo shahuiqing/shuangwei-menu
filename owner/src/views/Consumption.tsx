@@ -109,7 +109,7 @@ export default function Consumption({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
           {(
             [
               ["today", "今天"],
@@ -133,7 +133,7 @@ export default function Consumption({ version = 0 }: { version?: number }) {
         </div>
         <button
           onClick={exportCsv}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           导出 CSV
         </button>

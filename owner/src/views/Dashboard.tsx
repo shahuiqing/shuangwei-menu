@@ -161,9 +161,9 @@ export default function Dashboard({
   );
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 shrink-0">
           {(
             [
               ["today", "今天"],
@@ -175,18 +175,18 @@ export default function Dashboard({
             <button
               key={id}
               onClick={() => setRange(id)}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
+              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-colors ${range === id ? "bg-orange-600 text-white" : "text-zinc-400 hover:text-white"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-zinc-500">
+        <span className="hidden sm:inline text-[11px] text-zinc-500">
           服务端聚合 · 环比上一周期
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard
           icon={Wallet}
           label="营业收入"

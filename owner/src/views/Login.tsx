@@ -47,10 +47,12 @@ export default function Login({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="min-h-full flex items-center justify-center p-6 bg-zinc-950">
-      <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+    <div className="min-h-full relative flex items-center justify-center p-6 bg-zinc-950 overflow-hidden">
+      <div className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-orange-600/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-orange-900/20 blur-3xl" />
+      <div className="relative w-full max-w-sm bg-zinc-900/80 backdrop-blur border border-white/10 rounded-[28px] p-7 shadow-2xl">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-16 h-16 rounded-full bg-orange-600/20 text-orange-500 flex items-center justify-center mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-700 text-white flex items-center justify-center mb-4 shadow-lg shadow-orange-900/40">
             <Lock size={28} />
           </div>
           <h1 className="text-xl font-bold text-white">{STORE_NAME}</h1>
@@ -70,7 +72,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
                 setErr("");
               }}
               placeholder="请输入管理密码"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+              className="w-full bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
             />
             {err && <p className="text-red-500 text-sm">{err}</p>}
             <button
@@ -101,7 +103,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
                 setErr("");
               }}
               placeholder="当前密码"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+              className="w-full bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
             />
             <input
               type="password"
@@ -111,7 +113,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
                 setErr("");
               }}
               placeholder="新密码"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+              className="w-full bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
             />
             {err && <p className="text-red-500 text-sm">{err}</p>}
             <button

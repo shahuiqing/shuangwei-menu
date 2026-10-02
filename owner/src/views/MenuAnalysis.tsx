@@ -85,7 +85,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
           {(
             [
               ["7d", "近7天"],
@@ -102,7 +102,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
             </button>
           ))}
         </div>
-        <div className="flex bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+        <div className="flex bg-zinc-900 rounded-xl p-1 border border-white/5 overflow-x-auto max-w-full shrink-0">
           {(
             [
               ["profit", "按毛利"],
@@ -134,7 +134,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
           return (
             <div
               key={q}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4"
+              className="bg-zinc-900 border border-white/5 rounded-2xl p-4"
             >
               <div className="flex items-center gap-2">
                 <span
