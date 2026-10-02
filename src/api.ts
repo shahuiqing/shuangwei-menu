@@ -1105,6 +1105,30 @@ export const api = {
 
     const localOrders = readLocalJSON<any[]>("local_orders", []);
 
+    // 防重复下单：最近 10 秒内已存在「同桌 + 完全相同菜品」的订单，视为重复提交，直接返回已有订单
+    const itemsKey = JSON.stringify(
+      sanitizedItems.map((i: any) => `${i.id || i.name}x${i.quantity || 1}`),
+    );
+    const dup = localOrders.find((o: any) => {
+      if (!o || o.status === "cancelled") return false;
+      const sameTable =
+        String(o.customerName || o.customer_name || "") === String(custName) ||
+        String(o.table_no || o.tableNo || "") === String(tableNo);
+      if (!sameTable) return false;
+      const oKey = JSON.stringify(
+        (o.items || []).map((i: any) => `${i.id || i.name}x${i.quantity || 1}`),
+      );
+      if (oKey !== itemsKey) return false;
+      const ts = parseOrderTimestamp(
+        o.timestamp || o.created_at || o.createdAt,
+      );
+      return Date.now() - ts < 10000;
+    });
+    if (dup) {
+      console.log("[addOrder] 检测到重复下单，已忽略:", custName);
+      return dup;
+    }
+
     // Always create a brand-new independent order so new orders are never mixed up with previous orders
     const fullOrder = normalizeOrder({
       id: newId,
