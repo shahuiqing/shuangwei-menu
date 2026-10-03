@@ -41,7 +41,7 @@ const TABS: {
   { id: "printer", label: "打印机设置", icon: Printer },
   { id: "security", label: "账户安全", icon: Shield },
   { id: "datasecurity", label: "数据安全", icon: ShieldCheck },
-  { id: "database", label: "数据与备份 (Database)", icon: Database },
+  { id: "database", label: "数据与备份", icon: Database },
 ];
 
 export function AdminTabNav({
@@ -62,7 +62,7 @@ export function AdminTabNav({
         <button
           key={id}
           onClick={() => onChange(id)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap shrink-0 ${activeTab === id ? "bg-orange-600 text-white" : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"}`}
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap shrink-0 ${activeTab === id ? "bg-orange-600 text-white" : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"}`}
         >
           <Icon size={16} />
           {label}

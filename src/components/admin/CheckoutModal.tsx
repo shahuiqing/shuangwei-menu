@@ -90,7 +90,7 @@ export function CheckoutModal({
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto touch-pan-y"
       style={{ zIndex: 9999 }}
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl flex flex-col md:flex-row shadow-2xl max-h-[90dvh] my-auto overflow-y-auto custom-scrollbar">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl flex flex-col lg:flex-row shadow-2xl max-h-[90dvh] my-auto overflow-y-auto custom-scrollbar">
         {/* Left Column: Order Summary & Inputs */}
         <div className="flex-1 p-4 sm:p-6 flex flex-col min-h-0 overflow-y-auto custom-scrollbar">
           <h3 className="text-xl font-bold text-white mb-4">
@@ -346,8 +346,8 @@ export function CheckoutModal({
         </div>
 
         {/* Right Column: Numpad */}
-        <div className="w-full md:w-[320px] bg-zinc-950 p-4 sm:p-6 flex items-center justify-center border-t md:border-t-0 md:border-l border-zinc-800">
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full max-w-[280px] md:max-w-none mx-auto">
+        <div className="w-full lg:w-[320px] bg-zinc-950 p-4 sm:p-6 flex items-center justify-center border-t lg:border-t-0 lg:border-l border-zinc-800">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full max-w-[280px] lg:max-w-none mx-auto">
             {NUMPAD_KEYS.map((key) => (
               <button
                 key={key}
