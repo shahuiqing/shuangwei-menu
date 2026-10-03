@@ -7,8 +7,10 @@ import {
   Wallet,
   Truck,
   AlertTriangle,
+  CalendarDays,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
+import { Segmented } from "../components/Segmented";
 import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney } from "../lib/format";
@@ -27,12 +29,17 @@ import {
   fetchInventory,
   fetchPurchases,
   num,
-  restockSuggestions,
   type InventoryItem,
   type PurchaseOrder,
   type RecipeBom,
-  type RestockSuggestion,
 } from "../lib/inventory";
+import { consumptionByItem } from "../lib/aggregate";
+import {
+  buildPurchasePlan,
+  CONSUMPTION_WINDOW_DAYS,
+  COVERAGE_DAYS,
+  dailyFromConsumption,
+} from "../lib/purchasePlan";
 
 const newLocalId = () =>
   `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -131,17 +138,24 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     purchased_at: new Date().toISOString().slice(0, 10),
   });
   const [isNew, setIsNew] = useState(false);
+  const [coverage, setCoverage] = useState(7);
+  const [cons, setCons] = useState<{ key: string; qty: number }[]>([]);
+  const [bulk, setBulk] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [p, i, b] = await Promise.all([
+    const end = new Date();
+    const start = new Date(end.getTime() - CONSUMPTION_WINDOW_DAYS * 86400000);
+    const [p, i, b, c] = await Promise.all([
       fetchPurchases(),
       fetchInventory(),
       fetchBoms(),
+      consumptionByItem(start.toISOString(), end.toISOString()),
     ]);
     setList(p);
     setInv(i);
     setBoms(b);
+    setCons(c);
     setLoading(false);
   };
 
@@ -162,11 +176,18 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     return { total, month, suppliers };
   }, [list, monthKey]);
 
-  const restock = useMemo(() => restockSuggestions(inv), [inv]);
-
   const alerts = useMemo(() => buildPriceAlerts(list), [list]);
   const byItem = useMemo(() => alertMap(alerts), [alerts]);
   const flagged = useMemo(() => flaggedAlerts(alerts), [alerts]);
+  const daily = useMemo(
+    () => dailyFromConsumption(cons, CONSUMPTION_WINDOW_DAYS),
+    [cons],
+  );
+  const plan = useMemo(
+    () =>
+      buildPurchasePlan({ items: inv, daily, alerts, coverageDays: coverage }),
+    [inv, daily, alerts, coverage],
+  );
   const priceCheck = useMemo(
     () => checkUnitPrice(byItem.get(form.itemId), num(form.unit_price)),
     [byItem, form.itemId, form.unit_price],
@@ -194,7 +215,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     [isNew, form.itemId, form.unit_price, boms, inv],
   );
 
-  const preselect = (item: RestockSuggestion) => {
+  const preselect = (item: { id: string; gap: number; price: number }) => {
     setIsNew(false);
     setForm((f) => ({
       ...f,
@@ -203,6 +224,35 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       unit_price: String(item.price || ""),
     }));
     setOpen(true);
+  };
+
+  /** 按计划一次性生成采购记录并入库（逐条走既有 RPC，失败不阻断） */
+  const bulkBuy = async () => {
+    if (bulk || !plan.rows.length) return;
+    if (
+      !confirm(
+        `按计划采购 ${plan.rows.length} 项原料，合计约 ${fmtMoney(plan.totalCost)}？\n将生成采购记录并入库。`,
+      )
+    )
+      return;
+    setBulk(true);
+    let ok = 0;
+    for (const r of plan.rows) {
+      const done = await createPurchase({
+        supplier: "",
+        inventory_item_id: r.id,
+        item_name: r.name,
+        quantity: r.gap,
+        unit: r.unit,
+        unit_price: r.refPrice,
+        notes: `采购计划 · 覆盖 ${plan.coverageDays} 天`,
+      });
+      if (done) ok += 1;
+    }
+    setBulk(false);
+    if (ok) toast.success(`已生成 ${ok} 条采购记录并入库`);
+    else toast.error("生成失败，请稍后重试");
+    await load();
   };
 
   const submit = async () => {
@@ -337,36 +387,76 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         </ChartCard>
       )}
 
-      {restock.length > 0 && (
+      {plan.rows.length > 0 && (
         <ChartCard
-          title="补货建议"
-          subtitle="低于安全库存的原料，一键补货"
-          action={<AlertTriangle size={18} className="text-amber-400" />}
+          title="采购计划"
+          subtitle={`安全库存 + 近 ${CONSUMPTION_WINDOW_DAYS} 天日均消耗 × ${plan.coverageDays} 天 − 现存`}
+          action={<CalendarDays size={18} className="text-amber-400" />}
         >
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <Segmented
+              size="sm"
+              value={String(coverage)}
+              options={COVERAGE_DAYS.map(
+                (d) => [String(d), `${d} 天`] as const,
+              )}
+              onChange={(v) => setCoverage(Number(v))}
+            />
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-zinc-300">
+                合计约{" "}
+                <b className="text-amber-400">{fmtMoney(plan.totalCost)}</b>
+              </span>
+              <button
+                onClick={bulkBuy}
+                disabled={bulk}
+                className="px-3.5 py-1.5 rounded-lg btn-brand text-white text-xs font-semibold disabled:opacity-60"
+              >
+                {bulk ? "下单中…" : `一键采购 ${plan.rows.length} 项`}
+              </button>
+            </div>
+          </div>
           <div className="space-y-1.5">
-            {restock.map((i) => (
+            {plan.rows.map((r) => (
               <div
-                key={i.id}
-                className="flex items-center justify-between bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+                key={r.id}
+                className="flex items-center justify-between gap-3 bg-zinc-950 rounded-lg px-3 py-2 text-sm"
               >
                 <div className="min-w-0">
-                  <span className="text-zinc-200">{i.name}</span>
-                  <span className="text-zinc-500 text-xs ml-2">
-                    现存 {num(i.stock)}
-                    {i.unit} / 安全 {num(i.safety_stock)}
-                    {i.unit}
-                  </span>
+                  <span className="text-zinc-200">{r.name}</span>
+                  {r.priority !== "normal" && (
+                    <span
+                      className={`inline-flex ml-2 align-middle text-[10px] px-1.5 py-0.5 rounded ${
+                        r.priority === "urgent"
+                          ? "bg-red-500/10 text-red-400"
+                          : "bg-amber-500/10 text-amber-400"
+                      }`}
+                    >
+                      {r.priority === "urgent" ? "缺货" : "低于安全"}
+                    </span>
+                  )}
+                  <div className="text-zinc-500 text-xs mt-0.5">
+                    现存 {num(r.stock)}
+                    {r.unit} · 日均 {num(r.dailyAvg)}
+                    {r.unit}
+                    {r.daysLeft !== null && ` · 可撑 ${r.daysLeft} 天`}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-zinc-400 text-xs">
-                    建议补 {i.gap}
-                    {i.unit} · 约 {fmtMoney(i.estCost)}
+                  <span className="text-zinc-400 text-xs text-right">
+                    补 {num(r.gap)}
+                    {r.unit} · 约 {fmtMoney(r.estCost)}
+                    <span className="block text-zinc-500 text-[10px]">
+                      {r.reason}
+                    </span>
                   </span>
                   <button
-                    onClick={() => preselect(i)}
+                    onClick={() =>
+                      preselect({ id: r.id, gap: r.gap, price: r.refPrice })
+                    }
                     className="px-3 py-1.5 rounded-lg btn-brand text-white text-xs font-semibold"
                   >
-                    补货
+                    采购
                   </button>
                 </div>
               </div>

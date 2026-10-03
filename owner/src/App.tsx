@@ -74,6 +74,17 @@ export default function App() {
     if (authed) load();
   }, [authed, load]);
 
+  // PWA：断网期间看的是缓存，恢复联网立即重新拉取并通知各页刷新
+  useEffect(() => {
+    if (!authed || !isConfigured) return;
+    const on = () => {
+      load();
+      setVersion((v) => v + 1);
+    };
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, [authed, load, isConfigured]);
+
   // 数据库未初始化（聚合函数/列缺失）时常驻提示
   const [schemaErr, setSchemaErr] = useState<RpcSchemaError | null>(() =>
     getRpcSchemaError(),

@@ -11,6 +11,7 @@ import {
   RefreshCw,
   LogOut,
   Wifi,
+  WifiOff,
   ShoppingCart,
   Boxes,
   NotebookText,
@@ -25,6 +26,7 @@ import {
   Download,
 } from "lucide-react";
 import { useTheme } from "../lib/theme";
+import { useOnline } from "../lib/offline";
 
 export type OwnerTab =
   | "dashboard"
@@ -286,6 +288,7 @@ export function Layout({
   const pulling = pull > 4;
   const ready = pull > 56;
   const [scrolled, setScrolled] = useState(false);
+  const online = useOnline();
   const install = useInstallHint();
 
   useEffect(() => {
@@ -387,14 +390,24 @@ export function Layout({
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] leading-tight mt-0.5">
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${live ? "bg-emerald-400 animate-pulse" : configured ? "bg-zinc-500" : "bg-rose-500"}`}
+                    className={`w-1.5 h-1.5 rounded-full ${!online ? "bg-amber-400" : live ? "bg-emerald-400 animate-pulse" : configured ? "bg-zinc-500" : "bg-rose-500"}`}
                   />
-                  <span className={live ? "text-emerald-400" : "text-zinc-500"}>
-                    {live
-                      ? "实时同步中"
-                      : lastUpdated
-                        ? `更新于 ${lastUpdated}`
-                        : "同步中…"}
+                  <span
+                    className={
+                      !online
+                        ? "text-amber-400"
+                        : live
+                          ? "text-emerald-400"
+                          : "text-zinc-500"
+                    }
+                  >
+                    {!online
+                      ? "离线 · 显示缓存"
+                      : live
+                        ? "实时同步中"
+                        : lastUpdated
+                          ? `更新于 ${lastUpdated}`
+                          : "同步中…"}
                   </span>
                 </div>
               </div>
@@ -409,15 +422,21 @@ export function Layout({
             </div>
             <div className="flex items-center gap-1.5">
               <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-500">
-                <Wifi
-                  size={13}
-                  className={live ? "text-emerald-400" : "text-zinc-500"}
-                />
-                {live
-                  ? "实时同步中"
-                  : lastUpdated
-                    ? `更新于 ${lastUpdated}`
-                    : "同步中…"}
+                {online ? (
+                  <Wifi
+                    size={13}
+                    className={live ? "text-emerald-400" : "text-zinc-500"}
+                  />
+                ) : (
+                  <WifiOff size={13} className="text-amber-400" />
+                )}
+                {!online
+                  ? "离线 · 显示缓存"
+                  : live
+                    ? "实时同步中"
+                    : lastUpdated
+                      ? `更新于 ${lastUpdated}`
+                      : "同步中…"}
               </span>
               <ThemeToggle />
               <button
@@ -432,6 +451,13 @@ export function Layout({
               </button>
             </div>
           </div>
+          {/* 离线提示条：PWA 断网时页面走缓存，必须显式告知数据非最新 */}
+          {!online && (
+            <div className="flex items-center gap-2 px-4 lg:px-6 py-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 border-t border-amber-500/25">
+              <WifiOff size={12} className="shrink-0" />
+              网络已断开，当前显示缓存数据；恢复联网后自动刷新
+            </div>
+          )}
         </header>
 
         {/* 内容区：移动端独立滚动 + 底部导航留白；桌面居中 */}
