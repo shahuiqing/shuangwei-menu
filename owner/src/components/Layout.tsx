@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -22,6 +22,7 @@ import {
   X,
   ChevronRight,
   PackageX,
+  Download,
 } from "lucide-react";
 import { useTheme } from "../lib/theme";
 
@@ -193,6 +194,50 @@ function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
   return pull;
 }
 
+/* ---------- PWA 安装引导 ---------- */
+interface InstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice?: Promise<{ outcome: string }>;
+}
+
+let deferredPrompt: InstallPromptEvent | null = null;
+const INSTALLABLE = "owner:installable";
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault(); // 不让浏览器自动弹安装条，由我们自己控制入口
+    deferredPrompt = e as InstallPromptEvent;
+    window.dispatchEvent(new Event(INSTALLABLE));
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    window.dispatchEvent(new Event(INSTALLABLE));
+  });
+}
+
+/** 是否可安装到主屏幕（浏览器判断：HTTPS + manifest + SW 就绪） */
+function useInstallHint() {
+  const [can, setCan] = useState<boolean>(() => !!deferredPrompt);
+  useEffect(() => {
+    const on = () => setCan(!!deferredPrompt);
+    window.addEventListener(INSTALLABLE, on);
+    return () => window.removeEventListener(INSTALLABLE, on);
+  }, []);
+  const install = useCallback(async () => {
+    const prompt = deferredPrompt;
+    if (!prompt) return;
+    deferredPrompt = null;
+    setCan(false);
+    try {
+      await prompt.prompt();
+      await prompt.userChoice;
+    } catch {
+      /* 用户取消或浏览器不支持 */
+    }
+  }, []);
+  return { can, install };
+}
+
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
   return (
@@ -241,6 +286,7 @@ export function Layout({
   const pulling = pull > 4;
   const ready = pull > 56;
   const [scrolled, setScrolled] = useState(false);
+  const install = useInstallHint();
 
   useEffect(() => {
     const onScroll = () =>
@@ -289,6 +335,15 @@ export function Layout({
           ))}
         </nav>
         <div className="p-3 border-t border-white/5 space-y-2">
+          {install.can && (
+            <button
+              onClick={install.install}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-orange-300 bg-orange-500/10 ring-1 ring-orange-500/25 hover:bg-orange-500/15"
+            >
+              <Download size={18} />
+              安装到桌面
+            </button>
+          )}
           <div className="flex items-center gap-2 px-3 text-[11px] text-zinc-500">
             <span
               className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}
@@ -526,6 +581,19 @@ export function Layout({
                   </div>
                 </div>
               ))}
+
+              {install.can && (
+                <button
+                  onClick={install.install}
+                  className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-500/25 font-medium active:scale-[0.99] transition-transform"
+                >
+                  <span className="w-9 h-9 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
+                    <Download size={18} />
+                  </span>
+                  把「{storeName}」装到主屏幕
+                  <ChevronRight size={18} className="text-orange-400/70" />
+                </button>
+              )}
             </div>
 
             <button

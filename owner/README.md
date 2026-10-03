@@ -91,6 +91,14 @@ npm run build             # 产出 owner/dist
 
 > 已在用「损耗分析」页的库：只需单独执行 `supabase_owner_waste.sql`（约 5 秒）；未执行前报损记录仍会写入（仅 `reason` 缺失，前端已降级为不分类）。
 
+## PWA（添加到主屏幕）
+
+- 手机浏览器打开管理端 → 菜单选「**添加到主屏幕**」；Chrome/Edge 也会在「全部功能」面板里显示橙色「把 xx 装到主屏幕」按钮，桌面 Chrome 侧栏同样可装。
+- 安装后为独立窗口（无地址栏）、图标即应用图标，**断网也能打开**外壳页，静态资源走 Service Worker 缓存（`public/sw.js`，版本号 `VERSION`，升级时改版本号即可让旧缓存自动清理）。
+- 图标由 `npm run icons` 生成到 `public/icons/`（`scripts/gen-icons.mjs`，零依赖手写 PNG），改设计后重新执行即可。
+- 相关文件：`public/manifest.webmanifest`、`public/sw.js`、`index.html`（manifest / apple meta）、`src/main.tsx`（注册，仅 PROD）；回归测试见 `src/lib/__tests__/pwa.test.ts`。
+- 注意：Service Worker 与安装提示**仅在 HTTPS（或 localhost）生效**；本地用 `npm run build && npm run preview` 验证。
+
 ## 注意事项
 
 - 老板端对订单**只读现状**改为可**推进状态**（待接单→制作中→已上菜→结账/取消）；「员工管理」「系统设置」写 `settings`，采购/库存/配方写对应表。

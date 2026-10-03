@@ -22,3 +22,12 @@ createRoot(document.getElementById("root")!).render(
     </ThemeProvider>
   </StrictMode>,
 );
+
+// PWA：生产环境注册 Service Worker（离线可打开外壳页 + 静态资源缓存）
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("./sw.js", { scope: "./" })
+      .catch((e) => console.warn("[owner] SW register:", e?.message || e));
+  });
+}

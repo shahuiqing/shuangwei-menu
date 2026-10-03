@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="双味居">
+  <defs>
+    <linearGradient id="sw" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#sw)"/>
+  <g transform="rotate(-12 256 256)" fill="#ffffff">
+    <rect x="123" y="193" width="266" height="46" rx="23"/>
+    <rect x="123" y="273" width="266" height="46" rx="23"/>
+  </g>
+</svg>
