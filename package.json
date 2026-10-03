@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "node scripts/clean-dist.mjs && vite build",
     "preview": "vite preview",
     "start": "vite preview",
     "lint": "tsc --noEmit && eslint . --max-warnings=0",
