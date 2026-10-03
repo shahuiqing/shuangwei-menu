@@ -10,6 +10,7 @@ import {
   Pencil,
   Save,
   PackageX,
+  ClipboardList,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
@@ -28,6 +29,11 @@ import {
   type InventoryItem,
 } from "../lib/inventory";
 import { REASONS, todayWasteAmount, type Reason } from "../lib/waste";
+import {
+  buildStocktake,
+  pendingAdjustments,
+  STOCKTAKE_REASON,
+} from "../lib/stocktake";
 
 const EMPTY: Partial<InventoryItem> = {
   name: "",
@@ -51,6 +57,9 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   const [wasteNote, setWasteNote] = useState("");
   const [todayWaste, setTodayWaste] = useState(0);
   const [q, setQ] = useState("");
+  const [stocktaking, setStocktaking] = useState(false);
+  const [taking, setTaking] = useState(false);
+  const [counts, setCounts] = useState<Record<string, string>>({});
 
   const load = async () => {
     setLoading(true);
@@ -83,6 +92,8 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         (i.category || "").toLowerCase().includes(needle),
     );
   }, [list, q]);
+
+  const take = useMemo(() => buildStocktake(list, counts), [list, counts]);
 
   const submitEdit = async () => {
     if (!editing?.name?.trim()) return toast.error("名称不能为空");
@@ -128,6 +139,49 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     setWasteQty("");
     setWasteNote("");
     setWasteReason("过期");
+    load();
+  };
+
+  /** 盘点：按实盘与账面差异一次性调整，写流水（reason=盘点差异） */
+  const submitTake = async () => {
+    const adj = pendingAdjustments(take);
+    if (!adj.length) {
+      toast.success(
+        take.summary.counted ? "实盘与账面一致，无需调整" : "请先填写实盘数量",
+      );
+      if (take.summary.counted) {
+        setStocktaking(false);
+        setCounts({});
+      }
+      return;
+    }
+    if (
+      !confirm(
+        `将按实盘调整 ${adj.length} 项库存（流水原因：${STOCKTAKE_REASON}），\n净差异 ${fmtMoney(take.summary.diffValue)}（盘亏 ${fmtMoney(take.summary.lossValue)} / 盘盈 ${fmtMoney(take.summary.gainValue)}）。确定继续？`,
+      )
+    )
+      return;
+    setTaking(true);
+    let ok = 0;
+    for (const r of adj) {
+      const item = list.find((i) => i.id === r.id);
+      if (!item || r.diff === null) continue;
+      const done = await adjustStock(
+        item,
+        r.diff,
+        "adjustment",
+        `盘点 ${r.book}${r.unit} → ${r.actual}${r.unit}`,
+        STOCKTAKE_REASON,
+      );
+      if (done) ok += 1;
+    }
+    setTaking(false);
+    if (ok === adj.length) toast.success(`已按实盘调整 ${ok} 项库存`);
+    else if (ok > 0)
+      toast.error(`部分失败：${ok}/${adj.length} 已调整，请复核`);
+    else toast.error("盘点调整失败（检查库存表权限）");
+    setStocktaking(false);
+    setCounts({});
     load();
   };
 
@@ -214,6 +268,15 @@ export default function Inventory({ version = 0 }: { version?: number }) {
           className="flex items-center gap-2 px-3 py-2 text-sm text-white btn-brand rounded-xl"
         >
           <Plus size={16} /> 新增原料
+        </button>
+        <button
+          onClick={() => {
+            setCounts({});
+            setStocktaking(true);
+          }}
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+        >
+          <ClipboardList size={16} /> 盘点
         </button>
         <input
           value={q}
@@ -469,6 +532,102 @@ export default function Inventory({ version = 0 }: { version?: number }) {
             </button>
           </>
         )}
+      </Sheet>
+
+      {/* 库存盘点 */}
+      <Sheet
+        open={stocktaking}
+        title="库存盘点"
+        subtitle={`实盘与账面逐项比对；只调整有差异的项，流水原因记为「${STOCKTAKE_REASON}」`}
+        onClose={() => setStocktaking(false)}
+        maxW="max-w-lg"
+      >
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs bg-zinc-950 rounded-xl px-3 py-2.5 mb-2">
+          <span className="text-zinc-400">
+            已盘{" "}
+            <b className="text-white">
+              {take.summary.counted}/{take.summary.total}
+            </b>
+          </span>
+          <span className="text-zinc-400">
+            差异{" "}
+            <b
+              className={
+                take.summary.diffCount ? "text-amber-400" : "text-emerald-400"
+              }
+            >
+              {take.summary.diffCount}
+            </b>{" "}
+            项
+          </span>
+          <span className="text-zinc-400">
+            盘亏{" "}
+            <b className="text-red-400">{fmtMoney(take.summary.lossValue)}</b>
+          </span>
+          <span className="text-zinc-400">
+            盘盈{" "}
+            <b className="text-emerald-400">
+              {fmtMoney(take.summary.gainValue)}
+            </b>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-[1fr_88px_64px] gap-3 px-1 pb-1 text-[10px] text-zinc-600">
+          <span>原料 / 账面</span>
+          <span className="text-right">实盘</span>
+          <span className="text-right">差异</span>
+        </div>
+        <div className="max-h-[46vh] overflow-y-auto pr-1">
+          {take.rows.map((r) => (
+            <div
+              key={r.id}
+              className="grid grid-cols-[1fr_88px_64px] items-center gap-3 py-2 border-b border-white/5 last:border-0"
+            >
+              <div className="min-w-0">
+                <div className="text-sm text-zinc-200 truncate">{r.name}</div>
+                <div className="text-[11px] text-zinc-500">
+                  账面 {num(r.book)}
+                  {r.unit} · {fmtMoney(r.price)}/{r.unit}
+                </div>
+              </div>
+              <input
+                inputMode="decimal"
+                value={counts[r.id] ?? ""}
+                placeholder={String(r.book)}
+                onChange={(e) =>
+                  setCounts((c) => ({ ...c, [r.id]: e.target.value }))
+                }
+                className="w-full bg-zinc-950 border border-white/5 rounded-lg px-2.5 py-2 text-sm text-white text-right focus:outline-none focus:border-orange-500"
+              />
+              <div
+                className={`text-right text-sm font-semibold ${
+                  r.diff === null
+                    ? "text-zinc-700"
+                    : r.diff === 0
+                      ? "text-zinc-600"
+                      : r.diff > 0
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                }`}
+              >
+                {r.diff === null
+                  ? "—"
+                  : `${r.diff > 0 ? "+" : ""}${num(r.diff)}`}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={submitTake}
+          disabled={taking}
+          className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-60 active:scale-[0.98] transition-transform"
+        >
+          <Save size={16} />
+          {taking
+            ? "调整中…"
+            : `按实盘调整（${pendingAdjustments(take).length} 项）`}
+        </button>
       </Sheet>
     </div>
   );

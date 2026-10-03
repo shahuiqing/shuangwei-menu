@@ -27,8 +27,25 @@ import {
   type RpcSchemaError,
 } from "./lib/aggregate";
 import { subscribeOwner, type OrderChange } from "./lib/realtime";
+import {
+  notifyEnabled,
+  orderId,
+  orderNotice,
+  shouldNotifyOrder,
+  showNotify,
+} from "./lib/notify";
 
 const RECENT_LIMIT = 30;
+/** 已通知订单 id 的上限（防无限增长） */
+const SEEN_LIMIT = 300;
+
+function rememberIds(seen: Set<string>, ids: string[]) {
+  for (const id of ids) if (id) seen.add(id);
+  for (const id of seen) {
+    if (seen.size <= SEEN_LIMIT) break;
+    seen.delete(id);
+  }
+}
 
 /** 把实时变更合并进近况列表 */
 function mergeRecent(prev: any[], c: OrderChange): any[] {
@@ -55,6 +72,10 @@ export default function App() {
   const [version, setVersion] = useState(0);
   const [live, setLive] = useState(false);
   const bumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 已通知/已加载过的订单 id（避免刷新补发旧单） */
+  const seenOrders = useRef<Set<string>>(new Set());
+  const storeRef = useRef(STORE_NAME);
+  storeRef.current = settings?.restaurantName || STORE_NAME;
 
   // 免费额度优化：只拉少量近况订单 + 设置；其余统计由各页 RPC 拉取
   const load = useCallback(async () => {
@@ -65,6 +86,7 @@ export default function App() {
       fetchSettings(),
     ]);
     setRecentOrders(o);
+    rememberIds(seenOrders.current, o.map(orderId));
     setSettings(s);
     setLoading(false);
     setLastUpdated(new Date().toLocaleTimeString("zh-CN"));
@@ -102,6 +124,15 @@ export default function App() {
       onOrder: (c) => {
         setRecentOrders((prev) => mergeRecent(prev, c));
         scheduleBump();
+        // 新订单 → 系统通知（仅待接单、仅首次；无论开关与否都记为已处理）
+        const rec = c.new as any;
+        if (rec && shouldNotifyOrder(rec, seenOrders.current)) {
+          rememberIds(seenOrders.current, [orderId(rec)]);
+          if (notifyEnabled()) {
+            const n = orderNotice(rec, storeRef.current);
+            void showNotify(n.title, n.body, { tag: `order-${orderId(rec)}` });
+          }
+        }
       },
       onSettings: () => {
         fetchSettings().then(setSettings);

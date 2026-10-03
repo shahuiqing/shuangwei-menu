@@ -8,10 +8,18 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Bell,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
 import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
+import {
+  notifyEnabled,
+  notifyPermission,
+  requestNotifyPermission,
+  setNotifyEnabled,
+  type NotifyPermission,
+} from "../lib/notify";
 import { isConfigured, STORE_NAME } from "../lib/supabase";
 import { saveSettingsField } from "../lib/data";
 import { tableStats, prune, type TableStats } from "../lib/aggregate";
@@ -37,6 +45,31 @@ export default function Settings({
   const [ordersDays, setOrdersDays] = useState(90);
   const [txnsDays, setTxnsDays] = useState(180);
   const [pruning, setPruning] = useState(false);
+
+  const [notifyOn, setNotifyOn] = useState(() => notifyEnabled());
+  const [perm, setPerm] = useState<NotifyPermission>(() => notifyPermission());
+
+  const toggleNotify = async () => {
+    if (notifyOn) {
+      setNotifyEnabled(false);
+      setNotifyOn(false);
+      toast.success("已关闭新订单通知");
+      return;
+    }
+    if (perm === "unsupported") return toast.error("当前浏览器不支持系统通知");
+    let p: NotifyPermission = perm;
+    if (p !== "granted") p = await requestNotifyPermission();
+    setPerm(p);
+    if (p !== "granted")
+      return toast.error(
+        p === "denied"
+          ? "通知已被拒绝：请在浏览器地址栏的站点设置里改为「允许」"
+          : "未授予通知权限",
+      );
+    setNotifyEnabled(true);
+    setNotifyOn(true);
+    toast.success("已开启：有新订单时弹系统通知");
+  };
 
   const loadStats = async () => {
     setLoadingStats(true);
@@ -148,6 +181,43 @@ export default function Settings({
         >
           修改密码
         </button>
+      </ChartCard>
+
+      <ChartCard
+        title="消息通知"
+        subtitle="系统通知 · 仅在页面或安装的应用打开时生效"
+        action={<Bell size={18} className="text-orange-500" />}
+      >
+        <div className="flex items-center justify-between gap-3 bg-zinc-950 rounded-xl px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-zinc-200">新订单提醒</div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">
+              {perm === "unsupported"
+                ? "当前浏览器不支持系统通知"
+                : perm === "denied"
+                  ? "权限被拒绝"
+                  : perm === "default"
+                    ? "未授权，点右侧开启"
+                    : notifyOn
+                      ? "已开启"
+                      : "已关闭"}
+            </div>
+          </div>
+          <button
+            onClick={toggleNotify}
+            className={`shrink-0 px-4 py-2 rounded-lg text-sm font-semibold active:scale-95 transition-transform ${
+              notifyOn
+                ? "bg-zinc-700 hover:bg-zinc-600 text-white"
+                : "btn-brand text-white"
+            }`}
+          >
+            {notifyOn ? "关闭" : "开启"}
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2">
+          零后端：不联网也能用。顾客下单后只要本应用开着（含安装到主屏幕的
+          PWA），就会弹出系统通知；关闭页面不会推送。
+        </p>
       </ChartCard>
 
       <ChartCard
