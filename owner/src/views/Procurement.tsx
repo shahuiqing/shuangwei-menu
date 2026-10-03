@@ -13,6 +13,14 @@ import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
+  alertMap,
+  buildPriceAlerts,
+  checkUnitPrice,
+  flaggedAlerts,
+  MAX_SAMPLES,
+  type PriceAlert,
+} from "../lib/priceAlert";
+import {
   costImpactForPriceChange,
   createPurchase,
   fetchBoms,
@@ -28,6 +36,81 @@ import {
 
 const newLocalId = () =>
   `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+/** 采购价迷你走势（纯 SVG，不引图表库） */
+function Spark({
+  points,
+  className = "stroke-orange-400",
+}: {
+  points: number[];
+  className?: string;
+}) {
+  if (points.length < 2) return null;
+  const w = 72;
+  const h = 22;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = max - min || 1;
+  const xy = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * (w - 4) + 2;
+    const y = h - 3 - ((p - min) / span) * (h - 6);
+    return [x, y] as const;
+  });
+  const last = xy[xy.length - 1];
+  return (
+    <svg width={w} height={h} className="shrink-0" aria-hidden="true">
+      <polyline
+        points={xy.map(([x, y]) => `${x},${y}`).join(" ")}
+        fill="none"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+      />
+      <circle cx={last[0]} cy={last[1]} r={2} className={className} />
+    </svg>
+  );
+}
+
+/** 价格异常行：等级色条 + 走势 + 幅度 */
+function PriceAlertRow({ alert: a }: { alert: PriceAlert }) {
+  const up = a.changePct > 0;
+  const severe = a.level === "high";
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 border-l-4 ${
+        severe
+          ? "border-l-red-500 bg-red-500/[0.07]"
+          : "border-l-amber-500 bg-amber-500/[0.07]"
+      }`}
+    >
+      <div className="min-w-0">
+        <div className="text-sm text-zinc-200 truncate">{a.itemName}</div>
+        <div className="text-xs text-zinc-500">
+          近 {a.sampleCount} 次 {fmtMoney(a.priceMin)}~{fmtMoney(a.priceMax)} ·
+          中位 {fmtMoney(a.baseline)}/{a.unit} · {a.supplierCount} 家供应商
+        </div>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <Spark
+          points={a.spark.map((s) => s.price)}
+          className={severe ? "stroke-red-400" : "stroke-amber-400"}
+        />
+        <div className="text-right">
+          <div
+            className={`text-sm font-semibold ${
+              severe ? "text-red-400" : "text-amber-400"
+            }`}
+          >
+            {up ? "+" : ""}
+            {Math.round(a.changePct * 100)}%
+          </div>
+          <div className="text-xs text-zinc-500">现 {fmtMoney(a.current)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Procurement({ version = 0 }: { version?: number }) {
   const [list, setList] = useState<PurchaseOrder[]>([]);
@@ -80,6 +163,14 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   }, [list, monthKey]);
 
   const restock = useMemo(() => restockSuggestions(inv), [inv]);
+
+  const alerts = useMemo(() => buildPriceAlerts(list), [list]);
+  const byItem = useMemo(() => alertMap(alerts), [alerts]);
+  const flagged = useMemo(() => flaggedAlerts(alerts), [alerts]);
+  const priceCheck = useMemo(
+    () => checkUnitPrice(byItem.get(form.itemId), num(form.unit_price)),
+    [byItem, form.itemId, form.unit_price],
+  );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -197,7 +288,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard
           icon={Wallet}
           label="累计采购支出"
@@ -222,7 +313,29 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           accent="text-teal-400"
           bg="bg-teal-500/10"
         />
+        <KpiCard
+          icon={AlertTriangle}
+          label="价格异常"
+          value={String(flagged.length)}
+          valueNum={flagged.length}
+          accent={flagged.length ? "text-red-400" : "text-teal-400"}
+          bg={flagged.length ? "bg-red-500/10" : "bg-teal-500/10"}
+        />
       </div>
+
+      {flagged.length > 0 && (
+        <ChartCard
+          title="价格异常"
+          subtitle={`与最近 ${MAX_SAMPLES} 次采购单价的中位价比对`}
+          action={<AlertTriangle size={18} className="text-red-400" />}
+        >
+          <div className="space-y-1.5">
+            {flagged.map((a) => (
+              <PriceAlertRow key={a.itemId} alert={a} />
+            ))}
+          </div>
+        </ChartCard>
+      )}
 
       {restock.length > 0 && (
         <ChartCard
@@ -403,9 +516,24 @@ export default function Procurement({ version = 0 }: { version?: number }) {
               placeholder="单价(成本)"
               value={form.unit_price}
               onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
-              className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
+              className={`bg-zinc-950 border rounded-xl px-3 py-2.5 text-sm text-white ${
+                priceCheck.level === "ok"
+                  ? "border-white/5"
+                  : priceCheck.level === "high"
+                    ? "border-red-500/60 focus:border-red-400"
+                    : "border-amber-500/60 focus:border-amber-400"
+              }`}
             />
           </div>
+          {priceCheck.message && (
+            <div
+              className={`-mt-1 text-xs leading-relaxed ${
+                priceCheck.level === "high" ? "text-red-400" : "text-amber-400"
+              }`}
+            >
+              {priceCheck.message}
+            </div>
+          )}
           <input
             type="date"
             value={form.purchased_at}
