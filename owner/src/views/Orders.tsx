@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   X,
@@ -15,6 +15,7 @@ import { EmptyState, SkeletonTable } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
+import { lateOrders, useLateConfig } from "../lib/lateOrders";
 import {
   orderItems,
   orderTotal,
@@ -97,6 +98,18 @@ export default function Orders({ version = 0 }: { version?: number }) {
   const [qDebounced, setQDebounced] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+
+  // 超时高亮：阈值可配，每分钟重算
+  const [lateCfg] = useLateConfig();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const lateMap = useMemo(
+    () => new Map(lateOrders(rows, lateCfg, now).map((l) => [l.id, l])),
+    [rows, lateCfg, now],
+  );
   const [editDraft, setEditDraft] = useState({
     table_no: "",
     customer_name: "",
@@ -339,11 +352,14 @@ export default function Orders({ version = 0 }: { version?: number }) {
             ) : (
               rows.map((o, i) => {
                 const st = statusOf(o);
+                const late = lateMap.get(String(o.id || o._id || ""));
                 return (
                   <button
                     key={o._id || o.id || i}
                     onClick={() => openDetail(o)}
-                    className="relative w-full text-left card-surface overflow-hidden pl-4 pr-3.5 py-3 active:scale-[0.99] transition-transform"
+                    className={`relative w-full text-left card-surface overflow-hidden pl-4 pr-3.5 py-3 active:scale-[0.99] transition-transform ${
+                      late ? "ring-1 ring-red-500/40" : ""
+                    }`}
                   >
                     {/* 状态色条 */}
                     <span
@@ -375,6 +391,11 @@ export default function Orders({ version = 0 }: { version?: number }) {
                           />
                           {STATUS_TEXT[st] || "待接单"}
                         </span>
+                        {late && (
+                          <span className="inline-flex items-center text-[11px] px-2 py-1 rounded-full font-bold bg-red-500/15 text-red-400">
+                            超时 {late.overdueMin} 分
+                          </span>
+                        )}
                         <span className="tnum text-orange-400 font-black text-base leading-none">
                           {fmtMoney(orderTotal(o))}
                         </span>
@@ -413,10 +434,13 @@ export default function Orders({ version = 0 }: { version?: number }) {
                   ) : (
                     rows.map((o, i) => {
                       const st = statusOf(o);
+                      const late = lateMap.get(String(o.id || o._id || ""));
                       return (
                         <tr
                           key={o._id || o.id || i}
-                          className="border-b border-zinc-800/50 hover:bg-zinc-800/30 group"
+                          className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 group ${
+                            late ? "bg-red-500/[0.06]" : ""
+                          }`}
                         >
                           <td className="relative px-4 py-3 text-white font-semibold">
                             <span
@@ -438,6 +462,11 @@ export default function Orders({ version = 0 }: { version?: number }) {
                               />
                               {STATUS_TEXT[st] || "待接单"}
                             </span>
+                            {late && (
+                              <span className="inline-flex items-center mt-1.5 text-[11px] px-2 py-0.5 rounded-full font-bold bg-red-500/15 text-red-400">
+                                超时 {late.overdueMin} 分
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right text-zinc-400">
                             {itemCount(o)}

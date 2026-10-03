@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { saveSnap, snapFallback } from "./snapshot";
 
 /* ============ 类型 ============ */
 
@@ -73,9 +74,11 @@ export async function fetchInventory(): Promise<InventoryItem[]> {
     .order("name", { ascending: true });
   if (error) {
     console.warn("[owner] fetchInventory:", error.message);
-    return [];
+    return snapFallback("inventory", []);
   }
-  return (data || []) as InventoryItem[];
+  const rows = (data || []) as InventoryItem[];
+  saveSnap("inventory", rows);
+  return rows;
 }
 
 export async function saveInventoryItem(
@@ -273,9 +276,11 @@ export async function fetchPurchases(limit = 500): Promise<PurchaseOrder[]> {
     .limit(limit);
   if (error) {
     console.warn("[owner] fetchPurchases:", error.message);
-    return [];
+    return snapFallback(`purchases:${limit}`, []);
   }
-  return (data || []) as PurchaseOrder[];
+  const rows = (data || []) as PurchaseOrder[];
+  saveSnap(`purchases:${limit}`, rows);
+  return rows;
 }
 
 /**

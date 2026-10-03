@@ -34,6 +34,7 @@ import {
   shouldNotifyOrder,
   showNotify,
 } from "./lib/notify";
+import { lateNotice, lateOrders, loadLateConfig } from "./lib/lateOrders";
 
 const RECENT_LIMIT = 30;
 /** 已通知订单 id 的上限（防无限增长） */
@@ -74,6 +75,8 @@ export default function App() {
   const bumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 已通知/已加载过的订单 id（避免刷新补发旧单） */
   const seenOrders = useRef<Set<string>>(new Set());
+  /** 已提醒过的超时订单（id:status，每单每状态只提醒一次） */
+  const seenLate = useRef<Set<string>>(new Set());
   const storeRef = useRef(STORE_NAME);
   storeRef.current = settings?.restaurantName || STORE_NAME;
 
@@ -106,6 +109,29 @@ export default function App() {
     window.addEventListener("online", on);
     return () => window.removeEventListener("online", on);
   }, [authed, load, isConfigured]);
+
+  // 漏单提醒：每分钟检查超时订单，去重后弹系统通知（需手动开启通知）
+  useEffect(() => {
+    if (!authed || !isConfigured) return;
+    const check = () => {
+      for (const l of lateOrders(recentOrders, loadLateConfig())) {
+        const key = `${l.id}:${l.status}`;
+        if (seenLate.current.has(key)) continue;
+        seenLate.current.add(key);
+        if (seenLate.current.size > 200) {
+          const oldest = seenLate.current.values().next().value;
+          if (oldest) seenLate.current.delete(oldest);
+        }
+        if (notifyEnabled()) {
+          const n = lateNotice(l);
+          void showNotify(n.title, n.body, { tag: `late-${key}` });
+        }
+      }
+    };
+    check();
+    const t = setInterval(check, 60000);
+    return () => clearInterval(t);
+  }, [authed, isConfigured, recentOrders]);
 
   // 数据库未初始化（聚合函数/列缺失）时常驻提示
   const [schemaErr, setSchemaErr] = useState<RpcSchemaError | null>(() =>

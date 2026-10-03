@@ -1,5 +1,6 @@
 import { fmtMoney } from "./format";
 import { type InventoryItem } from "./inventory";
+import { type LateOrder } from "./lateOrders";
 import { type PriceAlert } from "./priceAlert";
 
 /* ============ 首页待办中心 ============
@@ -10,7 +11,7 @@ import { type PriceAlert } from "./priceAlert";
 export type TodoLevel = "high" | "warn" | "info";
 
 export interface TodoItem {
-  id: "pending" | "stock" | "price" | "waste";
+  id: "pending" | "stock" | "price" | "waste" | "late";
   level: TodoLevel;
   title: string;
   desc: string;
@@ -30,6 +31,8 @@ export interface TodoInput {
   todayWaste: number;
   /** 待接单数量 */
   pendingOrders: number;
+  /** 超时未处理的订单（漏单风险） */
+  late?: LateOrder[];
 }
 
 /** 取前 n 个名字拼成摘要，超出用「等 N 个」收尾 */
@@ -41,7 +44,21 @@ export function namesPreview(names: string[], n = 3): string {
 
 export function buildTodos(input: TodoInput): TodoItem[] {
   const out: TodoItem[] = [];
-  const { low, priceAlerts, todayWaste, pendingOrders } = input;
+  const { low, priceAlerts, todayWaste, pendingOrders, late = [] } = input;
+
+  if (late.length > 0) {
+    out.push({
+      id: "late",
+      level: "high",
+      title: `${late.length} 笔订单已超时未处理`,
+      desc: namesPreview(
+        late.map((l) => `${l.label}·${l.kindLabel}${l.elapsedMin}分`),
+      ),
+      badge: String(late.length),
+      tab: "orders",
+      weight: 140 + late.length,
+    });
+  }
 
   if (pendingOrders > 0) {
     out.push({

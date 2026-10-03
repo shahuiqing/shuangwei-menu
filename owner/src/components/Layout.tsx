@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
+import { cacheUsedAt, onCacheUse } from "../lib/snapshot";
 
 export type OwnerTab =
   | "dashboard"
@@ -289,6 +290,9 @@ export function Layout({
   const ready = pull > 56;
   const [scrolled, setScrolled] = useState(false);
   const online = useOnline();
+  // 断网回落到本地快照时，告知数据时间
+  const [cacheAt, setCacheAt] = useState(cacheUsedAt);
+  useEffect(() => onCacheUse(setCacheAt), []);
   const install = useInstallHint();
 
   useEffect(() => {
@@ -455,7 +459,10 @@ export function Layout({
           {!online && (
             <div className="flex items-center gap-2 px-4 lg:px-6 py-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 border-t border-amber-500/25">
               <WifiOff size={12} className="shrink-0" />
-              网络已断开，当前显示缓存数据；恢复联网后自动刷新
+              网络已断开，当前显示缓存数据
+              {cacheAt &&
+                `（数据快照 ${new Date(cacheAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}）`}
+              ；恢复联网后自动刷新
             </div>
           )}
         </header>

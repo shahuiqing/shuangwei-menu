@@ -5,6 +5,9 @@ import {
   verifyOwnerPassword,
   markAuthed,
   setOwnerPasswordLocal,
+  needsPasswordSetup,
+  setupOwnerPassword,
+  MIN_PASSWORD_LEN,
 } from "../lib/auth";
 import { STORE_NAME } from "../lib/supabase";
 
@@ -13,11 +16,32 @@ const fieldCls =
 
 export default function Login({ onDone }: { onDone: () => void }) {
   const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
   const [err, setErr] = useState("");
-  const [mode, setMode] = useState<"login" | "change">("login");
+  const [mode, setMode] = useState<"login" | "change" | "setup">(() =>
+    needsPasswordSetup() ? "setup" : "login",
+  );
   const [newPw, setNewPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState(false);
+
+  const handleSetup = (e: FormEvent) => {
+    e.preventDefault();
+    if (pw.length < MIN_PASSWORD_LEN) {
+      setErr(`密码至少 ${MIN_PASSWORD_LEN} 位`);
+      return;
+    }
+    if (pw !== pw2) {
+      setErr("两次输入的密码不一致");
+      return;
+    }
+    if (!setupOwnerPassword(pw)) {
+      setErr("设置失败，请重试");
+      return;
+    }
+    markAuthed();
+    onDone();
+  };
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -70,7 +94,78 @@ export default function Login({ onDone }: { onDone: () => void }) {
         </div>
 
         <div className="card-surface p-6 sm:p-7">
-          {mode === "login" ? (
+          {mode === "setup" ? (
+            <form onSubmit={handleSetup} className="space-y-3.5">
+              <div className="flex items-start gap-2 text-[12px] text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                首次使用：系统无内置默认密码，请设置老板密码（至少{" "}
+                {MIN_PASSWORD_LEN} 位）。
+              </div>
+              <div className="relative">
+                <Lock
+                  size={17}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none"
+                />
+                <input
+                  type={show ? "text" : "password"}
+                  value={pw}
+                  autoFocus
+                  onChange={(e) => {
+                    setPw(e.target.value);
+                    setErr("");
+                  }}
+                  placeholder={`设置密码（至少 ${MIN_PASSWORD_LEN} 位）`}
+                  className={fieldCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((s) => !s)}
+                  aria-label="显示/隐藏密码"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-300 flex items-center justify-center transition-colors"
+                >
+                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <div className="relative">
+                <ShieldCheck
+                  size={17}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none"
+                />
+                <input
+                  type={show ? "text" : "password"}
+                  value={pw2}
+                  onChange={(e) => {
+                    setPw2(e.target.value);
+                    setErr("");
+                  }}
+                  placeholder="再次输入密码"
+                  className={fieldCls}
+                />
+              </div>
+              {err && (
+                <p className="flex items-center gap-1.5 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  {err}
+                </p>
+              )}
+              <button
+                type="submit"
+                className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 active:scale-[0.98] transition-transform"
+              >
+                设置并进入
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setErr("");
+                }}
+                className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
+              >
+                已有密码？直接登录
+              </button>
+            </form>
+          ) : mode === "login" ? (
             <form onSubmit={handleLogin} className="space-y-3.5">
               <div className="relative">
                 <Lock
@@ -97,6 +192,23 @@ export default function Login({ onDone }: { onDone: () => void }) {
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+
+              {needsPasswordSetup() && (
+                <p className="text-[12px] text-zinc-500 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2">
+                  本机尚未设置过密码；若服务端已配置密码可直接登录，否则请
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("setup");
+                      setErr("");
+                    }}
+                    className="text-orange-400 hover:text-orange-300 underline underline-offset-2 mx-0.5"
+                  >
+                    设置密码
+                  </button>
+                  。
+                </p>
+              )}
 
               {err && (
                 <p className="flex items-center gap-1.5 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-2">

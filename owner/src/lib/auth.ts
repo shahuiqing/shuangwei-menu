@@ -1,54 +1,69 @@
 /**
  * 老板端登录（安全性升级）
  * - 密码走后端校验：POST /api/auth/verify-owner（bcrypt，settings.ownerPasswordHash）
- * - 本机只保存「会话令牌」，不再保存明文密码
- * - 后端不可达时回退到本地存储的哈希（支持离线/纯本地使用）
+ * - 本机只保存 bcrypt 哈希，不保存明文
+ * - 后端不可达时回退到本地哈希（支持离线/纯本地使用）
+ * - 无默认密码：本机无哈希且未配置 VITE_OWNER_PASSWORD 时，首登强制「设置密码」
  */
 import bcrypt from "bcryptjs";
 
 const SESSION_KEY = "ownerAuthedUntil";
 const LOCAL_HASH_KEY = "ownerPasswordHash";
-const DEFAULT_PASSWORD =
-  (import.meta.env.VITE_OWNER_PASSWORD as string) || "123456";
+/** 部署时可配置初始密码；不再有内置的通用弱默认值 */
+const ENV_PASSWORD = String(import.meta.env.VITE_OWNER_PASSWORD || "");
 const SESSION_MS = 3 * 24 * 60 * 60 * 1000; // 3 天
 
 const VERIFY_URL = "/api/auth/verify-owner";
 
-// 惰性计算默认哈希，避免模块加载时阻塞主线程（bcrypt cost 10 约几十毫秒）
-let defaultHashCache: string | null = null;
-function getDefaultHash(): string {
-  if (defaultHashCache !== null) return defaultHashCache;
+/** 最短密码长度 */
+export const MIN_PASSWORD_LEN = 6;
+
+/** 本机是否已存有密码哈希 */
+export function hasLocalPassword(): boolean {
   try {
-    defaultHashCache = bcrypt.hashSync(DEFAULT_PASSWORD, 10);
+    return (localStorage.getItem(LOCAL_HASH_KEY) || "").startsWith("$2");
   } catch {
-    defaultHashCache = "";
+    return false;
   }
-  return defaultHashCache;
+}
+
+/** 部署时是否通过环境变量配置了初始密码 */
+export function hasEnvPassword(): boolean {
+  return ENV_PASSWORD.length > 0;
+}
+
+/**
+ * 是否需要走「首次设置密码」：
+ * 本机无密码 且 未配置环境变量密码。
+ * （若服务端已配密码，可点「已有密码？直接登录」走后端校验）
+ */
+export function needsPasswordSetup(): boolean {
+  return !hasLocalPassword() && !hasEnvPassword();
 }
 
 function getLocalHash(): string {
+  // 配置了环境变量密码：惰性写入本地哈希，保证离线也能登录
+  if (ENV_PASSWORD) {
+    try {
+      if (!localStorage.getItem(LOCAL_HASH_KEY)) {
+        localStorage.setItem(LOCAL_HASH_KEY, bcrypt.hashSync(ENV_PASSWORD, 10));
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   try {
     const h = localStorage.getItem(LOCAL_HASH_KEY);
     if (h && h.startsWith("$2")) return h;
   } catch {
     /* ignore */
   }
-  // 首次访问惰性写入默认哈希
-  const def = getDefaultHash();
-  if (def) {
-    try {
-      if (!localStorage.getItem(LOCAL_HASH_KEY))
-        localStorage.setItem(LOCAL_HASH_KEY, def);
-    } catch {
-      /* ignore */
-    }
-  }
-  return def;
+  return "";
 }
 
 /**
  * 校验密码。返回 true 表示登录成功。
- * 优先后端；网络不可达时回退本地哈希；两者都不匹配则失败。
+ * 优先后端；网络不可达时回退本地哈希；无本地哈希（未设置过密码）直接失败。
  */
 export async function verifyOwnerPassword(input: string): Promise<boolean> {
   if (!input) return false;
@@ -66,8 +81,10 @@ export async function verifyOwnerPassword(input: string): Promise<boolean> {
   } catch {
     // 后端不可达 → 回退本地
   }
+  const local = getLocalHash();
+  if (!local) return false; // 未设置过密码：不再有默认密码兜底
   try {
-    return bcrypt.compareSync(input, getLocalHash());
+    return bcrypt.compareSync(input, local);
   } catch {
     return false;
   }
@@ -81,6 +98,14 @@ export function setOwnerPasswordLocal(pw: string): void {
   } catch {
     /* ignore */
   }
+}
+
+/** 首次设置密码：长度校验 + 写入本机哈希（云端需另行执行 set-owner-password） */
+export function setupOwnerPassword(pw: string): boolean {
+  const v = String(pw || "").trim();
+  if (v.length < MIN_PASSWORD_LEN) return false;
+  setOwnerPasswordLocal(v);
+  return hasLocalPassword();
 }
 
 export function markAuthed(): void {

@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { saveSnap, snapFallback } from "./snapshot";
 
 export interface Staff {
   name: string;
@@ -21,11 +22,16 @@ export async function fetchOrders(limit = 3000): Promise<any[]> {
 
 export async function fetchSettings(): Promise<any | null> {
   if (!supabase) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("settings")
     .select("*")
     .eq("id", "global")
     .maybeSingle();
+  if (error) {
+    console.warn("[owner] fetchSettings:", error.message);
+    return snapFallback<any>("settings", null);
+  }
+  if (data) saveSnap("settings", data);
   return data || null;
 }
 

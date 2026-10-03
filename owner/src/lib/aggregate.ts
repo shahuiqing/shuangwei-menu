@@ -5,6 +5,7 @@
  * - 只拉「近况」少量订单用于实时流
  */
 import { supabase } from "./supabase";
+import { saveSnap, snapFallback } from "./snapshot";
 import type { RangeKey } from "./analytics";
 
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -368,9 +369,11 @@ export async function fetchRecentOrders(limit = 30): Promise<any[]> {
     .limit(limit);
   if (error) {
     console.warn("[owner] fetchRecentOrders:", error.message);
-    return [];
+    return snapFallback(`orders:${limit}`, []);
   }
-  return data || [];
+  const rows = data || [];
+  saveSnap(`orders:${limit}`, rows);
+  return rows;
 }
 
 /* ============ 用量 / 清理 ============ */

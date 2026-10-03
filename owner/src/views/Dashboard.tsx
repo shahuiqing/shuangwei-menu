@@ -14,6 +14,7 @@ import {
   PackageX,
   ChevronRight,
   CircleCheck,
+  Copy,
 } from "lucide-react";
 import {
   AreaChart,
@@ -31,6 +32,7 @@ import {
 } from "recharts";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
+import { toast } from "../components/Toast";
 import { fmtMoney, fmtDateTime, STATUS_TEXT } from "../lib/format";
 import {
   buildDishCategoryMap,
@@ -61,6 +63,8 @@ import {
 import { buildPriceAlerts, flaggedAlerts } from "../lib/priceAlert";
 import { todayWasteAmount } from "../lib/waste";
 import { buildTodos } from "../lib/todo";
+import { lateOrders, useLateConfig } from "../lib/lateOrders";
+import { buildSummary, summaryLines, type SummaryInput } from "../lib/summary";
 import type { OwnerTab } from "../components/Layout";
 import { useChartTheme } from "../lib/theme";
 
@@ -69,6 +73,13 @@ const RANGE_LABEL: Record<string, string> = {
   "7d": "近 7 天",
   "30d": "近 30 天",
   all: "全部",
+};
+
+const COMPARE_LABEL: Record<string, string> = {
+  today: "昨天",
+  "7d": "上一周期",
+  "30d": "上一周期",
+  all: "上一周期",
 };
 
 /** 待办等级色（level → 主色） */
@@ -91,6 +102,24 @@ const PIE_COLORS = [
 
 const pct = (cur: number, prev: number) =>
   !prev ? (cur > 0 ? 100 : 0) : ((cur - prev) / prev) * 100;
+
+/** 剪贴板不可用（http/旧浏览器）时的兜底复制 */
+function fallbackCopy(text: string, done: () => void) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) done();
+    else toast.error("复制失败，请手动选择文本");
+  } catch {
+    toast.error("复制失败，请手动选择文本");
+  }
+}
 
 export default function Dashboard({
   recentOrders,
@@ -247,6 +276,18 @@ export default function Dashboard({
     [recentOrders],
   );
 
+  // 超时订单：阈值可配，每分钟重算一次（超时是随时间推移的）
+  const [lateCfg] = useLateConfig();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const late = useMemo(
+    () => lateOrders(recentOrders, lateCfg, now),
+    [recentOrders, lateCfg, now],
+  );
+
   const todos = useMemo(
     () =>
       buildTodos({
@@ -254,8 +295,9 @@ export default function Dashboard({
         priceAlerts: ops.alerts,
         todayWaste: ops.todayWaste,
         pendingOrders: ops.pending,
+        late,
       }),
-    [ops],
+    [ops, late],
   );
 
   const todoIcon = (tab: string) => {
@@ -264,6 +306,39 @@ export default function Dashboard({
     if (tab === "procurement") return <ShoppingCart size={16} />;
     if (tab === "waste") return <PackageX size={16} />;
     return <CircleCheck size={16} />;
+  };
+
+  // 经营小结：把当前区间的关键指标压成一段话，可一键复制
+  const summaryInput = useMemo<SummaryInput>(
+    () => ({
+      rangeLabel: RANGE_LABEL[range] || "本期",
+      compareLabel: COMPARE_LABEL[range] || "上一周期",
+      revenue: kpi.revenue,
+      orders: kpi.orders,
+      aov: kpi.aov,
+      revenueChange: kpi.revenueChange,
+      topDish: topDishes[0]
+        ? { name: topDishes[0].name, qty: topDishes[0].qty }
+        : null,
+      lowCount: ops.low.length,
+      priceAlertCount: ops.alerts.length,
+      waste: ops.todayWaste,
+      pending: ops.pending,
+      lateCount: late.length,
+    }),
+    [range, kpi, topDishes, ops, late],
+  );
+  const copySummary = () => {
+    const text = buildSummary(summaryInput);
+    const done = () => toast.success("小结已复制，可直接粘贴到群里");
+    try {
+      const p = navigator.clipboard?.writeText(text);
+      if (p && typeof p.then === "function") {
+        p.then(done).catch(() => fallbackCopy(text, done));
+      } else fallbackCopy(text, done);
+    } catch {
+      fallbackCopy(text, done);
+    }
   };
 
   return (
@@ -464,6 +539,30 @@ export default function Dashboard({
               ))}
             </div>
           )}
+        </ChartCard>
+      )}
+
+      {ops.ready && (
+        <ChartCard
+          title="经营小结"
+          subtitle={`${RANGE_LABEL[range] || "本期"} · 自动生成`}
+          action={
+            <button
+              onClick={copySummary}
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              title="复制小结"
+            >
+              <Copy size={12} /> 复制
+            </button>
+          }
+        >
+          <div className="rounded-xl bg-zinc-950 px-4 py-3.5 space-y-2">
+            {summaryLines(summaryInput).map((line, i) => (
+              <p key={i} className="text-sm text-zinc-300 leading-relaxed">
+                {line}
+              </p>
+            ))}
+          </div>
         </ChartCard>
       )}
 
