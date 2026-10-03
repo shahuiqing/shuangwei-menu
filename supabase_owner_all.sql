@@ -93,6 +93,10 @@ CREATE INDEX IF NOT EXISTS idx_inv_txn_item        ON public.inventory_transacti
 CREATE INDEX IF NOT EXISTS idx_inv_txn_ref         ON public.inventory_transactions (reference);
 CREATE INDEX IF NOT EXISTS idx_bom_name            ON public.recipe_boms (menu_item_name);
 
+-- 损耗原因分类（报损登记用，前端按 reason 聚合；历史行为空串不影响）
+ALTER TABLE public.inventory_transactions ADD COLUMN IF NOT EXISTS reason VARCHAR(30) DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_inv_txn_waste       ON public.inventory_transactions (type, created_at DESC);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. 老板端登录密码哈希（初始 123456，登录后请尽快修改）
 -- ─────────────────────────────────────────────────────────────────────────────

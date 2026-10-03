@@ -9,6 +9,7 @@ import {
   Layers,
   Pencil,
   Save,
+  PackageX,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
@@ -18,12 +19,15 @@ import {
   adjustStock,
   deleteInventoryItem,
   fetchInventory,
+  fetchTransactions,
   inventoryValue,
   lowStockItems,
   num,
+  recordWaste,
   saveInventoryItem,
   type InventoryItem,
 } from "../lib/inventory";
+import { REASONS, todayWasteAmount, type Reason } from "../lib/waste";
 
 const EMPTY: Partial<InventoryItem> = {
   name: "",
@@ -41,11 +45,23 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   const [adjusting, setAdjusting] = useState<InventoryItem | null>(null);
   const [delta, setDelta] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
+  const [wasting, setWasting] = useState<InventoryItem | null>(null);
+  const [wasteQty, setWasteQty] = useState("");
+  const [wasteReason, setWasteReason] = useState<Reason>("过期");
+  const [wasteNote, setWasteNote] = useState("");
+  const [todayWaste, setTodayWaste] = useState(0);
   const [q, setQ] = useState("");
 
   const load = async () => {
     setLoading(true);
-    setList(await fetchInventory());
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const [items, txns] = await Promise.all([
+      fetchInventory(),
+      fetchTransactions(500, "waste", start.toISOString()),
+    ]);
+    setList(items);
+    setTodayWaste(todayWasteAmount(txns));
     setLoading(false);
   };
 
@@ -95,6 +111,26 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     load();
   };
 
+  const submitWaste = async () => {
+    if (!wasting) return;
+    const qty = Math.abs(num(wasteQty));
+    if (!qty) return toast.error("请输入报损数量");
+    if (qty > num(wasting.stock))
+      return toast.error(
+        `报损数量不能超过现存 ${num(wasting.stock)} ${wasting.unit}`,
+      );
+    const ok = await recordWaste(wasting, qty, wasteReason, wasteNote);
+    if (!ok) return toast.error("报损失败（检查库存表权限）");
+    toast.success(
+      `已报损 ${qty}${wasting.unit} · ${fmtMoney(qty * num(wasting.price))}`,
+    );
+    setWasting(null);
+    setWasteQty("");
+    setWasteNote("");
+    setWasteReason("过期");
+    load();
+  };
+
   const remove = async (i: InventoryItem) => {
     if (
       !confirm(
@@ -120,7 +156,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard
           icon={Wallet}
           label="库存总值"
@@ -144,6 +180,15 @@ export default function Inventory({ version = 0 }: { version?: number }) {
           valueNum={low.length}
           accent={low.length ? "text-red-400" : "text-green-400"}
           bg={low.length ? "bg-red-500/10" : "bg-green-500/10"}
+        />
+        <KpiCard
+          icon={PackageX}
+          label="今日损耗"
+          value={fmtMoney(todayWaste)}
+          valueNum={todayWaste}
+          format={fmtMoney}
+          accent={todayWaste > 0 ? "text-amber-400" : "text-teal-400"}
+          bg={todayWaste > 0 ? "bg-amber-500/10" : "bg-teal-500/10"}
         />
       </div>
 
@@ -233,9 +278,22 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                       </td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <button
+                          onClick={() => {
+                            setWasteReason("过期");
+                            setWasteQty("");
+                            setWasteNote("");
+                            setWasting(i);
+                          }}
+                          disabled={num(i.stock) <= 0}
+                          className="text-zinc-400 hover:text-amber-400 disabled:opacity-30 mr-2"
+                          title="报损登记"
+                        >
+                          报损
+                        </button>
+                        <button
                           onClick={() => setAdjusting(i)}
                           className="text-zinc-400 hover:text-orange-400 mr-2"
-                          title="盘点/损耗"
+                          title="盘点/调整"
                         >
                           调整
                         </button>
@@ -350,6 +408,64 @@ export default function Inventory({ version = 0 }: { version?: number }) {
               className="mt-4 w-full py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-semibold active:scale-[0.98] transition-transform"
             >
               确认调整
+            </button>
+          </>
+        )}
+      </Sheet>
+
+      {/* 报损登记 */}
+      <Sheet
+        open={!!wasting}
+        title={`报损登记 · ${wasting?.name ?? ""}`}
+        subtitle={
+          wasting
+            ? `现存 ${num(wasting.stock)} ${wasting.unit} · 按现价 ${fmtMoney(wasting.price)}/${wasting.unit} 计入损耗`
+            : ""
+        }
+        onClose={() => setWasting(null)}
+      >
+        {wasting && (
+          <>
+            <SheetField
+              label="报损数量"
+              type="number"
+              value={wasteQty}
+              onChange={setWasteQty}
+            />
+            <div className="h-3" />
+            <div className="text-xs text-zinc-500 mb-1.5">报损原因</div>
+            <div className="flex flex-wrap gap-2">
+              {REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setWasteReason(r)}
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                    wasteReason === r
+                      ? "bg-amber-500/15 border-amber-500/60 text-amber-400 font-semibold"
+                      : "bg-zinc-950 border-white/5 text-zinc-400 hover:border-white/20"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div className="h-3" />
+            <SheetField
+              label="备注（选填）"
+              value={wasteNote}
+              onChange={setWasteNote}
+            />
+            <div className="mt-3 text-right text-sm text-zinc-400">
+              本次损耗{" "}
+              <span className="text-amber-400 font-bold">
+                {fmtMoney(Math.abs(num(wasteQty)) * num(wasting.price))}
+              </span>
+            </div>
+            <button
+              onClick={submitWaste}
+              className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold active:scale-[0.98] transition-transform"
+            >
+              <PackageX size={16} /> 确认报损（扣减库存）
             </button>
           </>
         )}

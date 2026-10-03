@@ -8,6 +8,7 @@ import Dishes from "./views/Dishes";
 import MenuAnalysis from "./views/MenuAnalysis";
 import Procurement from "./views/Procurement";
 import Inventory from "./views/Inventory";
+import Waste from "./views/Waste";
 import Recipe from "./views/Recipe";
 import CostReport from "./views/CostReport";
 import Consumption from "./views/Consumption";
@@ -197,6 +198,7 @@ export default function App() {
             {tab === "menu" && <MenuAnalysis version={version} />}
             {tab === "procurement" && <Procurement version={version} />}
             {tab === "inventory" && <Inventory version={version} />}
+            {tab === "waste" && <Waste version={version} />}
             {tab === "recipe" && (
               <Recipe settings={settings} version={version} />
             )}

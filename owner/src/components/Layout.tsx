@@ -21,6 +21,7 @@ import {
   Moon,
   X,
   ChevronRight,
+  PackageX,
 } from "lucide-react";
 import { useTheme } from "../lib/theme";
 
@@ -32,6 +33,7 @@ export type OwnerTab =
   | "menu"
   | "procurement"
   | "inventory"
+  | "waste"
   | "recipe"
   | "cost"
   | "consumption"
@@ -46,6 +48,7 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "menu", label: "菜单分析", icon: BarChart3 },
   { id: "procurement", label: "采购管理", icon: ShoppingCart },
   { id: "inventory", label: "库存管理", icon: Boxes },
+  { id: "waste", label: "损耗分析", icon: PackageX },
   { id: "recipe", label: "配方 BOM", icon: NotebookText },
   { id: "cost", label: "成本毛利", icon: BadgeDollarSign },
   { id: "consumption", label: "用料消耗", icon: Flame },
@@ -62,6 +65,7 @@ const SUBTITLE: Partial<Record<OwnerTab, string>> = {
   menu: "单品盈利与销量排行",
   procurement: "进货记录与供应商",
   inventory: "原料库存与预警",
+  waste: "报损登记与损耗率",
   recipe: "菜品用料与成本基准",
   cost: "配方成本 × 单价的毛利核算",
   consumption: "按订单反推的用料流水",
@@ -121,7 +125,10 @@ function TabItem({
 // 移动端「更多」里的分组
 const MOBILE_GROUPS: { title: string; items: OwnerTab[] }[] = [
   { title: "经营", items: ["dishes", "reports", "menu"] },
-  { title: "供应与成本", items: ["procurement", "inventory", "recipe"] },
+  {
+    title: "供应与成本",
+    items: ["procurement", "inventory", "waste", "recipe"],
+  },
   { title: "管理", items: ["staff", "settings"] },
 ];
 

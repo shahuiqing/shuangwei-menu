@@ -48,6 +48,7 @@ export interface InventoryTransaction {
   unit_cost: number;
   reference?: string;
   notes?: string;
+  reason?: string;
   created_at?: string;
 }
 
@@ -147,12 +148,26 @@ export async function deleteInventoryItem(id: string): Promise<DeleteResult> {
   return { ok: true, referencedBoms: refCount };
 }
 
+/** 写流水；reason 列未执行迁移时降级为不含 reason 重试（不阻断业务） */
+async function insertTxn(
+  row: Partial<InventoryTransaction> & { id: string; item_id: string },
+): Promise<void> {
+  if (!supabase) return;
+  let { error } = await supabase.from("inventory_transactions").insert(row);
+  if (error && "reason" in row && /reason/i.test(error.message)) {
+    const { reason: _omit, ...rest } = row;
+    ({ error } = await supabase.from("inventory_transactions").insert(rest));
+  }
+  if (error) console.warn("[owner] inventory txn:", error.message);
+}
+
 /** 盘点/损耗调整：delta 正数入库、负数出库 */
 export async function adjustStock(
   item: InventoryItem,
   delta: number,
   type: TxnType = "adjustment",
   notes = "",
+  reason = "",
 ): Promise<boolean> {
   if (!supabase) return false;
   const next = num(item.stock) + num(delta);
@@ -164,7 +179,7 @@ export async function adjustStock(
     console.warn("[owner] adjustStock:", error.message);
     return false;
   }
-  const { error: e2 } = await supabase.from("inventory_transactions").insert({
+  await insertTxn({
     id: newId("ADJ"),
     item_id: item.id,
     item_name: item.name,
@@ -174,10 +189,29 @@ export async function adjustStock(
     unit_cost: num(item.price),
     reference: "",
     notes,
+    reason,
     created_at: new Date().toISOString(),
   });
-  if (e2) console.warn("[owner] adjustStock txn:", e2.message);
   return true;
+}
+
+/**
+ * 报损登记：库存扣减 + 写 waste 流水（按原料现价记成本）
+ * @param qty 报损数量（正数，内部转为负 delta）
+ */
+export async function recordWaste(
+  item: InventoryItem,
+  qty: number,
+  reason = "",
+  notes = "",
+): Promise<boolean> {
+  const amount = Math.abs(num(qty));
+  if (amount <= 0) return false;
+  if (amount > num(item.stock)) {
+    console.warn("[owner] recordWaste: qty exceeds stock");
+    return false;
+  }
+  return adjustStock(item, -amount, "waste", notes, reason);
 }
 
 /* ============ 配方 BOM ============ */
@@ -283,6 +317,7 @@ export async function createPurchase(input: {
 export async function fetchTransactions(
   limit = 2000,
   type?: TxnType,
+  sinceIso?: string,
 ): Promise<InventoryTransaction[]> {
   if (!supabase) return [];
   let q = supabase
@@ -291,6 +326,7 @@ export async function fetchTransactions(
     .order("created_at", { ascending: false })
     .limit(limit);
   if (type) q = q.eq("type", type);
+  if (sinceIso) q = q.gte("created_at", sinceIso);
   const { data, error } = await q;
   if (error) {
     console.warn("[owner] fetchTransactions:", error.message);
