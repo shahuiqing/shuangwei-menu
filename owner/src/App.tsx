@@ -188,6 +188,7 @@ export default function App() {
                 recentOrders={recentOrders}
                 settings={settings}
                 version={version}
+                onTab={setTab}
               />
             )}
             {tab === "orders" && <Orders version={version} />}

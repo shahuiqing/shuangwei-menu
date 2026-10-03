@@ -8,6 +8,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  ReceiptText,
+  Boxes,
+  ShoppingCart,
+  PackageX,
+  ChevronRight,
+  CircleCheck,
 } from "lucide-react";
 import {
   AreaChart,
@@ -40,10 +46,22 @@ import {
   dailySeries,
   dishStats,
   hourlySeries,
+  fetchOrdersPage,
   type DailyPoint,
   type DishStat,
   type HourPoint,
 } from "../lib/aggregate";
+import {
+  fetchInventory,
+  fetchPurchases,
+  fetchTransactions,
+  lowStockItems,
+  type InventoryItem,
+} from "../lib/inventory";
+import { buildPriceAlerts, flaggedAlerts } from "../lib/priceAlert";
+import { todayWasteAmount } from "../lib/waste";
+import { buildTodos } from "../lib/todo";
+import type { OwnerTab } from "../components/Layout";
 import { useChartTheme } from "../lib/theme";
 
 const RANGE_LABEL: Record<string, string> = {
@@ -51,6 +69,13 @@ const RANGE_LABEL: Record<string, string> = {
   "7d": "近 7 天",
   "30d": "近 30 天",
   all: "全部",
+};
+
+/** 待办等级色（level → 主色） */
+const LEVEL_COLOR: Record<string, string> = {
+  high: "#ef4444",
+  warn: "#f59e0b",
+  info: "#38bdf8",
 };
 
 const PIE_COLORS = [
@@ -71,10 +96,12 @@ export default function Dashboard({
   recentOrders,
   settings,
   version = 0,
+  onTab,
 }: {
   recentOrders: any[];
   settings: any;
   version?: number;
+  onTab?: (t: OwnerTab) => void;
 }) {
   const C = useChartTheme();
   const tooltipStyle = {
@@ -100,6 +127,46 @@ export default function Dashboard({
   const [trend, setTrend] = useState<DailyPoint[]>([]);
   const [hourly, setHourly] = useState<HourPoint[]>([]);
   const [dishes, setDishes] = useState<DishStat[]>([]);
+  const [ops, setOps] = useState<{
+    low: InventoryItem[];
+    alerts: ReturnType<typeof flaggedAlerts>;
+    todayWaste: number;
+    pending: number;
+    ready: boolean;
+  }>({ low: [], alerts: [], todayWaste: 0, pending: 0, ready: false });
+
+  /** 待办中心：库存/采购价/损耗/待接单，与主数据分开拉取 */
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+      const tomorrow = new Date(Date.now() + 86400000).toISOString();
+      const [inv, pur, wt, pg] = await Promise.all([
+        fetchInventory(),
+        fetchPurchases(300),
+        fetchTransactions(300, "waste", todayStart.toISOString()),
+        fetchOrdersPage({
+          start: monthAgo,
+          end: tomorrow,
+          status: "pending",
+          limit: 1,
+        }),
+      ]);
+      if (!alive) return;
+      setOps({
+        low: lowStockItems(inv),
+        alerts: flaggedAlerts(buildPriceAlerts(pur)),
+        todayWaste: todayWasteAmount(wt),
+        pending: pg.count,
+        ready: true,
+      });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [version]);
 
   useEffect(() => {
     let alive = true;
@@ -179,6 +246,25 @@ export default function Dashboard({
         .slice(0, 8),
     [recentOrders],
   );
+
+  const todos = useMemo(
+    () =>
+      buildTodos({
+        low: ops.low,
+        priceAlerts: ops.alerts,
+        todayWaste: ops.todayWaste,
+        pendingOrders: ops.pending,
+      }),
+    [ops],
+  );
+
+  const todoIcon = (tab: string) => {
+    if (tab === "orders") return <ReceiptText size={16} />;
+    if (tab === "inventory") return <Boxes size={16} />;
+    if (tab === "procurement") return <ShoppingCart size={16} />;
+    if (tab === "waste") return <PackageX size={16} />;
+    return <CircleCheck size={16} />;
+  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -312,6 +398,74 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+
+      {ops.ready && (
+        <ChartCard
+          title="今日待办"
+          subtitle={
+            todos.length
+              ? `${todos.length} 项需要处理 · 点击直达`
+              : "订单、库存、采购、损耗都正常"
+          }
+          action={
+            todos.length ? (
+              <span className="px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 text-[11px] font-bold">
+                {todos.length}
+              </span>
+            ) : (
+              <CircleCheck size={18} className="text-teal-400" />
+            )
+          }
+        >
+          {todos.length === 0 ? (
+            <div className="flex items-center gap-2 py-2 text-sm text-teal-400">
+              <CircleCheck size={16} /> 今日无待办事项，继续保持
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {todos.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => onTab?.(t.tab as OwnerTab)}
+                  className="group w-full flex items-center gap-3 bg-zinc-950 rounded-lg px-3 py-2.5 text-left border-l-4 hover:bg-zinc-900/70 transition-colors"
+                  style={{ borderLeftColor: LEVEL_COLOR[t.level] }}
+                >
+                  <span
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{
+                      background: `${LEVEL_COLOR[t.level]}1f`,
+                      color: LEVEL_COLOR[t.level],
+                    }}
+                  >
+                    {todoIcon(t.tab)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-zinc-100 truncate">
+                      {t.title}
+                    </span>
+                    <span className="block text-xs text-zinc-500 truncate">
+                      {t.desc}
+                    </span>
+                  </span>
+                  <span
+                    className="text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                    style={{
+                      background: `${LEVEL_COLOR[t.level]}1f`,
+                      color: LEVEL_COLOR[t.level],
+                    }}
+                  >
+                    {t.badge}
+                  </span>
+                  <ChevronRight
+                    size={16}
+                    className="text-zinc-600 group-hover:text-zinc-400 shrink-0"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+        </ChartCard>
+      )}
 
       <ChartCard title="营收趋势" subtitle="近 30 天营业收入">
         {trendPoints.length === 0 ? (
