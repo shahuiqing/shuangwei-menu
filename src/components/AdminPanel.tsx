@@ -1421,7 +1421,7 @@ export default function AdminPanel({
               />
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar flex-1 min-h-0 pb-16">
+            <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y custom-scrollbar flex-1 min-h-0 pb-16">
               {activeTab === "orders" && (
                 <>
                   <OrdersTab

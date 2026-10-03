@@ -52,12 +52,7 @@ export function AdminTabNav({
   onChange: (tab: AdminTab) => void;
 }) {
   return (
-    <div
-      onWheel={(e) => {
-        if (e.deltaY !== 0) e.currentTarget.scrollLeft += e.deltaY;
-      }}
-      className="flex sm:flex-wrap gap-2 overflow-x-auto sm:overflow-x-visible border-b border-zinc-800 pb-3 pr-2 touch-pan-x"
-    >
+    <div className="flex flex-wrap gap-1.5 sm:gap-2 border-b border-zinc-800 pb-3">
       {TABS.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
