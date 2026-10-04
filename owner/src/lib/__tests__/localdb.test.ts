@@ -53,6 +53,8 @@ describe("本地数据备份", () => {
   it("白名单覆盖本地数据键", () => {
     expect(LOCAL_KEYS).toContain("owner:tasks");
     expect(LOCAL_KEYS).toContain("owner:item:meta");
+    expect(LOCAL_KEYS).toContain("owner:biz:type");
+    expect(LOCAL_KEYS).toContain("owner:dish:lang");
   });
 });
 

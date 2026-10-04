@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { benchmarks, wasteVerdict } from "../lib/industry";
 import {
   Wallet,
   Percent,
@@ -196,9 +197,17 @@ export default function Waste({ version = 0 }: { version?: number }) {
           value={pctFmt(stats.rateOnRevenue)}
           valueNum={stats.rateOnRevenue}
           format={pctFmt}
-          sub={`占成本 ${pctFmt(stats.rateOnCogs)}`}
-          accent={stats.rateOnRevenue > 3 ? "text-red-400" : "text-green-400"}
-          bg={stats.rateOnRevenue > 3 ? "bg-red-500/10" : "bg-green-500/10"}
+          sub={`占成本 ${pctFmt(stats.rateOnCogs)} · 行业上限 ≤${benchmarks().wasteMax}%`}
+          accent={
+            wasteVerdict(stats.rateOnRevenue, benchmarks().wasteMax) === "high"
+              ? "text-red-400"
+              : "text-green-400"
+          }
+          bg={
+            wasteVerdict(stats.rateOnRevenue, benchmarks().wasteMax) === "high"
+              ? "bg-red-500/10"
+              : "bg-green-500/10"
+          }
         />
         <KpiCard
           icon={ClipboardList}

@@ -87,6 +87,8 @@ export const LOCAL_KEYS = [
   "owner:last-stocktake",
   "owner:stocktake:count",
   "owner:notify:orders",
+  "owner:biz:type",
+  "owner:dish:lang",
 ];
 
 export function exportLocalData(): string {
@@ -138,8 +140,12 @@ export function localDataStats(): { count: number; bytes: number } {
   return { count, bytes };
 }
 
-export function downloadText(filename: string, text: string): void {
-  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+export function downloadText(
+  filename: string,
+  text: string,
+  mime = "application/json;charset=utf-8",
+): void {
+  const blob = new Blob([text], { type: mime });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;

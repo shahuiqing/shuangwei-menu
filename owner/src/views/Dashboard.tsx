@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { benchmarks, pctText, rangeVerdict } from "../lib/industry";
 import {
   Wallet,
   ShoppingBag,
@@ -568,8 +569,17 @@ export default function Dashboard({
             value={`${foodCostRate.toFixed(1)}%`}
             valueNum={foodCostRate}
             format={(n) => `${n.toFixed(1)}%`}
-            accent={foodCostRate > 35 ? "text-red-400" : "text-teal-400"}
-            bg={foodCostRate > 35 ? "bg-red-500/10" : "bg-teal-500/10"}
+            sub={`行业参考 ${pctText(benchmarks().foodCost)}`}
+            accent={
+              rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
+                ? "text-red-400"
+                : "text-teal-400"
+            }
+            bg={
+              rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
+                ? "bg-red-500/10"
+                : "bg-teal-500/10"
+            }
           />
         </div>
       </div>

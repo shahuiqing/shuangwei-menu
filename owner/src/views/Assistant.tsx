@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles, Send, Copy } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
+import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { STORE_NAME } from "../lib/supabase";
 import { rangeToIso, salesSummary, dishStats } from "../lib/aggregate";
@@ -169,13 +170,20 @@ export default function Assistant({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && send(q)}
-                placeholder="问我经营相关的问题…"
-                className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-              />
+              <div className="relative flex-1">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && send(q)}
+                  placeholder="问我经营相关的问题…"
+                  className="w-full bg-zinc-950 border border-white/5 rounded-xl pl-3.5 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                />
+                <Dictation
+                  value={q}
+                  onChange={setQ}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5"
+                />
+              </div>
               <button
                 onClick={() => send(q)}
                 className="shrink-0 w-10 h-10 rounded-xl btn-brand text-white flex items-center justify-center active:scale-95 transition-transform"

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { EmptyState, SkeletonTable } from "../components/ui";
 import { Segmented } from "../components/Segmented";
+import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
 import { lateOrders, useLateConfig } from "../lib/lateOrders";
@@ -365,7 +366,15 @@ export default function Orders({ version = 0 }: { version?: number }) {
               resetPage();
             }}
             placeholder="搜索桌号 / 姓名 / 单号"
-            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-9 pr-9 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <Dictation
+            value={q}
+            onChange={(v) => {
+              setQ(v);
+              resetPage();
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5"
           />
         </div>
 

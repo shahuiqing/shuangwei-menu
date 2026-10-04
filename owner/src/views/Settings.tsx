@@ -35,6 +35,14 @@ import {
 import { isConfigured, STORE_NAME } from "../lib/supabase";
 import { saveSettingsField } from "../lib/data";
 import { tableStats, prune, type TableStats } from "../lib/aggregate";
+import {
+  BIZ_LABEL,
+  benchmarks,
+  getBizType,
+  pctText,
+  setBizType,
+  type BizType,
+} from "../lib/industry";
 
 export default function Settings({
   settings,
@@ -69,6 +77,8 @@ export default function Settings({
     const q = getDailyQuota(todayQuotaKey());
     return q === null ? "" : String(q);
   });
+
+  const [biz, setBiz] = useState<BizType>(() => getBizType());
 
   const saveQuota = () => {
     const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
@@ -348,6 +358,53 @@ export default function Settings({
         </div>
         <p className="text-[11px] text-zinc-600 mt-1.5">
           实际食材成本超过定额的差额，会在盘点/损耗分析中标记为「定额超出」。
+        </p>
+      </ChartCard>
+
+      <ChartCard
+        title="行业基准"
+        subtitle="按业态给出的参考区间 · 看板与损耗页据此对比"
+        action={<Gauge size={18} className="text-orange-500" />}
+      >
+        <label className="text-sm text-zinc-400">餐饮业态</label>
+        <select
+          value={biz}
+          onChange={(e) => {
+            const v = e.target.value as BizType;
+            setBizType(v);
+            setBiz(v);
+            toast.success(`已切换「${BIZ_LABEL[v]}」基准`);
+          }}
+          className="mt-1.5 w-full bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+        >
+          {(Object.keys(BIZ_LABEL) as BizType[]).map((t) => (
+            <option key={t} value={t}>
+              {BIZ_LABEL[t]}
+            </option>
+          ))}
+        </select>
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          <div className="bg-zinc-950 rounded-xl px-2 py-2.5 text-center">
+            <div className="text-[11px] text-zinc-500">食材成本率</div>
+            <div className="text-sm font-bold text-white mt-0.5">
+              {pctText(benchmarks(biz).foodCost)}
+            </div>
+          </div>
+          <div className="bg-zinc-950 rounded-xl px-2 py-2.5 text-center">
+            <div className="text-[11px] text-zinc-500">损耗率上限</div>
+            <div className="text-sm font-bold text-white mt-0.5">
+              ≤{benchmarks(biz).wasteMax}%
+            </div>
+          </div>
+          <div className="bg-zinc-950 rounded-xl px-2 py-2.5 text-center">
+            <div className="text-[11px] text-zinc-500">人工占比</div>
+            <div className="text-sm font-bold text-white mt-0.5">
+              {pctText(benchmarks(biz).labor)}
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2">
+          行业经验值，仅供对比参考；存在本机，换设备需重新选择。
         </p>
       </ChartCard>
 

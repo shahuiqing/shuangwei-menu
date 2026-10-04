@@ -9,6 +9,8 @@ import {
   Search,
   Ban,
   Check,
+  Languages,
+  Download,
 } from "lucide-react";
 import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
@@ -26,6 +28,17 @@ import {
   type MenuCategory,
   type MenuItem,
 } from "../lib/menu";
+import {
+  LANGS,
+  langCompletion,
+  langCoverage,
+  langCsv,
+  loadLangNames,
+  saveLangName,
+  type DishLangNames,
+  type LangCode,
+} from "../lib/langNames";
+import { downloadText } from "../lib/localdb";
 
 export default function Dishes({ version = 0 }: { version?: number }) {
   const [cats, setCats] = useState<MenuCategory[]>([]);
@@ -43,9 +56,16 @@ export default function Dishes({ version = 0 }: { version?: number }) {
     draft: Partial<MenuItem>;
   } | null>(null);
 
+  const [langMap, setLangMap] = useState<Record<string, DishLangNames>>({});
+  const [langModal, setLangModal] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+
   const load = async () => {
     setLoading(true);
     setCats(await fetchCategories());
+    setLangMap(loadLangNames());
     setLoading(false);
   };
 
@@ -125,6 +145,24 @@ export default function Dishes({ version = 0 }: { version?: number }) {
       dishModal?.dishId ? "菜品已更新" : "菜品已新增",
     ).then(() => setDishModal(null));
 
+  const exportLang = () => {
+    const rows = cats.flatMap((c) =>
+      (c.items || []).map((it) => ({ id: it.id, title: it.title })),
+    );
+    if (!rows.length) return toast.error("暂无菜品可导出");
+    downloadText(
+      `dish-lang-${new Date().toISOString().slice(0, 10)}.csv`,
+      langCsv(rows, langMap),
+      "text/csv;charset=utf-8",
+    );
+    toast.success(`已导出 ${rows.length} 个菜品的多语言名称`);
+  };
+
+  const saveLang = (dishId: string, code: LangCode, v: string) => {
+    saveLangName(dishId, code, v);
+    setLangMap(loadLangNames());
+  };
+
   return (
     <div className="space-y-3.5 sm:space-y-4">
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
@@ -160,6 +198,16 @@ export default function Dishes({ version = 0 }: { version?: number }) {
         </span>
         <span className="text-amber-400">售罄 {stats.soldOut}</span>
         <span className="text-red-400">低库存 {stats.lowStock}</span>
+        <span>
+          多语言已录 {langCoverage(langMap).dishes} 菜（四语齐全{" "}
+          {langCoverage(langMap).complete}）
+        </span>
+        <button
+          onClick={exportLang}
+          className="flex items-center gap-1.5 text-zinc-300 hover:text-white"
+        >
+          <Download size={13} /> 导出多语言 CSV
+        </button>
       </div>
 
       {loading ? (
@@ -213,92 +261,114 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                   <EmptyState text={q ? "无匹配菜品" : "该分类暂无菜品"} />
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {items.map((it) => (
-                      <div
-                        key={it.id}
-                        className="flex items-center gap-3 bg-zinc-950 rounded-xl px-3 py-2.5"
-                      >
-                        {it.image ? (
-                          <img
-                            src={it.image}
-                            alt=""
-                            className="w-12 h-12 rounded-lg object-cover shrink-0"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-zinc-800 shrink-0" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-zinc-100 font-medium truncate">
-                              {it.title}
-                            </span>
-                            {it.isSoldOut && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 shrink-0">
-                                售罄
+                    {items.map((it) => {
+                      const langDone = langCompletion(langMap[it.id] || {});
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center gap-3 bg-zinc-950 rounded-xl px-3 py-2.5"
+                        >
+                          {it.image ? (
+                            <img
+                              src={it.image}
+                              alt=""
+                              className="w-12 h-12 rounded-lg object-cover shrink-0"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-zinc-800 shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-zinc-100 font-medium truncate">
+                                {it.title}
                               </span>
-                            )}
-                            {it.stock !== null &&
-                              it.stock !== "" &&
-                              Number(it.stock) <= 3 && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
-                                  剩{String(it.stock)}
+                              {it.isSoldOut && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 shrink-0">
+                                  售罄
                                 </span>
                               )}
+                              {it.stock !== null &&
+                                it.stock !== "" &&
+                                Number(it.stock) <= 3 && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
+                                    剩{String(it.stock)}
+                                  </span>
+                                )}
+                            </div>
+                            <div className="text-xs text-zinc-500">
+                              {fmtMoney(parsePrice(it.price))}
+                            </div>
                           </div>
-                          <div className="text-xs text-zinc-500">
-                            {fmtMoney(parsePrice(it.price))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() =>
-                              run(
-                                () =>
-                                  updateDish(c.id, it.id, {
-                                    isSoldOut: !it.isSoldOut,
-                                  }),
-                                it.isSoldOut ? "已恢复售卖" : "已标售罄",
-                              )
-                            }
-                            className="p-2.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10"
-                            title={it.isSoldOut ? "恢复售卖" : "标为售罄"}
-                          >
-                            {it.isSoldOut ? (
-                              <Check size={15} />
-                            ) : (
-                              <Ban size={15} />
-                            )}
-                          </button>
-                          <button
-                            onClick={() =>
-                              setDishModal({
-                                catId: c.id,
-                                dishId: it.id,
-                                draft: { ...it },
-                              })
-                            }
-                            className="p-2.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
-                            title="编辑"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm(`删除菜品「${it.title}」？`))
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() =>
                                 run(
-                                  () => deleteDish(c.id, it.id),
-                                  "菜品已删除",
-                                );
-                            }}
-                            className="p-2.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
-                            title="删除"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                                  () =>
+                                    updateDish(c.id, it.id, {
+                                      isSoldOut: !it.isSoldOut,
+                                    }),
+                                  it.isSoldOut ? "已恢复售卖" : "已标售罄",
+                                )
+                              }
+                              className="p-2.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10"
+                              title={it.isSoldOut ? "恢复售卖" : "标为售罄"}
+                            >
+                              {it.isSoldOut ? (
+                                <Check size={15} />
+                              ) : (
+                                <Ban size={15} />
+                              )}
+                            </button>
+                            <button
+                              onClick={() =>
+                                setLangModal({ id: it.id, title: it.title })
+                              }
+                              className={`p-2.5 rounded-lg ${
+                                langDone === LANGS.length
+                                  ? "text-green-400 hover:bg-green-500/10"
+                                  : langDone > 0
+                                    ? "text-amber-400 hover:bg-amber-500/10"
+                                    : "text-zinc-400 hover:text-white hover:bg-white/5"
+                              }`}
+                              title={
+                                langDone
+                                  ? `多语言名称（已录 ${langDone}/${LANGS.length}）`
+                                  : "多语言名称"
+                              }
+                            >
+                              <Languages size={15} />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setDishModal({
+                                  catId: c.id,
+                                  dishId: it.id,
+                                  draft: { ...it },
+                                })
+                              }
+                              className="p-2.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
+                              title="编辑"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`删除菜品「${it.title}」？`))
+                                  run(
+                                    () => deleteDish(c.id, it.id),
+                                    "菜品已删除",
+                                  );
+                              }}
+                              className="p-2.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                              title="删除"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </ChartCard>
@@ -419,6 +489,41 @@ export default function Dishes({ version = 0 }: { version?: number }) {
             >
               <Save size={16} /> 保存
             </button>
+          </>
+        )}
+      </Sheet>
+      {/* 多语言名称弹窗 */}
+      <Sheet
+        open={!!langModal}
+        title="多语言名称"
+        subtitle={
+          langModal ? `${langModal.title} · 保存即生效（存本机）` : undefined
+        }
+        onClose={() => setLangModal(null)}
+      >
+        {langModal && (
+          <>
+            {LANGS.map((l) => (
+              <SheetField
+                key={l.code}
+                label={l.label}
+                value={(langMap[langModal.id] || {})[l.code] || ""}
+                onChange={(v) => saveLang(langModal.id, l.code, v)}
+                placeholder={l.code === "zh" ? "中文菜名" : "选填"}
+                className="mb-3"
+              />
+            ))}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-400">
+                已录 {langCompletion(langMap[langModal.id] || {})}/
+                {LANGS.length} 种语言
+              </span>
+              <span className="text-zinc-600">改动即时保存</span>
+            </div>
+            <p className="text-[11px] text-zinc-600 mt-2">
+              换设备需重新填写（可在列表处「导出多语言 CSV」存档 /
+              之后同步顾客端菜单）。
+            </p>
           </>
         )}
       </Sheet>

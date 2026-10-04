@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
+import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
 import {
@@ -331,12 +332,19 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         >
           <ClipboardList size={16} /> 盘点
         </button>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="搜索名称 / 分类"
-          className="flex-1 min-w-[160px] bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-        />
+        <div className="relative flex-1 min-w-[160px]">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜索名称 / 分类"
+            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-3 pr-9 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <Dictation
+            value={q}
+            onChange={setQ}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5"
+          />
+        </div>
         <button
           onClick={() => setOnlyA((v) => !v)}
           className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl border transition-colors ${
