@@ -124,6 +124,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any | null>(null);
   const [tagTick, setTagTick] = useState(0);
+  const [onlyAbnormal, setOnlyAbnormal] = useState(false);
   const [qDebounced, setQDebounced] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -298,6 +299,11 @@ export default function Orders({ version = 0 }: { version?: number }) {
     );
   };
 
+  // 异常订单队列：退菜/赠送/员工餐/试菜（本地标记）在当前页内过滤
+  const shown = onlyAbnormal
+    ? rows.filter((o) => getOrderTag(String(o.id || o._id)) !== "normal")
+    : rows;
+
   return (
     <div className="space-y-3.5 sm:space-y-4">
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
@@ -369,6 +375,17 @@ export default function Orders({ version = 0 }: { version?: number }) {
         >
           <Download size={16} /> 导出 CSV
         </button>
+
+        <button
+          onClick={() => setOnlyAbnormal((v) => !v)}
+          className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl border transition-colors ${
+            onlyAbnormal
+              ? "bg-purple-500/15 border-purple-500/60 text-purple-400 font-semibold"
+              : "bg-zinc-900 border-white/5 text-zinc-300 hover:text-white"
+          }`}
+        >
+          异常订单
+        </button>
       </div>
 
       <div className="text-sm text-zinc-400">
@@ -382,13 +399,13 @@ export default function Orders({ version = 0 }: { version?: number }) {
         <>
           {/* 手机卡片 */}
           <div className="sm:hidden space-y-2.5">
-            {rows.length === 0 ? (
+            {shown.length === 0 ? (
               <EmptyState
-                text="暂无订单"
+                text={onlyAbnormal ? "暂无异常订单" : "暂无订单"}
                 hint="可切换时间范围，或到看板查看实时订单"
               />
             ) : (
-              rows.map((o, i) => {
+              shown.map((o, i) => {
                 const st = statusOf(o);
                 const late = lateMap.get(String(o.id || o._id || ""));
                 return (
@@ -466,17 +483,17 @@ export default function Orders({ version = 0 }: { version?: number }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 ? (
+                  {shown.length === 0 ? (
                     <tr>
                       <td
                         colSpan={6}
                         className="text-center text-zinc-500 py-10"
                       >
-                        暂无订单
+                        {onlyAbnormal ? "暂无异常订单" : "暂无订单"}
                       </td>
                     </tr>
                   ) : (
-                    rows.map((o, i) => {
+                    shown.map((o, i) => {
                       const st = statusOf(o);
                       const late = lateMap.get(String(o.id || o._id || ""));
                       return (

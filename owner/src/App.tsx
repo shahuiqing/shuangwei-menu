@@ -14,6 +14,8 @@ import CostReport from "./views/CostReport";
 import Consumption from "./views/Consumption";
 import StaffView from "./views/Staff";
 import Settings from "./views/Settings";
+import Tasks from "./views/Tasks";
+import Assistant from "./views/Assistant";
 import { Layout, type OwnerTab } from "./components/Layout";
 import { ToastHost } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -276,6 +278,16 @@ export default function App() {
             {tab === "staff" && <StaffView />}
             {tab === "settings" && (
               <Settings settings={settings} onSaved={load} />
+            )}
+            {tab === "tasks" && (
+              <Tasks recentOrders={recentOrders} version={version} />
+            )}
+            {tab === "assistant" && (
+              <Assistant
+                recentOrders={recentOrders}
+                settings={settings}
+                version={version}
+              />
             )}
           </ErrorBoundary>
         </div>

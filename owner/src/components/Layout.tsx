@@ -24,6 +24,8 @@ import {
   ChevronRight,
   PackageX,
   Download,
+  ClipboardCheck,
+  Sparkles,
 } from "lucide-react";
 import { useTheme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
@@ -42,7 +44,9 @@ export type OwnerTab =
   | "cost"
   | "consumption"
   | "staff"
-  | "settings";
+  | "settings"
+  | "tasks"
+  | "assistant";
 
 export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "dashboard", label: "经营看板", icon: LayoutDashboard },
@@ -58,6 +62,8 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "consumption", label: "用料消耗", icon: Flame },
   { id: "staff", label: "员工管理", icon: Users },
   { id: "settings", label: "系统设置", icon: SettingsIcon },
+  { id: "tasks", label: "任务中心", icon: ClipboardCheck },
+  { id: "assistant", label: "AI 助手", icon: Sparkles },
 ];
 
 // 页面副标题（移动端大标题下方的一行说明）
@@ -75,6 +81,8 @@ const SUBTITLE: Partial<Record<OwnerTab, string>> = {
   consumption: "按订单反推的用料流水",
   staff: "账号与权限",
   settings: "店铺信息与系统参数",
+  tasks: "问题→任务→解决闭环",
+  assistant: "简报与经营问答",
 };
 
 // 移动端底部主导航（4 个高频目的地，中间凸起按钮打开「更多」）
@@ -128,12 +136,12 @@ function TabItem({
 
 // 移动端「更多」里的分组
 const MOBILE_GROUPS: { title: string; items: OwnerTab[] }[] = [
-  { title: "经营", items: ["dishes", "reports", "menu"] },
+  { title: "经营", items: ["dishes", "reports", "menu", "assistant"] },
   {
     title: "供应与成本",
     items: ["procurement", "inventory", "waste", "recipe"],
   },
-  { title: "管理", items: ["staff", "settings"] },
+  { title: "管理", items: ["tasks", "staff", "settings"] },
 ];
 
 /** 移动端下拉刷新：仅在页面顶部、向下拖动超过阈值时触发刷新 */
