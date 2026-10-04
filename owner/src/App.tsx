@@ -1,21 +1,31 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import { AlertTriangle } from "lucide-react";
 import Login from "./views/Login";
-import Dashboard from "./views/Dashboard";
-import Orders from "./views/Orders";
-import Reports from "./views/Reports";
-import Dishes from "./views/Dishes";
-import MenuAnalysis from "./views/MenuAnalysis";
-import Procurement from "./views/Procurement";
-import Inventory from "./views/Inventory";
-import Waste from "./views/Waste";
-import Recipe from "./views/Recipe";
-import CostReport from "./views/CostReport";
-import Consumption from "./views/Consumption";
-import StaffView from "./views/Staff";
-import Settings from "./views/Settings";
-import Tasks from "./views/Tasks";
-import Assistant from "./views/Assistant";
+import { SkeletonRows } from "./components/ui";
+
+// 路由级代码分割：只预载登录页，其余视图按切换懒加载（首包 -约一半）
+const Dashboard = lazy(() => import("./views/Dashboard"));
+const Orders = lazy(() => import("./views/Orders"));
+const Reports = lazy(() => import("./views/Reports"));
+const Dishes = lazy(() => import("./views/Dishes"));
+const MenuAnalysis = lazy(() => import("./views/MenuAnalysis"));
+const Procurement = lazy(() => import("./views/Procurement"));
+const Inventory = lazy(() => import("./views/Inventory"));
+const Waste = lazy(() => import("./views/Waste"));
+const Recipe = lazy(() => import("./views/Recipe"));
+const CostReport = lazy(() => import("./views/CostReport"));
+const Consumption = lazy(() => import("./views/Consumption"));
+const StaffView = lazy(() => import("./views/Staff"));
+const Settings = lazy(() => import("./views/Settings"));
+const Tasks = lazy(() => import("./views/Tasks"));
+const Assistant = lazy(() => import("./views/Assistant"));
 import { Layout, type OwnerTab } from "./components/Layout";
 import { ToastHost } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -253,42 +263,50 @@ export default function App() {
 
         <div key={tab} className="page-enter">
           <ErrorBoundary>
-            {tab === "dashboard" && (
-              <Dashboard
-                recentOrders={recentOrders}
-                settings={settings}
-                version={version}
-                onTab={setTab}
-              />
-            )}
-            {tab === "orders" && <Orders version={version} />}
-            {tab === "reports" && (
-              <Reports settings={settings} version={version} />
-            )}
-            {tab === "dishes" && <Dishes version={version} />}
-            {tab === "menu" && <MenuAnalysis version={version} />}
-            {tab === "procurement" && <Procurement version={version} />}
-            {tab === "inventory" && <Inventory version={version} />}
-            {tab === "waste" && <Waste version={version} />}
-            {tab === "recipe" && (
-              <Recipe settings={settings} version={version} />
-            )}
-            {tab === "cost" && <CostReport version={version} />}
-            {tab === "consumption" && <Consumption version={version} />}
-            {tab === "staff" && <StaffView />}
-            {tab === "settings" && (
-              <Settings settings={settings} onSaved={load} />
-            )}
-            {tab === "tasks" && (
-              <Tasks recentOrders={recentOrders} version={version} />
-            )}
-            {tab === "assistant" && (
-              <Assistant
-                recentOrders={recentOrders}
-                settings={settings}
-                version={version}
-              />
-            )}
+            <Suspense
+              fallback={
+                <div className="p-2">
+                  <SkeletonRows rows={4} />
+                </div>
+              }
+            >
+              {tab === "dashboard" && (
+                <Dashboard
+                  recentOrders={recentOrders}
+                  settings={settings}
+                  version={version}
+                  onTab={setTab}
+                />
+              )}
+              {tab === "orders" && <Orders version={version} />}
+              {tab === "reports" && (
+                <Reports settings={settings} version={version} />
+              )}
+              {tab === "dishes" && <Dishes version={version} />}
+              {tab === "menu" && <MenuAnalysis version={version} />}
+              {tab === "procurement" && <Procurement version={version} />}
+              {tab === "inventory" && <Inventory version={version} />}
+              {tab === "waste" && <Waste version={version} />}
+              {tab === "recipe" && (
+                <Recipe settings={settings} version={version} />
+              )}
+              {tab === "cost" && <CostReport version={version} />}
+              {tab === "consumption" && <Consumption version={version} />}
+              {tab === "staff" && <StaffView />}
+              {tab === "settings" && (
+                <Settings settings={settings} onSaved={load} />
+              )}
+              {tab === "tasks" && (
+                <Tasks recentOrders={recentOrders} version={version} />
+              )}
+              {tab === "assistant" && (
+                <Assistant
+                  recentOrders={recentOrders}
+                  settings={settings}
+                  version={version}
+                />
+              )}
+            </Suspense>
           </ErrorBoundary>
         </div>
       </Layout>

@@ -85,6 +85,32 @@ export default function Settings({
 
   const [logs, setLogs] = useState(() => loadAuditLog());
 
+  // 浏览器原生存储用量（含 IndexedDB 图片），供判断剩余空间
+  const [originStorage, setOriginStorage] = useState("");
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const est = await (
+          navigator as Navigator & {
+            storage?: { estimate?: () => Promise<StorageEstimate> };
+          }
+        ).storage?.estimate?.();
+        if (!alive || !est?.quota) return;
+        setOriginStorage(
+          `${((est.usage || 0) / 1048576).toFixed(1)} / ${(
+            est.quota / 1048576
+          ).toFixed(0)} MB`,
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const saveQuota = () => {
     const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
     setQuotaDraft(v === null ? "" : String(v));
@@ -452,6 +478,7 @@ export default function Settings({
                 ? `${s.bytes} B`
                 : `${(s.bytes / 1024).toFixed(1)} KB`}
               · 数据格式 v{DB_VERSION}
+              {originStorage ? ` · 浏览器存储 ${originStorage}` : ""}
             </p>
           );
         })()}
