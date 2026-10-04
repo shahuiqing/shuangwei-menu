@@ -332,6 +332,14 @@ body {
   border-radius: 0.5rem;
 }
 
+/* 分段控件溢出时的右缘渐变提示 */
+.seg-fade {
+  background: linear-gradient(to left, #0a0a0c, transparent);
+}
+[data-theme="light"] .seg-fade {
+  background: linear-gradient(to left, #e9eaee, transparent);
+}
+
 /* 彩色背景上的文字在浅色主题保持纯白（选择器特异性高于 text-white） */
 [data-theme="light"] .btn-brand,
 [data-theme="light"] .bg-orange-500.text-white,

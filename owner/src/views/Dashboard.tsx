@@ -549,10 +549,10 @@ export default function Dashboard({
           action={
             <button
               onClick={copySummary}
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors active:scale-95"
               title="复制小结"
             >
-              <Copy size={12} /> 复制
+              <Copy size={13} /> 复制
             </button>
           }
         >
@@ -628,8 +628,8 @@ export default function Dashboard({
                     data={cats}
                     dataKey="revenue"
                     nameKey="name"
-                    innerRadius={45}
-                    outerRadius={80}
+                    innerRadius="50%"
+                    outerRadius="80%"
                     paddingAngle={2}
                   >
                     {cats.map((_, i) => (

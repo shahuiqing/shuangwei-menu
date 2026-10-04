@@ -296,91 +296,174 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         ) : shown.length === 0 ? (
           <EmptyState text="暂无原料，点「新增原料」" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-500 text-left border-b border-white/5">
-                  <th className="px-3 py-2 font-medium">名称</th>
-                  <th className="px-3 py-2 font-medium">分类</th>
-                  <th className="px-3 py-2 font-medium text-right">现存</th>
-                  <th className="px-3 py-2 font-medium text-right">安全库存</th>
-                  <th className="px-3 py-2 font-medium text-right">单价</th>
-                  <th className="px-3 py-2 font-medium text-right">金额</th>
-                  <th className="px-3 py-2 font-medium text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((i) => {
-                  const isLow =
-                    num(i.safety_stock) > 0 &&
-                    num(i.stock) <= num(i.safety_stock);
-                  return (
-                    <tr
-                      key={i.id}
-                      className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                    >
-                      <td className="px-3 py-2.5 text-white font-medium">
-                        {i.name}
-                      </td>
-                      <td className="px-3 py-2.5 text-zinc-400">
-                        {i.category}
-                      </td>
-                      <td
-                        className={`px-3 py-2.5 text-right font-semibold ${isLow ? "text-red-400" : "text-zinc-200"}`}
-                      >
-                        {num(i.stock)} {i.unit}
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-zinc-500">
-                        {num(i.safety_stock) || "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-zinc-300">
-                        {fmtMoney(i.price)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-zinc-300">
+          <>
+            <div className="sm:hidden space-y-2.5">
+              {shown.map((i) => {
+                const isLow =
+                  num(i.safety_stock) > 0 &&
+                  num(i.stock) <= num(i.safety_stock);
+                return (
+                  <div
+                    key={i.id}
+                    className={`card-surface p-3.5 ${isLow ? "ring-1 ring-red-500/40" : ""}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-semibold truncate">
+                            {i.name}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
+                            {i.category}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs">
+                          <span
+                            className={
+                              isLow
+                                ? "text-red-400 font-semibold"
+                                : "text-zinc-300"
+                            }
+                          >
+                            现存 {num(i.stock)} {i.unit}
+                          </span>
+                          <span className="text-zinc-500">
+                            安全 {num(i.safety_stock) || "-"}
+                          </span>
+                          <span className="text-zinc-500">
+                            单价 {fmtMoney(i.price)}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-sm text-zinc-200 font-semibold tnum">
                         {fmtMoney(num(i.stock) * num(i.price))}
-                      </td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => {
-                            setWasteReason("过期");
-                            setWasteQty("");
-                            setWasteNote("");
-                            setWasting(i);
-                          }}
-                          disabled={num(i.stock) <= 0}
-                          className="text-zinc-400 hover:text-amber-400 disabled:opacity-30 mr-2"
-                          title="报损登记"
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5 mt-3 pt-3 border-t border-white/5">
+                      <button
+                        onClick={() => {
+                          setWasteReason("过期");
+                          setWasteQty("");
+                          setWasteNote("");
+                          setWasting(i);
+                        }}
+                        disabled={num(i.stock) <= 0}
+                        className="flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium bg-zinc-900/70 border border-white/5 text-amber-400 disabled:opacity-30 active:scale-[0.98] transition-transform"
+                      >
+                        报损
+                      </button>
+                      <button
+                        onClick={() => setAdjusting(i)}
+                        className="flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium bg-zinc-900/70 border border-white/5 text-orange-400 active:scale-[0.98] transition-transform"
+                      >
+                        调整
+                      </button>
+                      <button
+                        onClick={() => setEditing(i)}
+                        className="flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium bg-zinc-900/70 border border-white/5 text-zinc-300 active:scale-[0.98] transition-transform"
+                      >
+                        <Pencil size={13} /> 编辑
+                      </button>
+                      <button
+                        onClick={() => remove(i)}
+                        className="flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium bg-zinc-900/70 border border-white/5 text-red-400 active:scale-[0.98] transition-transform"
+                      >
+                        <Trash2 size={13} /> 删除
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-500 text-left border-b border-white/5">
+                    <th className="px-3 py-2 font-medium">名称</th>
+                    <th className="px-3 py-2 font-medium">分类</th>
+                    <th className="px-3 py-2 font-medium text-right">现存</th>
+                    <th className="px-3 py-2 font-medium text-right">
+                      安全库存
+                    </th>
+                    <th className="px-3 py-2 font-medium text-right">单价</th>
+                    <th className="px-3 py-2 font-medium text-right">金额</th>
+                    <th className="px-3 py-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((i) => {
+                    const isLow =
+                      num(i.safety_stock) > 0 &&
+                      num(i.stock) <= num(i.safety_stock);
+                    return (
+                      <tr
+                        key={i.id}
+                        className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
+                      >
+                        <td className="px-3 py-2.5 text-white font-medium">
+                          {i.name}
+                        </td>
+                        <td className="px-3 py-2.5 text-zinc-400">
+                          {i.category}
+                        </td>
+                        <td
+                          className={`px-3 py-2.5 text-right font-semibold ${isLow ? "text-red-400" : "text-zinc-200"}`}
                         >
-                          报损
-                        </button>
-                        <button
-                          onClick={() => setAdjusting(i)}
-                          className="text-zinc-400 hover:text-orange-400 mr-2"
-                          title="盘点/调整"
-                        >
-                          调整
-                        </button>
-                        <button
-                          onClick={() => setEditing(i)}
-                          className="text-zinc-400 hover:text-white mr-2"
-                          title="编辑"
-                        >
-                          <Pencil size={14} className="inline" />
-                        </button>
-                        <button
-                          onClick={() => remove(i)}
-                          className="text-zinc-400 hover:text-red-400"
-                          title="删除"
-                        >
-                          <Trash2 size={14} className="inline" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          {num(i.stock)} {i.unit}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-zinc-500">
+                          {num(i.safety_stock) || "-"}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-zinc-300">
+                          {fmtMoney(i.price)}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-zinc-300">
+                          {fmtMoney(num(i.stock) * num(i.price))}
+                        </td>
+                        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => {
+                              setWasteReason("过期");
+                              setWasteQty("");
+                              setWasteNote("");
+                              setWasting(i);
+                            }}
+                            disabled={num(i.stock) <= 0}
+                            className="text-zinc-400 hover:text-amber-400 disabled:opacity-30 mr-2"
+                            title="报损登记"
+                          >
+                            报损
+                          </button>
+                          <button
+                            onClick={() => setAdjusting(i)}
+                            className="text-zinc-400 hover:text-orange-400 mr-2"
+                            title="盘点/调整"
+                          >
+                            调整
+                          </button>
+                          <button
+                            onClick={() => setEditing(i)}
+                            className="text-zinc-400 hover:text-white mr-2"
+                            title="编辑"
+                          >
+                            <Pencil size={14} className="inline" />
+                          </button>
+                          <button
+                            onClick={() => remove(i)}
+                            className="text-zinc-400 hover:text-red-400"
+                            title="删除"
+                          >
+                            <Trash2 size={14} className="inline" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </ChartCard>
 

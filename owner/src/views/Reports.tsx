@@ -153,30 +153,22 @@ export default function Reports({
         >
           <Download size={16} /> 导出
         </button>
+        <Segmented
+          value={dim}
+          onChange={setDim}
+          options={
+            [
+              ["dish", "按菜品"],
+              ["category", "按分类"],
+              ["hour", "按时段"],
+            ] as const
+          }
+        />
       </div>
 
       <ChartCard
         title="销售报表"
         subtitle={`共 ${rows.length} 项 · 合计 ${fmtMoney(total)}`}
-        action={
-          <div className="flex bg-zinc-950 rounded-xl p-1 border border-white/5">
-            {(
-              [
-                ["dish", "按菜品"],
-                ["category", "按分类"],
-                ["hour", "按时段"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setDim(id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${dim === id ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        }
       >
         {loading ? (
           <SkeletonRows rows={5} />

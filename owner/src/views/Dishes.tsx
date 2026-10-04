@@ -179,7 +179,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setCatModal({ id: c.id, name: c.name })}
-                      className="p-1.5 text-zinc-400 hover:text-white"
+                      className="p-2.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
                       title="重命名"
                     >
                       <Pencil size={15} />
@@ -189,7 +189,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                         if (confirm(`删除分类「${c.name}」及其下所有菜品？`))
                           run(() => deleteCategory(c.id), "分类已删除");
                       }}
-                      className="p-1.5 text-zinc-400 hover:text-red-400"
+                      className="p-2.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
                       title="删除分类"
                     >
                       <Trash2 size={15} />
@@ -201,7 +201,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                           draft: { title: "", price: "" },
                         })
                       }
-                      className="p-1.5 text-orange-400 hover:text-orange-300"
+                      className="p-2.5 rounded-lg text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
                       title="新增菜品"
                     >
                       <Plus size={16} />
@@ -261,7 +261,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                                 it.isSoldOut ? "已恢复售卖" : "已标售罄",
                               )
                             }
-                            className="p-1.5 text-zinc-400 hover:text-amber-400"
+                            className="p-2.5 rounded-lg text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10"
                             title={it.isSoldOut ? "恢复售卖" : "标为售罄"}
                           >
                             {it.isSoldOut ? (
@@ -278,7 +278,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                                 draft: { ...it },
                               })
                             }
-                            className="p-1.5 text-zinc-400 hover:text-white"
+                            className="p-2.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
                             title="编辑"
                           >
                             <Pencil size={15} />
@@ -291,7 +291,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                                   "菜品已删除",
                                 );
                             }}
-                            className="p-1.5 text-zinc-400 hover:text-red-400"
+                            className="p-2.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
                             title="删除"
                           >
                             <Trash2 size={15} />

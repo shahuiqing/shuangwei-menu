@@ -244,9 +244,9 @@ export default function Recipe({
                                   load();
                                 } else toast.error("删除失败");
                               }}
-                              className="text-zinc-500 hover:text-red-400"
+                              className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 active:scale-90 transition-transform"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={15} />
                             </button>
                           </div>
                         </div>

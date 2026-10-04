@@ -210,54 +210,94 @@ export default function CostReport({ version = 0 }: { version?: number }) {
         ) : margins.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-500 text-left border-b border-white/5">
-                  <th className="px-3 py-2 font-medium">菜品</th>
-                  <th className="px-3 py-2 font-medium text-right">销量</th>
-                  <th className="px-3 py-2 font-medium text-right">营收</th>
-                  <th className="px-3 py-2 font-medium text-right">成本</th>
-                  <th className="px-3 py-2 font-medium text-right">毛利</th>
-                  <th className="px-3 py-2 font-medium text-right">毛利率</th>
-                </tr>
-              </thead>
-              <tbody>
-                {margins.slice(0, 60).map((d) => (
-                  <tr
-                    key={d.name}
-                    className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                  >
-                    <td className="px-3 py-2.5 text-white">
+          <>
+            <div className="sm:hidden space-y-2.5">
+              {margins.slice(0, 60).map((d) => (
+                <div key={d.name} className="card-surface p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 text-white font-medium truncate">
                       {d.name}
                       {!d.hasCost && (
                         <span className="text-[11px] text-amber-400 ml-1">
                           未配配方
                         </span>
                       )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-400">
-                      x{num(d.qty)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-300">
-                      {fmtMoney(d.revenue)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-red-400">
-                      {fmtMoney(d.cost)}
-                    </td>
-                    <td
-                      className={`px-3 py-2.5 text-right font-semibold ${d.profit >= 0 ? "text-green-400" : "text-red-400"}`}
+                    </div>
+                    <span
+                      className={`shrink-0 text-sm font-bold tnum ${
+                        d.margin >= 0 ? "text-green-400" : "text-red-400"
+                      }`}
                     >
-                      {fmtMoney(d.profit)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-400">
                       {d.margin.toFixed(0)}%
-                    </td>
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs">
+                    <span className="text-zinc-400">销量 x{num(d.qty)}</span>
+                    <span className="text-zinc-300">
+                      营收 {fmtMoney(d.revenue)}
+                    </span>
+                    <span className="text-red-400">
+                      成本 {fmtMoney(d.cost)}
+                    </span>
+                    <span
+                      className={`font-semibold ${d.profit >= 0 ? "text-green-400" : "text-red-400"}`}
+                    >
+                      毛利 {fmtMoney(d.profit)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-500 text-left border-b border-white/5">
+                    <th className="px-3 py-2 font-medium">菜品</th>
+                    <th className="px-3 py-2 font-medium text-right">销量</th>
+                    <th className="px-3 py-2 font-medium text-right">营收</th>
+                    <th className="px-3 py-2 font-medium text-right">成本</th>
+                    <th className="px-3 py-2 font-medium text-right">毛利</th>
+                    <th className="px-3 py-2 font-medium text-right">毛利率</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {margins.slice(0, 60).map((d) => (
+                    <tr
+                      key={d.name}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
+                    >
+                      <td className="px-3 py-2.5 text-white">
+                        {d.name}
+                        {!d.hasCost && (
+                          <span className="text-[11px] text-amber-400 ml-1">
+                            未配配方
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-zinc-400">
+                        x{num(d.qty)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-zinc-300">
+                        {fmtMoney(d.revenue)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-red-400">
+                        {fmtMoney(d.cost)}
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 text-right font-semibold ${d.profit >= 0 ? "text-green-400" : "text-red-400"}`}
+                      >
+                        {fmtMoney(d.profit)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-zinc-400">
+                        {d.margin.toFixed(0)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </ChartCard>
     </div>

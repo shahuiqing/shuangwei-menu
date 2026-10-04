@@ -514,7 +514,51 @@ export default function Procurement({ version = 0 }: { version?: number }) {
               </span>
             )}
           </div>
-          <div className="overflow-x-auto">
+          <div className="sm:hidden space-y-2.5">
+            {cmpStats.map((s) => (
+              <div key={s.supplier} className="card-surface p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-white font-medium truncate">
+                      {s.supplier}
+                    </span>
+                    {s.level !== "mid" && (
+                      <span
+                        className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
+                          s.level === "best"
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-red-500/10 text-red-400"
+                        }`}
+                      >
+                        {s.level === "best" ? "最低" : "最高"}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`shrink-0 font-semibold tnum ${
+                      s.level === "best"
+                        ? "text-emerald-400"
+                        : s.level === "worst"
+                          ? "text-red-400"
+                          : "text-zinc-200"
+                    }`}
+                  >
+                    {fmtMoney(s.avg)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-zinc-500">
+                  <span>中位 {fmtMoney(s.medianUnit)}</span>
+                  <span>{s.count} 笔</span>
+                  <span>占比 {Math.round(s.share * 100)}%</span>
+                  <span>
+                    最近 {s.lastAt ? fmtDateTime(s.lastAt).slice(0, 10) : "—"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-zinc-500 text-left border-b border-white/5">
@@ -610,45 +654,74 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         ) : filtered.length === 0 ? (
           <EmptyState text="暂无采购记录" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-500 text-left border-b border-white/5">
-                  <th className="px-3 py-2 font-medium">时间</th>
-                  <th className="px-3 py-2 font-medium">供应商</th>
-                  <th className="px-3 py-2 font-medium">原料</th>
-                  <th className="px-3 py-2 font-medium text-right">数量</th>
-                  <th className="px-3 py-2 font-medium text-right">单价</th>
-                  <th className="px-3 py-2 font-medium text-right">金额</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                  >
-                    <td className="px-3 py-2.5 text-zinc-400">
-                      {fmtDateTime(p.purchased_at || p.created_at)}
-                    </td>
-                    <td className="px-3 py-2.5 text-zinc-300">
-                      {p.supplier || "-"}
-                    </td>
-                    <td className="px-3 py-2.5 text-white">{p.item_name}</td>
-                    <td className="px-3 py-2.5 text-right text-zinc-300">
-                      {num(p.quantity)} {p.unit}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-300">
-                      {fmtMoney(p.unit_price)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-orange-400 font-semibold">
+          <>
+            <div className="sm:hidden space-y-2.5">
+              {filtered.map((p) => (
+                <div key={p.id} className="card-surface p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-medium truncate">
+                        {p.item_name}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 mt-0.5">
+                        {p.supplier || "-"} ·{" "}
+                        {fmtDateTime(p.purchased_at || p.created_at)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-orange-400 font-semibold tnum">
                       {fmtMoney(p.total_cost)}
-                    </td>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-x-3 mt-1.5 text-xs text-zinc-400">
+                    <span>
+                      {num(p.quantity)} {p.unit}
+                    </span>
+                    <span>单价 {fmtMoney(p.unit_price)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-500 text-left border-b border-white/5">
+                    <th className="px-3 py-2 font-medium">时间</th>
+                    <th className="px-3 py-2 font-medium">供应商</th>
+                    <th className="px-3 py-2 font-medium">原料</th>
+                    <th className="px-3 py-2 font-medium text-right">数量</th>
+                    <th className="px-3 py-2 font-medium text-right">单价</th>
+                    <th className="px-3 py-2 font-medium text-right">金额</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
+                    >
+                      <td className="px-3 py-2.5 text-zinc-400">
+                        {fmtDateTime(p.purchased_at || p.created_at)}
+                      </td>
+                      <td className="px-3 py-2.5 text-zinc-300">
+                        {p.supplier || "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-white">{p.item_name}</td>
+                      <td className="px-3 py-2.5 text-right text-zinc-300">
+                        {num(p.quantity)} {p.unit}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-zinc-300">
+                        {fmtMoney(p.unit_price)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-orange-400 font-semibold">
+                        {fmtMoney(p.total_cost)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </ChartCard>
 

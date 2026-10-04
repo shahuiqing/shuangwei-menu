@@ -236,8 +236,8 @@ export default function Waste({ version = 0 }: { version?: number }) {
                     data={reasonData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={42}
-                    outerRadius={78}
+                    innerRadius="50%"
+                    outerRadius="80%"
                     paddingAngle={2}
                   >
                     {reasonData.map((_, i) => (
@@ -362,52 +362,92 @@ export default function Waste({ version = 0 }: { version?: number }) {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-500 text-left border-b border-white/5">
-                  <th className="px-3 py-2 font-medium">时间</th>
-                  <th className="px-3 py-2 font-medium">原料</th>
-                  <th className="px-3 py-2 font-medium text-right">数量</th>
-                  <th className="px-3 py-2 font-medium text-right">金额</th>
-                  <th className="px-3 py-2 font-medium">原因</th>
-                  <th className="px-3 py-2 font-medium">备注</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 200).map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                  >
-                    <td className="px-3 py-2.5 text-zinc-400">
-                      {fmtDateTime(t.created_at)}
-                    </td>
-                    <td className="px-3 py-2.5 text-white">{t.item_name}</td>
-                    <td className="px-3 py-2.5 text-right text-zinc-300">
-                      -{num(t.quantity)} {t.unit}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-amber-400 font-semibold">
+          <>
+            <div className="sm:hidden space-y-2.5">
+              {rows.slice(0, 200).map((t) => (
+                <div key={t.id} className="card-surface p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-medium truncate">
+                        {t.item_name}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 mt-0.5">
+                        {fmtDateTime(t.created_at)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-amber-400 font-semibold tnum">
                       {fmtMoney(Math.abs(num(t.quantity)) * num(t.unit_cost))}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                        {normalizeReason(t.reason)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                      {normalizeReason(t.reason)}
+                    </span>
+                    <span className="text-xs text-zinc-400">
+                      -{num(t.quantity)} {t.unit}
+                    </span>
+                    {t.notes && (
+                      <span className="text-[11px] text-zinc-500 truncate max-w-[160px]">
+                        {t.notes}
                       </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-zinc-500 max-w-[200px] truncate">
-                      {t.notes || "-"}
-                    </td>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {rows.length > 200 && (
+                <div className="text-xs text-zinc-600 px-1 py-1">
+                  仅显示最近 200 笔，导出前请缩小时间范围
+                </div>
+              )}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-500 text-left border-b border-white/5">
+                    <th className="px-3 py-2 font-medium">时间</th>
+                    <th className="px-3 py-2 font-medium">原料</th>
+                    <th className="px-3 py-2 font-medium text-right">数量</th>
+                    <th className="px-3 py-2 font-medium text-right">金额</th>
+                    <th className="px-3 py-2 font-medium">原因</th>
+                    <th className="px-3 py-2 font-medium">备注</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {rows.length > 200 && (
-              <div className="text-xs text-zinc-600 px-3 py-2">
-                仅显示最近 200 笔，导出前请缩小时间范围
-              </div>
-            )}
-          </div>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 200).map((t) => (
+                    <tr
+                      key={t.id}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
+                    >
+                      <td className="px-3 py-2.5 text-zinc-400">
+                        {fmtDateTime(t.created_at)}
+                      </td>
+                      <td className="px-3 py-2.5 text-white">{t.item_name}</td>
+                      <td className="px-3 py-2.5 text-right text-zinc-300">
+                        -{num(t.quantity)} {t.unit}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-amber-400 font-semibold">
+                        {fmtMoney(Math.abs(num(t.quantity)) * num(t.unit_cost))}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                          {normalizeReason(t.reason)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-zinc-500 max-w-[200px] truncate">
+                        {t.notes || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.length > 200 && (
+                <div className="text-xs text-zinc-600 px-3 py-2">
+                  仅显示最近 200 笔，导出前请缩小时间范围
+                </div>
+              )}
+            </div>
+          </>
         )}
       </ChartCard>
 
