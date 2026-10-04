@@ -66,6 +66,24 @@ class UsbPrinterManager {
     return null;
   }
 
+  async autoReconnect(): Promise<boolean> {
+    if (!this.state.supported || !navigator.usb || this.device) return false;
+    try {
+      const devices = await navigator.usb.getDevices();
+      for (const d of devices) {
+        try {
+          await this.connectDevice(d);
+          return true;
+        } catch {
+          // 尝试下一个已授权设备
+        }
+      }
+    } catch (e) {
+      console.warn("[usbPrinter] autoReconnect 失败", e);
+    }
+    return false;
+  }
+
   async requestAndConnect(): Promise<void> {
     if (!this.state.supported || !navigator.usb) {
       throw new Error("当前浏览器不支持 WebUSB，请使用 Chrome 或 Edge");
@@ -176,3 +194,6 @@ class UsbPrinterManager {
 }
 
 export const usbPrinter = new UsbPrinterManager();
+
+// 页面加载时静默重连之前授权过的 USB 打印机（WebUSB 连接不跨刷新保持）
+usbPrinter.autoReconnect().catch(() => undefined);
