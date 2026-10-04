@@ -1,5 +1,6 @@
 import { businessDayKey } from "./businessDay";
 import { localGet, localSet } from "./localdb";
+import { logAction } from "./auditLog";
 
 /* ============ 每日定额（前端 only，不动数据库） ============
  * 老板每天填「食材成本定额」（成本价），当日实际食材成本超出即算损耗。
@@ -27,10 +28,12 @@ export function setDailyQuota(dayKey: string, amount: number): number | null {
   if (!Number.isFinite(amt) || amt < 0) {
     delete map[dayKey];
     localSet(KEY, map);
+    logAction("每日定额", `${dayKey} 清除`);
     return null;
   }
   map[dayKey] = amt;
   localSet(KEY, map);
+  logAction("每日定额", `${dayKey} → ${amt} 元`);
   return amt;
 }
 

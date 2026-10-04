@@ -11,12 +11,13 @@ import {
   Save,
   PackageX,
   ClipboardList,
+  History,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
-import { fmtMoney } from "../lib/format";
+import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
   adjustStock,
   deleteInventoryItem,
@@ -51,6 +52,13 @@ import {
   stocktakeConfidence,
   STOCKTAKE_CONF_LABEL,
 } from "../lib/stocktakeReminder";
+import {
+  pushStocktake,
+  loadStocktakeHistory,
+  clearStocktakeHistory,
+  type StocktakeRecord,
+} from "../lib/stocktakeHistory";
+import { logAction } from "../lib/auditLog";
 
 const EMPTY: Partial<InventoryItem> = {
   name: "",
@@ -77,6 +85,9 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   const [stocktaking, setStocktaking] = useState(false);
   const [taking, setTaking] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
+  const [stocktakes, setStocktakes] = useState<StocktakeRecord[]>(() =>
+    loadStocktakeHistory(),
+  );
   const [metaMap, setMetaMap] = useState<Record<string, ItemMeta>>({});
   const [meta, setMeta] = useState<ItemMeta | null>(null);
   const [convUnit, setConvUnit] = useState("");
@@ -233,7 +244,19 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     else if (ok > 0)
       toast.error(`部分失败：${ok}/${adj.length} 已调整，请复核`);
     else toast.error("盘点调整失败（检查库存表权限）");
-    if (ok > 0) markStocktake();
+    if (ok > 0) {
+      markStocktake();
+      pushStocktake({
+        items: take.summary.counted,
+        diffs: adj.length,
+        netValue: take.summary.diffValue,
+      });
+      setStocktakes(loadStocktakeHistory());
+      logAction(
+        "盘点提交",
+        `${ok} 项调整 · 净差异 ${fmtMoney(take.summary.diffValue)}`,
+      );
+    }
     setStocktaking(false);
     setCounts({});
     load();
@@ -554,6 +577,66 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                 </tbody>
               </table>
             </div>
+          </>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title="盘点记录"
+        subtitle="本机保存最近 60 次 · 随「数据导出」可备份"
+        action={<History size={18} className="text-orange-500" />}
+      >
+        {stocktakes.length === 0 ? (
+          <EmptyState text="还没有盘点记录，点上方「盘点」开始第一次" />
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              {stocktakes.slice(0, 10).map((r, idx) => (
+                <div
+                  key={`${r.at}-${idx}`}
+                  className="flex items-center justify-between bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+                >
+                  <span className="text-zinc-300 truncate mr-2">
+                    {fmtDateTime(r.at)}
+                    <span className="text-zinc-500 ml-2 text-xs">
+                      营业日 {r.day}
+                    </span>
+                  </span>
+                  <div className="flex items-center gap-3 shrink-0 text-xs">
+                    <span className="text-zinc-400">实盘 {r.items} 项</span>
+                    <span
+                      className={r.diffs ? "text-amber-400" : "text-zinc-500"}
+                    >
+                      差异 {r.diffs}
+                    </span>
+                    <span
+                      className={`font-semibold w-20 text-right ${
+                        r.netValue > 0
+                          ? "text-green-400"
+                          : r.netValue < 0
+                            ? "text-red-400"
+                            : "text-zinc-500"
+                      }`}
+                    >
+                      {r.netValue > 0 ? "+" : ""}
+                      {fmtMoney(r.netValue)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                if (confirm("清空本机盘点记录？")) {
+                  clearStocktakeHistory();
+                  setStocktakes([]);
+                  logAction("清空盘点记录");
+                }
+              }}
+              className="mt-3 text-xs text-zinc-500 hover:text-red-400"
+            >
+              清空记录
+            </button>
           </>
         )}
       </ChartCard>

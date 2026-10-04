@@ -89,6 +89,8 @@ export const LOCAL_KEYS = [
   "owner:notify:orders",
   "owner:biz:type",
   "owner:dish:lang",
+  "owner:audit:log",
+  "owner:stocktake:history",
 ];
 
 export function exportLocalData(): string {

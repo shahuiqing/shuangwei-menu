@@ -4,6 +4,7 @@
  */
 
 import { localGet, localSet } from "./localdb";
+import { logAction } from "./auditLog";
 
 export type OrderTag = "normal" | "refund" | "gift" | "staff" | "trial";
 
@@ -43,5 +44,6 @@ export function setOrderTag(id: string, tag: OrderTag): OrderTag {
   if (tag === "normal") delete map[id];
   else map[id] = tag;
   localSet(KEY, map);
+  logAction("订单标记", `${id} → ${ORDER_TAG_LABEL[tag]}`);
   return tag;
 }

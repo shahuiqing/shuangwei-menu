@@ -5,6 +5,7 @@
  */
 
 import { localGet, localSet } from "./localdb";
+import { logAction } from "./auditLog";
 
 export type BizType = "chinese" | "hotpot" | "bbq" | "fastfood" | "western";
 
@@ -44,6 +45,7 @@ export function getBizType(): BizType {
 
 export function setBizType(t: BizType): void {
   localSet(KEY, t);
+  logAction("业态切换", BIZ_LABEL[t] || t);
 }
 
 export function benchmarks(t: BizType = getBizType()): Benchmark {

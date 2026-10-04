@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { fmtMoney, parseTs, tableName } from "./format";
 import { localGet, localSet } from "./localdb";
+import { logAction } from "./auditLog";
 
 /* ============ 漏单 / 超时提醒 ============
  * 订单在「待接单 / 制作中」停留超过阈值即视为漏单风险。
@@ -40,6 +41,10 @@ export function saveLateConfig(cfg: Partial<LateConfig>): LateConfig {
     cookingMin: clampInt(cfg.cookingMin, DEFAULT_LATE.cookingMin),
   };
   localSet(LATE_KEY, next);
+  logAction(
+    "漏单阈值",
+    `待接单 ${next.pendingMin} 分 / 制作 ${next.cookingMin} 分`,
+  );
   return next;
 }
 

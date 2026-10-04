@@ -12,6 +12,7 @@ import {
   Gauge,
   Download,
   Upload,
+  History,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -43,6 +44,8 @@ import {
   setBizType,
   type BizType,
 } from "../lib/industry";
+import { loadAuditLog, clearAuditLog, logAction } from "../lib/auditLog";
+import { fmtDateTime } from "../lib/format";
 
 export default function Settings({
   settings,
@@ -80,6 +83,8 @@ export default function Settings({
 
   const [biz, setBiz] = useState<BizType>(() => getBizType());
 
+  const [logs, setLogs] = useState(() => loadAuditLog());
+
   const saveQuota = () => {
     const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
     setQuotaDraft(v === null ? "" : String(v));
@@ -91,6 +96,8 @@ export default function Settings({
       `shuangwei-backup-${new Date().toISOString().slice(0, 10)}.json`,
       exportLocalData(),
     );
+    logAction("导出本地数据");
+    setLogs(loadAuditLog());
     toast.success("已导出本地数据备份");
   };
 
@@ -102,6 +109,8 @@ export default function Settings({
       try {
         const n = importLocalData(String(reader.result || ""));
         e.target.value = "";
+        logAction("导入本地数据", `${n} 项`);
+        setLogs(loadAuditLog());
         toast.success(`已导入 ${n} 项本地数据`);
         onSaved();
       } catch {
@@ -446,6 +455,55 @@ export default function Settings({
             </p>
           );
         })()}
+      </ChartCard>
+
+      <ChartCard
+        title="操作日志"
+        subtitle="本机记录最近的关键操作（上限 500 条）"
+        action={<History size={18} className="text-orange-500" />}
+      >
+        {logs.length === 0 ? (
+          <p className="text-xs text-zinc-500">还没有记录</p>
+        ) : (
+          <div className="space-y-1.5">
+            {logs.slice(0, 20).map((e, i) => (
+              <div
+                key={`${e.at}-${i}`}
+                className="flex items-start justify-between gap-3 bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <span className="text-orange-400 font-medium">
+                    {e.action}
+                  </span>
+                  {e.detail && (
+                    <span className="text-zinc-300 ml-2">{e.detail}</span>
+                  )}
+                </div>
+                <span className="text-zinc-500 text-xs shrink-0">
+                  {fmtDateTime(e.at)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-[11px] text-zinc-600">
+            仅存本机 · 显示最近 20 条
+          </span>
+          {logs.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm("清空操作日志？")) {
+                  clearAuditLog();
+                  setLogs([]);
+                }
+              }}
+              className="text-xs text-zinc-500 hover:text-red-400"
+            >
+              清空日志
+            </button>
+          )}
+        </div>
       </ChartCard>
 
       <ChartCard

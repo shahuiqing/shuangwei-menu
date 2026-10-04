@@ -7,6 +7,7 @@
  */
 import bcrypt from "bcryptjs";
 import { localRaw, localRemove, localSetRaw } from "./localdb";
+import { logAction } from "./auditLog";
 
 const SESSION_KEY = "ownerAuthedUntil";
 const LOCAL_HASH_KEY = "ownerPasswordHash";
@@ -79,7 +80,9 @@ export async function verifyOwnerPassword(input: string): Promise<boolean> {
 /** 本地降级修改密码（仅当后端不可用/本地模式时使用） */
 export function setOwnerPasswordLocal(pw: string): void {
   if (!pw) return;
+  const first = !hasLocalPassword();
   localSetRaw(LOCAL_HASH_KEY, bcrypt.hashSync(pw, 10));
+  logAction(first ? "设置密码" : "修改密码");
 }
 
 /** 首次设置密码：长度校验 + 写入本机哈希（云端需另行执行 set-owner-password） */

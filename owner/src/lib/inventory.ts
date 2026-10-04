@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { saveSnap, snapFallback } from "./snapshot";
+import { logAction } from "./auditLog";
 
 /* ============ 类型 ============ */
 
@@ -217,7 +218,13 @@ export async function recordWaste(
     console.warn("[owner] recordWaste: qty exceeds stock");
     return false;
   }
-  return adjustStock(item, -amount, "waste", notes, reason);
+  const ok = await adjustStock(item, -amount, "waste", notes, reason);
+  if (ok)
+    logAction(
+      "报损登记",
+      `${item.name} -${amount}${item.unit || ""}${reason ? `（${reason}）` : ""}`,
+    );
+  return ok;
 }
 
 /* ============ 配方 BOM ============ */
@@ -319,6 +326,12 @@ export async function createPurchase(input: {
     console.warn("[owner] createPurchase:", error.message);
     return false;
   }
+  logAction(
+    "采购入库",
+    `${input.item_name} ×${input.quantity}${input.unit || ""}${
+      input.supplier ? ` · ${input.supplier}` : ""
+    }`,
+  );
   return true;
 }
 

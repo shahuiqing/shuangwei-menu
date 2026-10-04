@@ -1,4 +1,5 @@
 import { localGet, localSet } from "./localdb";
+import { logAction } from "./auditLog";
 
 /* ============ 任务中心（前端 only，不动数据库） ============
  * 问题 → 任务化 → 生命周期流转（发现→确认→分析→措施→执行→观察→解决），
@@ -110,7 +111,8 @@ export function createTask(
 }
 
 export function advanceTask(id: string): Task[] {
-  const list = read().map((t) => {
+  const prev = read();
+  const list = prev.map((t) => {
     if (t.id !== id) return t;
     const next = STAGE_NEXT[t.stage];
     if (!next) return t;
@@ -121,12 +123,21 @@ export function advanceTask(id: string): Task[] {
     };
   });
   persist(list);
+  const a = prev.find((t) => t.id === id);
+  const b = list.find((t) => t.id === id);
+  if (a && b && a.stage !== b.stage) {
+    logAction(
+      "任务推进",
+      `${b.title}：${STAGE_LABEL[a.stage]} → ${STAGE_LABEL[b.stage]}`,
+    );
+  }
   return list;
 }
 
 /** 复发重开：已解决的问题回退到「发现」，并累计复发次数 */
 export function reopenTask(id: string): Task[] {
-  const list = read().map((t) =>
+  const prev = read();
+  const list = prev.map((t) =>
     t.id === id
       ? {
           ...t,
@@ -137,6 +148,8 @@ export function reopenTask(id: string): Task[] {
       : t,
   );
   persist(list);
+  const t = list.find((x) => x.id === id);
+  if (t) logAction("任务复发", t.title);
   return list;
 }
 
