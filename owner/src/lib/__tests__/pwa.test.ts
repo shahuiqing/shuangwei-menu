@@ -84,6 +84,12 @@ describe("SW 注册", () => {
     expect(main).toContain("controllerchange");
     expect(main).toContain("新版本已生效");
   });
+
+  it("常开标签页聚焦时补查 SW 更新（30 分钟节流）", () => {
+    expect(main).toContain("visibilitychange");
+    expect(main).toContain("reg.update()");
+    expect(main).toContain("30 * 60_000");
+  });
 });
 
 describe("构建盖章 stamp-sw", () => {

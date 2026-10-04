@@ -31,6 +31,18 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("./sw.js", { scope: "./" })
+      .then((reg) => {
+        // 常开标签页（安装版 PWA 常驻）不会自发检查 SW → 窗口重新聚焦时补查，
+        // 最短间隔 30 分钟，避免频繁拉 sw.js
+        let lastCheck = 0;
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState !== "visible") return;
+          const now = Date.now();
+          if (now - lastCheck < 30 * 60_000) return;
+          lastCheck = now;
+          reg.update().catch(() => undefined);
+        });
+      })
       .catch((e) => console.warn("[owner] SW register:", e?.message || e));
   });
 }
