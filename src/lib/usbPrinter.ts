@@ -70,12 +70,18 @@ class UsbPrinterManager {
     if (!this.state.supported || !navigator.usb || this.device) return false;
     try {
       const devices = await navigator.usb.getDevices();
+      console.log(
+        "[usbPrinter] autoReconnect getDevices 数量 =",
+        devices.length,
+        devices.map((d) => d.productName || d.vendorId).join(", "),
+      );
       for (const d of devices) {
         try {
           await this.connectDevice(d);
+          console.log("[usbPrinter] autoReconnect 成功:", d.productName);
           return true;
-        } catch {
-          // 尝试下一个已授权设备
+        } catch (e) {
+          console.warn("[usbPrinter] autoReconnect connectDevice 失败", e);
         }
       }
     } catch (e) {

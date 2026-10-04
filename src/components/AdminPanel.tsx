@@ -477,6 +477,16 @@ export default function AdminPanel({
       "usbConnected=",
       usbPrinter.connected,
     );
+    if (isPrintServer && !usbPrinter.connected) {
+      usbPrinter.autoReconnect().then((ok) => {
+        console.log(
+          "[print] 自动重连结果 =",
+          ok,
+          "usbConnected=",
+          usbPrinter.connected,
+        );
+      });
+    }
     const unsubscribe = api.subscribeToOrders((data) => {
       if (Array.isArray(data)) {
         data.forEach((order) => {
