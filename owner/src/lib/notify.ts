@@ -1,4 +1,5 @@
 import { fmtMoney, STATUS_TEXT, tableName } from "./format";
+import { localRaw, localSetRaw } from "./localdb";
 
 /* ============ 本地系统通知（零后端） ============
  * 只在页面/PWA 打开时触发（无服务端，不做离线推送），
@@ -21,19 +22,11 @@ export function notifyPermission(): NotifyPermission {
 
 export function notifyEnabled(): boolean {
   if (!notifySupported() || Notification.permission !== "granted") return false;
-  try {
-    return localStorage.getItem(NOTIFY_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return localRaw(NOTIFY_KEY) === "1";
 }
 
 export function setNotifyEnabled(on: boolean): void {
-  try {
-    localStorage.setItem(NOTIFY_KEY, on ? "1" : "0");
-  } catch {
-    /* 隐身模式等忽略 */
-  }
+  localSetRaw(NOTIFY_KEY, on ? "1" : "0");
 }
 
 /** 用户手势里调用，返回最新权限态 */

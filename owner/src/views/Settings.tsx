@@ -25,7 +25,13 @@ import {
 } from "../lib/notify";
 import { useLateConfig } from "../lib/lateOrders";
 import { getDailyQuota, setDailyQuota, todayQuotaKey } from "../lib/dailyQuota";
-import { exportLocalData, importLocalData, downloadText } from "../lib/backup";
+import {
+  exportLocalData,
+  importLocalData,
+  downloadText,
+  localDataStats,
+  DB_VERSION,
+} from "../lib/localdb";
 import { isConfigured, STORE_NAME } from "../lib/supabase";
 import { saveSettingsField } from "../lib/data";
 import { tableStats, prune, type TableStats } from "../lib/aggregate";
@@ -371,6 +377,18 @@ export default function Settings({
           云端数据在 Supabase
           自动保存；这里只备份「本机暂存」的部分（换机/清缓存后可用导入还原）。
         </p>
+        {(() => {
+          const s = localDataStats();
+          return (
+            <p className="text-[11px] text-zinc-500 mt-1">
+              本机暂存 {s.count} 项 ·{" "}
+              {s.bytes < 1024
+                ? `${s.bytes} B`
+                : `${(s.bytes / 1024).toFixed(1)} KB`}
+              · 数据格式 v{DB_VERSION}
+            </p>
+          );
+        })()}
       </ChartCard>
 
       <ChartCard

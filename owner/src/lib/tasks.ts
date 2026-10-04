@@ -1,3 +1,5 @@
+import { localGet, localSet } from "./localdb";
+
 /* ============ 任务中心（前端 only，不动数据库） ============
  * 问题 → 任务化 → 生命周期流转（发现→确认→分析→措施→执行→观察→解决），
  * 老板确认/完成/复发重开；任务与负责人暂存本机 localStorage。
@@ -70,22 +72,12 @@ export interface Task {
 const KEY = "owner:tasks";
 
 function read(): Task[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const o = JSON.parse(raw);
-    return Array.isArray(o) ? o : [];
-  } catch {
-    return [];
-  }
+  const o = localGet<unknown>(KEY);
+  return Array.isArray(o) ? (o as Task[]) : [];
 }
 
 function persist(list: Task[]) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
-  }
+  localSet(KEY, list);
 }
 
 export function loadTasks(): Task[] {

@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { exportLocalData, importLocalData, LOCAL_KEYS } from "../backup";
+import {
+  exportLocalData,
+  importLocalData,
+  LOCAL_KEYS,
+  localGet,
+  localSet,
+  localRemove,
+  localDataStats,
+  dbSubscribe,
+} from "../localdb";
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -44,5 +53,34 @@ describe("本地数据备份", () => {
   it("白名单覆盖本地数据键", () => {
     expect(LOCAL_KEYS).toContain("owner:tasks");
     expect(LOCAL_KEYS).toContain("owner:item:meta");
+  });
+});
+
+describe("统一读写 + 变更通知", () => {
+  it("localSet/localGet 往返 + 坏数据返回 null", () => {
+    localSet("owner:test:x", { a: 1, b: "中" });
+    expect(localGet<{ a: number }>("owner:test:x")).toEqual({ a: 1, b: "中" });
+    store.set("owner:test:bad", "{oops");
+    expect(localGet("owner:test:bad")).toBeNull();
+    expect(localGet("owner:test:missing")).toBeNull();
+  });
+
+  it("变更事件广播 set/remove", () => {
+    const seen: string[] = [];
+    const off = dbSubscribe((c) => seen.push(`${c.op}:${c.key}`));
+    localSet("owner:test:k", 1);
+    localRemove("owner:test:k");
+    off();
+    localSet("owner:test:k", 2);
+    expect(seen).toEqual(["set:owner:test:k", "remove:owner:test:k"]);
+  });
+
+  it("localDataStats 只统计白名单键", () => {
+    expect(localDataStats()).toEqual({ count: 0, bytes: 0 });
+    localSet("owner:tasks", [{ id: "t1" }]);
+    store.set("not-related", "x".repeat(1000));
+    const s = localDataStats();
+    expect(s.count).toBe(1);
+    expect(s.bytes).toBeLessThan(1000);
   });
 });

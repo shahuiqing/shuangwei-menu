@@ -1,3 +1,5 @@
+import { localGet, localSet } from "./localdb";
+
 /* ============ 票据图片本地存储（IndexedDB，手机本地） ============
  * 图片存本机 IndexedDB，系统只保存「图片 id」索引。
  * 换手机会丢图（需备份），但采购数据仍在云端。
@@ -128,24 +130,16 @@ export async function deleteReceiptImage(id: string): Promise<boolean> {
 const LINK_KEY = "owner:receipt:link";
 
 function readLinks(): Record<string, string[]> {
-  try {
-    const raw = localStorage.getItem(LINK_KEY);
-    if (!raw) return {};
-    const o = JSON.parse(raw);
-    return o && typeof o === "object" && !Array.isArray(o) ? o : {};
-  } catch {
-    return {};
-  }
+  const o = localGet<unknown>(LINK_KEY);
+  return o && typeof o === "object" && !Array.isArray(o)
+    ? (o as Record<string, string[]>)
+    : {};
 }
 
 export function linkReceipts(purchaseId: string, imageIds: string[]): void {
-  try {
-    const map = readLinks();
-    map[purchaseId] = Array.from(new Set(imageIds.filter(Boolean)));
-    localStorage.setItem(LINK_KEY, JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
+  const map = readLinks();
+  map[purchaseId] = Array.from(new Set(imageIds.filter(Boolean)));
+  localSet(LINK_KEY, map);
 }
 
 export function receiptsForPurchase(purchaseId: string): string[] {

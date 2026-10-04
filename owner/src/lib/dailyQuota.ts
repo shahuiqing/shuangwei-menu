@@ -1,4 +1,5 @@
 import { businessDayKey } from "./businessDay";
+import { localGet, localSet } from "./localdb";
 
 /* ============ 每日定额（前端 only，不动数据库） ============
  * 老板每天填「食材成本定额」（成本价），当日实际食材成本超出即算损耗。
@@ -8,14 +9,10 @@ import { businessDayKey } from "./businessDay";
 const KEY = "owner:quota:day";
 
 function readMap(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return {};
-    const o = JSON.parse(raw);
-    return o && typeof o === "object" && !Array.isArray(o) ? o : {};
-  } catch {
-    return {};
-  }
+  const o = localGet<unknown>(KEY);
+  return o && typeof o === "object" && !Array.isArray(o)
+    ? (o as Record<string, number>)
+    : {};
 }
 
 /** 某营业日的食材成本定额；未填返回 null */
@@ -29,19 +26,11 @@ export function setDailyQuota(dayKey: string, amount: number): number | null {
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt < 0) {
     delete map[dayKey];
-    try {
-      localStorage.setItem(KEY, JSON.stringify(map));
-    } catch {
-      /* ignore */
-    }
+    localSet(KEY, map);
     return null;
   }
   map[dayKey] = amt;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
+  localSet(KEY, map);
   return amt;
 }
 

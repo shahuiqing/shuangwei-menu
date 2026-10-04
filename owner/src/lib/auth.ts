@@ -6,6 +6,7 @@
  * - 无默认密码：本机无哈希且未配置 VITE_OWNER_PASSWORD 时，首登强制「设置密码」
  */
 import bcrypt from "bcryptjs";
+import { localRaw, localRemove, localSetRaw } from "./localdb";
 
 const SESSION_KEY = "ownerAuthedUntil";
 const LOCAL_HASH_KEY = "ownerPasswordHash";
@@ -20,11 +21,7 @@ export const MIN_PASSWORD_LEN = 6;
 
 /** 本机是否已存有密码哈希 */
 export function hasLocalPassword(): boolean {
-  try {
-    return (localStorage.getItem(LOCAL_HASH_KEY) || "").startsWith("$2");
-  } catch {
-    return false;
-  }
+  return (localRaw(LOCAL_HASH_KEY) || "").startsWith("$2");
 }
 
 /** 部署时是否通过环境变量配置了初始密码 */
@@ -43,22 +40,11 @@ export function needsPasswordSetup(): boolean {
 
 function getLocalHash(): string {
   // 配置了环境变量密码：惰性写入本地哈希，保证离线也能登录
-  if (ENV_PASSWORD) {
-    try {
-      if (!localStorage.getItem(LOCAL_HASH_KEY)) {
-        localStorage.setItem(LOCAL_HASH_KEY, bcrypt.hashSync(ENV_PASSWORD, 10));
-      }
-    } catch {
-      /* ignore */
-    }
+  if (ENV_PASSWORD && !localRaw(LOCAL_HASH_KEY)) {
+    localSetRaw(LOCAL_HASH_KEY, bcrypt.hashSync(ENV_PASSWORD, 10));
   }
-  try {
-    const h = localStorage.getItem(LOCAL_HASH_KEY);
-    if (h && h.startsWith("$2")) return h;
-  } catch {
-    /* ignore */
-  }
-  return "";
+  const h = localRaw(LOCAL_HASH_KEY);
+  return h && h.startsWith("$2") ? h : "";
 }
 
 /**
@@ -93,11 +79,7 @@ export async function verifyOwnerPassword(input: string): Promise<boolean> {
 /** 本地降级修改密码（仅当后端不可用/本地模式时使用） */
 export function setOwnerPasswordLocal(pw: string): void {
   if (!pw) return;
-  try {
-    localStorage.setItem(LOCAL_HASH_KEY, bcrypt.hashSync(pw, 10));
-  } catch {
-    /* ignore */
-  }
+  localSetRaw(LOCAL_HASH_KEY, bcrypt.hashSync(pw, 10));
 }
 
 /** 首次设置密码：长度校验 + 写入本机哈希（云端需另行执行 set-owner-password） */
@@ -109,26 +91,14 @@ export function setupOwnerPassword(pw: string): boolean {
 }
 
 export function markAuthed(): void {
-  try {
-    localStorage.setItem(SESSION_KEY, String(Date.now() + SESSION_MS));
-  } catch {
-    /* ignore */
-  }
+  localSetRaw(SESSION_KEY, String(Date.now() + SESSION_MS));
 }
 
 export function clearAuthed(): void {
-  try {
-    localStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+  localRemove(SESSION_KEY);
 }
 
 export function isAuthed(): boolean {
-  try {
-    const until = localStorage.getItem(SESSION_KEY);
-    return !!until && Date.now() < parseInt(until, 10);
-  } catch {
-    return false;
-  }
+  const until = localRaw(SESSION_KEY);
+  return !!until && Date.now() < parseInt(until, 10);
 }

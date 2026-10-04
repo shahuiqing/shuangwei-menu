@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import { localRaw, localSetRaw } from "./localdb";
 
 export type Theme = "dark" | "light";
 
@@ -23,14 +24,9 @@ const ThemeCtx = createContext<ThemeCtxValue>({
   setTheme: () => {},
 });
 
-function readInitial(): Theme {
-  try {
-    const v = localStorage.getItem(KEY);
-    if (v === "light" || v === "dark") return v;
-  } catch {
-    /* ignore */
-  }
-  return "dark";
+export function readInitialTheme(): Theme {
+  const v = localRaw(KEY);
+  return v === "light" || v === "dark" ? v : "dark";
 }
 
 /** 在 React 挂载前就把主题写到 <html data-theme>，避免首屏闪黑 */
@@ -42,15 +38,11 @@ export function applyThemeAttr(theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(readInitial);
+  const [theme, setThemeState] = useState<Theme>(readInitialTheme);
 
   useEffect(() => {
     applyThemeAttr(theme);
-    try {
-      localStorage.setItem(KEY, theme);
-    } catch {
-      /* ignore */
-    }
+    localSetRaw(KEY, theme);
   }, [theme]);
 
   const setTheme = useCallback((t: Theme) => setThemeState(t), []);

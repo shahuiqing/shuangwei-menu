@@ -3,6 +3,8 @@
  * 存本机 localStorage（按订单 id），后续需跨设备再迁列。
  */
 
+import { localGet, localSet } from "./localdb";
+
 export type OrderTag = "normal" | "refund" | "gift" | "staff" | "trial";
 
 export const ORDER_TAG_LABEL: Record<OrderTag, string> = {
@@ -22,14 +24,10 @@ export const isExcludedTag = (t: OrderTag): boolean =>
 const KEY = "owner:order:tag";
 
 function readMap(): Record<string, OrderTag> {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return {};
-    const o = JSON.parse(raw);
-    return o && typeof o === "object" && !Array.isArray(o) ? o : {};
-  } catch {
-    return {};
-  }
+  const o = localGet<unknown>(KEY);
+  return o && typeof o === "object" && !Array.isArray(o)
+    ? (o as Record<string, OrderTag>)
+    : {};
 }
 
 export function loadOrderTags(): Record<string, OrderTag> {
@@ -44,10 +42,6 @@ export function setOrderTag(id: string, tag: OrderTag): OrderTag {
   const map = readMap();
   if (tag === "normal") delete map[id];
   else map[id] = tag;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
+  localSet(KEY, map);
   return tag;
 }

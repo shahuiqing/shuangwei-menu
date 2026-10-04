@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { fmtMoney, parseTs, tableName } from "./format";
+import { localGet, localSet } from "./localdb";
 
 /* ============ 漏单 / 超时提醒 ============
  * 订单在「待接单 / 制作中」停留超过阈值即视为漏单风险。
@@ -25,17 +26,12 @@ function clampInt(v: unknown, fb: number): number {
 }
 
 export function loadLateConfig(): LateConfig {
-  try {
-    const raw = localStorage.getItem(LATE_KEY);
-    if (!raw) return { ...DEFAULT_LATE };
-    const o = JSON.parse(raw);
-    return {
-      pendingMin: clampInt(o?.pendingMin, DEFAULT_LATE.pendingMin),
-      cookingMin: clampInt(o?.cookingMin, DEFAULT_LATE.cookingMin),
-    };
-  } catch {
-    return { ...DEFAULT_LATE };
-  }
+  const o = localGet<Partial<LateConfig> | null>(LATE_KEY);
+  if (!o || typeof o !== "object") return { ...DEFAULT_LATE };
+  return {
+    pendingMin: clampInt(o.pendingMin, DEFAULT_LATE.pendingMin),
+    cookingMin: clampInt(o.cookingMin, DEFAULT_LATE.cookingMin),
+  };
 }
 
 export function saveLateConfig(cfg: Partial<LateConfig>): LateConfig {
@@ -43,11 +39,7 @@ export function saveLateConfig(cfg: Partial<LateConfig>): LateConfig {
     pendingMin: clampInt(cfg.pendingMin, DEFAULT_LATE.pendingMin),
     cookingMin: clampInt(cfg.cookingMin, DEFAULT_LATE.cookingMin),
   };
-  try {
-    localStorage.setItem(LATE_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore */
-  }
+  localSet(LATE_KEY, next);
   return next;
 }
 

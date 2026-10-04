@@ -4,6 +4,8 @@
  * 后续要跨设备/多人协作时，再迁移为数据库列。
  */
 
+import { localGet, localSet } from "./localdb";
+
 export interface ItemMeta {
   /** 是否可盘点（称重/计数）。false = 不可盘（按消耗率估） */
   countable: boolean;
@@ -22,22 +24,14 @@ export const DEFAULT_META: ItemMeta = {
 };
 
 function readRaw(): Record<string, ItemMeta> {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return {};
-    const o = JSON.parse(raw);
-    return o && typeof o === "object" && !Array.isArray(o) ? o : {};
-  } catch {
-    return {};
-  }
+  const o = localGet<unknown>(KEY);
+  return o && typeof o === "object" && !Array.isArray(o)
+    ? (o as Record<string, ItemMeta>)
+    : {};
 }
 
 function persist(map: Record<string, ItemMeta>) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(map));
-  } catch {
-    /* 配额/隐私模式忽略 */
-  }
+  localSet(KEY, map);
 }
 
 /** 全量读取（渲染徽章用） */

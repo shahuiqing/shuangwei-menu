@@ -1,4 +1,5 @@
 import { businessDayKey } from "./businessDay";
+import { localGet, localSet } from "./localdb";
 
 /* ============ 盘点提醒（前端 only，不动数据库） ============
  * 记录上次盘点时间，按周期判断是否该提醒（供今日待办 / 盘点入口提示）。
@@ -9,22 +10,14 @@ const COUNT_KEY = "owner:stocktake:count";
 
 export function markStocktake(now: number | Date = Date.now()): void {
   const ms = now instanceof Date ? now.getTime() : now;
-  try {
-    localStorage.setItem(KEY, String(ms));
-    localStorage.setItem(COUNT_KEY, String(stocktakeCount() + 1));
-  } catch {
-    /* ignore */
-  }
+  localSet(KEY, ms);
+  localSet(COUNT_KEY, stocktakeCount() + 1);
 }
 
 /** 累计盘点次数（周期积累的代理） */
 export function stocktakeCount(): number {
-  try {
-    const n = Number(localStorage.getItem(COUNT_KEY));
-    return Number.isFinite(n) && n > 0 ? n : 0;
-  } catch {
-    return 0;
-  }
+  const n = Number(localGet<number>(COUNT_KEY));
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 export type StocktakeConfidence = "low" | "medium" | "high";
@@ -44,13 +37,8 @@ export function stocktakeConfidence(
 }
 
 export function lastStocktakeAt(): number | null {
-  try {
-    const v = localStorage.getItem(KEY);
-    const n = Number(v);
-    return v && Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
+  const n = Number(localGet<number>(KEY));
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /** 距上次盘点的天数；从未盘点返回 null */
