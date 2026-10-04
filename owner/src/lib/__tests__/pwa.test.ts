@@ -79,4 +79,25 @@ describe("SW 注册", () => {
     expect(main).toContain('"./sw.js"');
     expect(main).toContain('scope: "./"');
   });
+
+  it("新版本接管后提示用户刷新（controllerchange）", () => {
+    expect(main).toContain("controllerchange");
+    expect(main).toContain("新版本已生效");
+  });
+});
+
+describe("构建盖章 stamp-sw", () => {
+  const stamp = read("scripts/stamp-sw.mjs");
+  const pkg = JSON.parse(read("package.json"));
+
+  it("按时间戳替换 dist/sw.js 的 VERSION，失败即退出", () => {
+    expect(stamp).toContain("dist/sw.js");
+    expect(stamp).toContain('const VERSION = "[^"]+"');
+    expect(stamp).toContain("shuangwei-owner-${Date.now()}");
+    expect(stamp).toContain("process.exit(1)");
+  });
+
+  it("build 流程已接入盖章步骤", () => {
+    expect(pkg.scripts.build).toContain("stamp-sw.mjs");
+  });
 });

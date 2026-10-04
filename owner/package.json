@@ -6,7 +6,7 @@
   "description": "炙·双味居 · 老板管理端（独立部署，不依赖顾客端）",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/clean-dist.mjs && tsc --noEmit && vite build",
+    "build": "node scripts/clean-dist.mjs && tsc --noEmit && vite build && node scripts/stamp-sw.mjs",
     "preview": "vite preview --port 4173",
     "test": "vitest run --passWithNoTests",
     "icons": "node scripts/gen-icons.mjs"

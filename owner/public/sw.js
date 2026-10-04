@@ -3,7 +3,8 @@
  *   1. 静态资源（assets/、css/js/图片）→ 缓存优先 + 后台更新（SWR）
  *   2. 页面导航 → 网络优先，失败回落缓存的外壳页（离线可打开）
  *   3. 跨域请求（Supabase REST / Realtime）→ 完全不拦截
- * 升级：改 VERSION 后旧缓存在 activate 阶段自动清理
+ * 升级：构建时 scripts/stamp-sw.mjs 会把 VERSION 换成时间戳，
+ *        新版 activate 阶段自动清掉旧版全部缓存（含上一版哈希文件）
  */
 const VERSION = "shuangwei-owner-v1";
 const SHELL = "./";
