@@ -15,6 +15,7 @@ import {
   ChevronRight,
   CircleCheck,
   Copy,
+  AlertTriangle,
 } from "lucide-react";
 import {
   AreaChart,
@@ -65,6 +66,9 @@ import { todayWasteAmount } from "../lib/waste";
 import { buildTodos } from "../lib/todo";
 import { lateOrders, useLateConfig } from "../lib/lateOrders";
 import { buildSummary, summaryLines, type SummaryInput } from "../lib/summary";
+import { stocktakeDue, lastStocktakeAt } from "../lib/stocktakeReminder";
+import { buildProblems, topProblem } from "../lib/problems";
+import { dataConfidence, CONFIDENCE_LABEL } from "../lib/confidence";
 import type { OwnerTab } from "../components/Layout";
 import { useChartTheme } from "../lib/theme";
 
@@ -161,8 +165,16 @@ export default function Dashboard({
     alerts: ReturnType<typeof flaggedAlerts>;
     todayWaste: number;
     pending: number;
+    purchaseCount: number;
     ready: boolean;
-  }>({ low: [], alerts: [], todayWaste: 0, pending: 0, ready: false });
+  }>({
+    low: [],
+    alerts: [],
+    todayWaste: 0,
+    pending: 0,
+    purchaseCount: 0,
+    ready: false,
+  });
 
   /** 待办中心：库存/采购价/损耗/待接单，与主数据分开拉取 */
   useEffect(() => {
@@ -189,6 +201,7 @@ export default function Dashboard({
         alerts: flaggedAlerts(buildPriceAlerts(pur)),
         todayWaste: todayWasteAmount(wt),
         pending: pg.count,
+        purchaseCount: pur.length,
         ready: true,
       });
     })();
@@ -288,6 +301,24 @@ export default function Dashboard({
     [recentOrders, lateCfg, now],
   );
 
+  // 问题池：把各模块异常聚合成统一问题，按影响×可执行×紧急排序
+  const problems = useMemo(
+    () =>
+      buildProblems({
+        priceAlerts: ops.alerts,
+        low: ops.low,
+        todayWaste: ops.todayWaste,
+        late,
+        stocktakeDue: stocktakeDue(),
+      }),
+    [ops, late],
+  );
+  const top = useMemo(() => topProblem(problems), [problems]);
+  const confidence = dataConfidence({
+    purchaseCount: ops.purchaseCount,
+    stocktakeDone: lastStocktakeAt() !== null,
+  });
+
   const todos = useMemo(
     () =>
       buildTodos({
@@ -296,6 +327,7 @@ export default function Dashboard({
         todayWaste: ops.todayWaste,
         pendingOrders: ops.pending,
         late,
+        stocktakeDue: stocktakeDue(),
       }),
     [ops, late],
   );
@@ -563,6 +595,64 @@ export default function Dashboard({
               </p>
             ))}
           </div>
+        </ChartCard>
+      )}
+
+      {ops.ready && (
+        <ChartCard
+          title="最大问题"
+          subtitle={`数据置信度：${CONFIDENCE_LABEL[confidence]}`}
+          action={
+            <AlertTriangle
+              size={18}
+              className={
+                top?.level === "high"
+                  ? "text-red-400"
+                  : top
+                    ? "text-amber-400"
+                    : "text-teal-400"
+              }
+            />
+          }
+        >
+          {top ? (
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-white font-semibold">{top.title}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">{top.desc}</div>
+                </div>
+                {top.impact > 0 && (
+                  <span className="shrink-0 text-red-400 font-black tnum text-lg">
+                    {fmtMoney(top.impact)}
+                  </span>
+                )}
+              </div>
+              {top.evidence.length > 0 && (
+                <div className="mt-3 rounded-xl bg-zinc-950 px-3.5 py-2.5 space-y-1.5">
+                  {top.evidence.map((e, i) => (
+                    <div key={i} className="flex justify-between text-xs">
+                      <span className="text-zinc-500">{e.label}</span>
+                      <span className="text-zinc-300">{e.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-zinc-400">{top.suggestion}</span>
+                <button
+                  onClick={() => onTab?.(top.tab as OwnerTab)}
+                  className="shrink-0 text-xs font-semibold text-orange-400 hover:text-orange-300"
+                >
+                  去处理 →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-teal-400 py-1">
+              暂无异常问题，继续保持
+            </div>
+          )}
         </ChartCard>
       )}
 

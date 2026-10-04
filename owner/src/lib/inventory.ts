@@ -63,6 +63,9 @@ export const num = (v: unknown): number => {
 const newId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+/** 预生成采购单 id（提交前用于关联本地票据图片） */
+export const newPurchaseId = () => newId("PO");
+
 /* ============ 原料档案 ============ */
 
 export async function fetchInventory(): Promise<InventoryItem[]> {
@@ -297,10 +300,12 @@ export async function createPurchase(input: {
   unit_price: number;
   notes?: string;
   purchased_at?: string;
+  /** 可选：由调用方预生成采购单 id（用于关联本地票据图片） */
+  id?: string;
 }): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.rpc("owner_create_purchase", {
-    p_id: newId("PO"),
+    p_id: input.id || newId("PO"),
     p_supplier: input.supplier || "",
     p_item_id: input.inventory_item_id,
     p_item_name: input.item_name,

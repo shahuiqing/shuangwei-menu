@@ -11,7 +11,7 @@ import { type PriceAlert } from "./priceAlert";
 export type TodoLevel = "high" | "warn" | "info";
 
 export interface TodoItem {
-  id: "pending" | "stock" | "price" | "waste" | "late";
+  id: "pending" | "stock" | "price" | "waste" | "late" | "stocktake";
   level: TodoLevel;
   title: string;
   desc: string;
@@ -33,6 +33,8 @@ export interface TodoInput {
   pendingOrders: number;
   /** 超时未处理的订单（漏单风险） */
   late?: LateOrder[];
+  /** 是否已到盘点周期 */
+  stocktakeDue?: boolean;
 }
 
 /** 取前 n 个名字拼成摘要，超出用「等 N 个」收尾 */
@@ -44,7 +46,26 @@ export function namesPreview(names: string[], n = 3): string {
 
 export function buildTodos(input: TodoInput): TodoItem[] {
   const out: TodoItem[] = [];
-  const { low, priceAlerts, todayWaste, pendingOrders, late = [] } = input;
+  const {
+    low,
+    priceAlerts,
+    todayWaste,
+    pendingOrders,
+    late = [],
+    stocktakeDue = false,
+  } = input;
+
+  if (stocktakeDue) {
+    out.push({
+      id: "stocktake",
+      level: "warn",
+      title: "该盘点了",
+      desc: "距上次盘点已超周期，A 类食材建议优先盘",
+      badge: "盘点",
+      tab: "inventory",
+      weight: 130,
+    });
+  }
 
   if (late.length > 0) {
     out.push({

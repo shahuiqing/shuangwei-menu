@@ -9,6 +9,7 @@ import {
   EyeOff,
   AlertTriangle,
   Bell,
+  Gauge,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -21,6 +22,7 @@ import {
   type NotifyPermission,
 } from "../lib/notify";
 import { useLateConfig } from "../lib/lateOrders";
+import { getDailyQuota, setDailyQuota, todayQuotaKey } from "../lib/dailyQuota";
 import { isConfigured, STORE_NAME } from "../lib/supabase";
 import { saveSettingsField } from "../lib/data";
 import { tableStats, prune, type TableStats } from "../lib/aggregate";
@@ -53,6 +55,17 @@ export default function Settings({
   const [lateCfg, setLateCfg] = useLateConfig();
   const [pendingDraft, setPendingDraft] = useState(String(lateCfg.pendingMin));
   const [cookingDraft, setCookingDraft] = useState(String(lateCfg.cookingMin));
+
+  const [quotaDraft, setQuotaDraft] = useState(() => {
+    const q = getDailyQuota(todayQuotaKey());
+    return q === null ? "" : String(q);
+  });
+
+  const saveQuota = () => {
+    const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
+    setQuotaDraft(v === null ? "" : String(v));
+    toast.success(v === null ? "已清除今日定额" : `今日定额已设为 ${v} 元`);
+  };
 
   const saveLate = () => {
     const next = setLateCfg({
@@ -272,6 +285,35 @@ export default function Settings({
         <p className="text-[11px] text-zinc-600 mt-2">
           零后端：不联网也能用。顾客下单后只要本应用开着（含安装到主屏幕的
           PWA），就会弹出系统通知；关闭页面不会推送。
+        </p>
+      </ChartCard>
+
+      <ChartCard
+        title="每日定额"
+        subtitle="今日食材成本上限 · 超出部分计为损耗"
+        action={<Gauge size={18} className="text-orange-500" />}
+      >
+        <label className="text-sm text-zinc-400">
+          今日食材成本定额（元，按营业日，凌晨 3 点分界）
+        </label>
+        <div className="flex items-center gap-2 mt-1.5">
+          <input
+            type="number"
+            min={0}
+            value={quotaDraft}
+            onChange={(e) => setQuotaDraft(e.target.value)}
+            placeholder="未设置"
+            className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+          />
+          <button
+            onClick={saveQuota}
+            className="px-4 py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-semibold active:scale-95 transition-transform"
+          >
+            保存
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-1.5">
+          实际食材成本超过定额的差额，会在盘点/损耗分析中标记为「定额超出」。
         </p>
       </ChartCard>
 

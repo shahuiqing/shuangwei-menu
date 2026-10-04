@@ -32,6 +32,33 @@ import {
   deleteOrder,
   NEXT_STATUS,
 } from "../lib/aggregate";
+import {
+  getOrderTag,
+  setOrderTag,
+  ORDER_TAG_LABEL,
+  type OrderTag,
+} from "../lib/orderTags";
+
+const TAG_CLS: Record<OrderTag, string> = {
+  normal: "",
+  refund: "bg-red-500/15 text-red-400",
+  gift: "bg-purple-500/15 text-purple-400",
+  staff: "bg-sky-500/15 text-sky-400",
+  trial: "bg-amber-500/15 text-amber-400",
+};
+
+const TAG_ORDER: OrderTag[] = ["refund", "gift", "staff", "trial"];
+
+function TagBadge({ tag }: { tag: OrderTag }) {
+  if (tag === "normal") return null;
+  return (
+    <span
+      className={`inline-flex items-center text-[11px] px-1.5 py-0.5 rounded-full font-bold ${TAG_CLS[tag]}`}
+    >
+      {ORDER_TAG_LABEL[tag]}
+    </span>
+  );
+}
 
 const STATUS_CLS: Record<string, string> = {
   pending: "bg-orange-500/20 text-orange-400",
@@ -51,6 +78,7 @@ const STATUS_HEX: Record<string, string> = {
 };
 
 const statusOf = (o: any) => o?.status || "pending";
+const tagOf = (o: any) => getOrderTag(String(o?.id || o?._id || ""));
 const statusColor = (s: string) => STATUS_HEX[s] || STATUS_HEX.pending;
 const itemCount = (o: any) =>
   orderItems(o).reduce((s: number, it: any) => s + itemQty(it), 0);
@@ -95,6 +123,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any | null>(null);
+  const [tagTick, setTagTick] = useState(0);
   const [qDebounced, setQDebounced] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -110,6 +139,15 @@ export default function Orders({ version = 0 }: { version?: number }) {
     () => new Map(lateOrders(rows, lateCfg, now).map((l) => [l.id, l])),
     [rows, lateCfg, now],
   );
+  const tagMap = useMemo(() => {
+    const m = new Map<string, OrderTag>();
+    for (const o of rows) {
+      const id = String(o.id || o._id || "");
+      m.set(id, getOrderTag(id));
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tagTick]);
   const [editDraft, setEditDraft] = useState({
     table_no: "",
     customer_name: "",
@@ -368,13 +406,19 @@ export default function Orders({ version = 0 }: { version?: number }) {
                     />
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="flex items-baseline gap-2">
+                        <div className="flex items-center gap-2">
                           <span className="text-lg font-black text-white leading-none">
                             {tableName(o)}
                           </span>
                           <span className="text-[11px] text-zinc-500">
                             {itemCount(o)} 项
                           </span>
+                          <TagBadge
+                            tag={
+                              tagMap.get(String(o.id || o._id || "")) ||
+                              "normal"
+                            }
+                          />
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mt-1.5">
                           <Clock size={12} className="shrink-0" />
@@ -461,7 +505,13 @@ export default function Orders({ version = 0 }: { version?: number }) {
                                 style={{ background: statusColor(st) }}
                               />
                               {STATUS_TEXT[st] || "待接单"}
-                            </span>
+                            </span>{" "}
+                            <TagBadge
+                              tag={
+                                tagMap.get(String(o.id || o._id || "")) ||
+                                "normal"
+                              }
+                            />
                             {late && (
                               <span className="inline-flex items-center mt-1.5 text-[11px] px-2 py-0.5 rounded-full font-bold bg-red-500/15 text-red-400">
                                 超时 {late.overdueMin} 分
@@ -572,6 +622,45 @@ export default function Orders({ version = 0 }: { version?: number }) {
                     <CreditCard size={12} /> {detail.paymentMethod}
                   </span>
                 )}
+              </div>
+
+              {/* 订单标记：退菜/赠送/员工餐/试菜 不参与理论消耗 */}
+              <div className="mb-4 rounded-xl bg-zinc-950 border border-white/5 px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500 mb-2">
+                  订单标记（退菜/赠送/员工餐/试菜不计入理论消耗）
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {TAG_ORDER.map((t) => {
+                    const on = tagOf(detail) === t;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => {
+                          setOrderTag(String(detail.id || detail._id), t);
+                          setTagTick((v) => v + 1);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                          on
+                            ? "bg-orange-500/15 border-orange-500/60 text-orange-400"
+                            : "bg-zinc-900 border-white/5 text-zinc-400 hover:border-white/20"
+                        }`}
+                      >
+                        {ORDER_TAG_LABEL[t]}
+                      </button>
+                    );
+                  })}
+                  {tagOf(detail) !== "normal" && (
+                    <button
+                      onClick={() => {
+                        setOrderTag(String(detail.id || detail._id), "normal");
+                        setTagTick((v) => v + 1);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white"
+                    >
+                      恢复正常
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">

@@ -34,6 +34,19 @@ import {
   pendingAdjustments,
   STOCKTAKE_REASON,
 } from "../lib/stocktake";
+import {
+  addConversion,
+  getItemMeta,
+  loadMetaMap,
+  removeConversion,
+  saveItemMeta,
+  type ItemMeta,
+} from "../lib/masterData";
+import {
+  daysSinceStocktake,
+  lastStocktakeDay,
+  markStocktake,
+} from "../lib/stocktakeReminder";
 
 const EMPTY: Partial<InventoryItem> = {
   name: "",
@@ -60,6 +73,11 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   const [stocktaking, setStocktaking] = useState(false);
   const [taking, setTaking] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
+  const [metaMap, setMetaMap] = useState<Record<string, ItemMeta>>({});
+  const [meta, setMeta] = useState<ItemMeta | null>(null);
+  const [convUnit, setConvUnit] = useState("");
+  const [convFactor, setConvFactor] = useState("");
+  const [onlyA, setOnlyA] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -78,6 +96,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     load();
   }, [version]);
 
+  useEffect(() => {
+    setMetaMap(loadMetaMap());
+  }, [version]);
+
+  useEffect(() => {
+    setMeta(editing?.id ? getItemMeta(editing.id) : null);
+    setConvUnit("");
+    setConvFactor("");
+  }, [editing?.id]);
+
   const low = useMemo(() => lowStockItems(list), [list]);
   const categories = useMemo(
     () => Array.from(new Set(list.map((i) => i.category))).length,
@@ -85,15 +113,36 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   );
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter(
-      (i) =>
-        i.name.toLowerCase().includes(needle) ||
-        (i.category || "").toLowerCase().includes(needle),
-    );
-  }, [list, q]);
+    let out = list;
+    if (needle)
+      out = out.filter(
+        (i) =>
+          i.name.toLowerCase().includes(needle) ||
+          (i.category || "").toLowerCase().includes(needle),
+      );
+    if (onlyA) out = out.filter((i) => !!metaMap[i.id]?.classA);
+    return out;
+  }, [list, q, onlyA, metaMap]);
 
   const take = useMemo(() => buildStocktake(list, counts), [list, counts]);
+
+  const setMetaField = (patch: Partial<ItemMeta>) => {
+    if (!editing?.id) return;
+    setMeta(saveItemMeta(editing.id, patch));
+    setMetaMap(loadMetaMap());
+  };
+  const addConv = () => {
+    if (!editing?.id) return;
+    setMeta(addConversion(editing.id, convUnit, num(convFactor)));
+    setConvUnit("");
+    setConvFactor("");
+    setMetaMap(loadMetaMap());
+  };
+  const removeConv = (u: string) => {
+    if (!editing?.id) return;
+    setMeta(removeConversion(editing.id, u));
+    setMetaMap(loadMetaMap());
+  };
 
   const submitEdit = async () => {
     if (!editing?.name?.trim()) return toast.error("名称不能为空");
@@ -180,6 +229,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     else if (ok > 0)
       toast.error(`部分失败：${ok}/${adj.length} 已调整，请复核`);
     else toast.error("盘点调整失败（检查库存表权限）");
+    if (ok > 0) markStocktake();
     setStocktaking(false);
     setCounts({});
     load();
@@ -284,6 +334,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
           placeholder="搜索名称 / 分类"
           className="flex-1 min-w-[160px] bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
         />
+        <button
+          onClick={() => setOnlyA((v) => !v)}
+          className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl border transition-colors ${
+            onlyA
+              ? "bg-orange-500/15 border-orange-500/60 text-orange-400 font-semibold"
+              : "bg-zinc-900 border-white/5 text-zinc-400 hover:text-white"
+          }`}
+        >
+          A类食材
+        </button>
       </div>
 
       <ChartCard
@@ -316,6 +376,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                           <span className="shrink-0 text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">
                             {i.category}
                           </span>
+                          {metaMap[i.id]?.classA && (
+                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400">
+                              A类
+                            </span>
+                          )}
+                          {metaMap[i.id]?.countable === false && (
+                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-400">
+                              不可盘
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs">
                           <span
@@ -403,6 +473,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                       >
                         <td className="px-3 py-2.5 text-white font-medium">
                           {i.name}
+                          {metaMap[i.id]?.classA && (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 align-middle">
+                              A类
+                            </span>
+                          )}
+                          {metaMap[i.id]?.countable === false && (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-400 align-middle">
+                              不可盘
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-zinc-400">
                           {i.category}
@@ -514,6 +594,78 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                 className="col-span-2"
               />
             </div>
+
+            {editing.id && meta && (
+              <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+                <div className="text-xs text-zinc-500 font-semibold">
+                  本机设置（盘点与换算，不影响云端）
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setMetaField({ classA: !meta.classA })}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${
+                      meta.classA
+                        ? "bg-orange-500/15 border-orange-500/60 text-orange-400"
+                        : "bg-zinc-950 border-white/5 text-zinc-400"
+                    }`}
+                  >
+                    {meta.classA ? "A类食材（重点监控）" : "标为 A 类"}
+                  </button>
+                  <button
+                    onClick={() => setMetaField({ countable: !meta.countable })}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${
+                      !meta.countable
+                        ? "bg-sky-500/15 border-sky-500/60 text-sky-400"
+                        : "bg-zinc-950 border-white/5 text-zinc-400"
+                    }`}
+                  >
+                    {meta.countable ? "可盘点" : "不可盘（按消耗率估）"}
+                  </button>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-400 mb-1.5">
+                    采购单位换算（1 采购单位 = 多少 {editing.unit || "最小单位"}
+                    ）
+                  </div>
+                  {Object.entries(meta.conversions).map(([u, f]) => (
+                    <div key={u} className="flex items-center gap-2 mb-1.5">
+                      <span className="flex-1 text-sm text-zinc-200 bg-zinc-950 rounded-lg px-3 py-2">
+                        1 {u} = {f} {editing.unit}
+                      </span>
+                      <button
+                        onClick={() => removeConv(u)}
+                        className="px-2.5 py-2 text-xs font-semibold text-red-400 bg-red-500/10 rounded-lg active:scale-95 transition-transform"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={convUnit}
+                      onChange={(e) => setConvUnit(e.target.value)}
+                      placeholder="采购单位（如 箱/件）"
+                      className="flex-1 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                    />
+                    <input
+                      type="number"
+                      value={convFactor}
+                      onChange={(e) => setConvFactor(e.target.value)}
+                      placeholder="系数"
+                      className="w-24 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                    />
+                    <button
+                      onClick={addConv}
+                      className="px-3 py-2 text-sm font-semibold text-orange-400 bg-orange-500/10 rounded-lg active:scale-95 transition-transform"
+                    >
+                      添加
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={submitEdit}
               className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold active:scale-[0.98] transition-transform"
@@ -626,6 +778,14 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         maxW="max-w-lg"
       >
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs bg-zinc-950 rounded-xl px-3 py-2.5 mb-2">
+          <span className="text-zinc-400">
+            上次盘点{" "}
+            <b className="text-white">
+              {lastStocktakeDay() ?? "从未"}
+              {daysSinceStocktake() !== null &&
+                `（${daysSinceStocktake()} 天前）`}
+            </b>
+          </span>
           <span className="text-zinc-400">
             已盘{" "}
             <b className="text-white">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import {
   ShoppingCart,
   Plus,
@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   CalendarDays,
   Scale,
+  Camera,
+  X,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
@@ -29,11 +31,18 @@ import {
   fetchBoms,
   fetchInventory,
   fetchPurchases,
+  newPurchaseId,
   num,
   type InventoryItem,
   type PurchaseOrder,
   type RecipeBom,
 } from "../lib/inventory";
+import { getItemMeta, unitFactor } from "../lib/masterData";
+import {
+  saveReceiptImage,
+  deleteReceiptImage,
+  linkReceipts,
+} from "../lib/receipts";
 import { consumptionByItem } from "../lib/aggregate";
 import {
   buildPurchasePlan,
@@ -147,6 +156,10 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   const [coverage, setCoverage] = useState(7);
   const [cons, setCons] = useState<{ key: string; qty: number }[]>([]);
   const [bulk, setBulk] = useState(false);
+  const [buyUnit, setBuyUnit] = useState("");
+  const [images, setImages] = useState<
+    { id: string; name: string; url: string }[]
+  >([]);
 
   const load = async () => {
     setLoading(true);
@@ -207,9 +220,24 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   );
   const insight = useMemo(() => compareInsight(cmpStats), [cmpStats]);
 
+  // 采购单位换算：按最小单位归一（采购价异常判定/成本影响都用归一的单价）
+  const selectedMeta = useMemo(
+    () => (!isNew && form.itemId ? getItemMeta(form.itemId) : null),
+    [isNew, form.itemId],
+  );
+  const buyUnits = selectedMeta ? Object.keys(selectedMeta.conversions) : [];
+  const selectedUnit =
+    !isNew && form.itemId
+      ? inv.find((i) => i.id === form.itemId)?.unit || ""
+      : "";
+  const factor =
+    !isNew && form.itemId ? unitFactor(selectedMeta ?? undefined, buyUnit) : 1;
+  const pricePerMin =
+    factor !== 1 ? num(form.unit_price) / factor : num(form.unit_price);
+
   const priceCheck = useMemo(
-    () => checkUnitPrice(byItem.get(form.itemId), num(form.unit_price)),
-    [byItem, form.itemId, form.unit_price],
+    () => checkUnitPrice(byItem.get(form.itemId), pricePerMin),
+    [byItem, form.itemId, pricePerMin],
   );
 
   const filtered = useMemo(() => {
@@ -229,9 +257,9 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   const impacts = useMemo(
     () =>
       !isNew && form.itemId
-        ? costImpactForPriceChange(form.itemId, num(form.unit_price), boms, inv)
+        ? costImpactForPriceChange(form.itemId, pricePerMin, boms, inv)
         : [],
-    [isNew, form.itemId, form.unit_price, boms, inv],
+    [isNew, form.itemId, pricePerMin, boms, inv],
   );
 
   const preselect = (item: { id: string; gap: number; price: number }) => {
@@ -274,6 +302,24 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     await load();
   };
 
+  const onPickImages = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    for (const f of files) {
+      const id = await saveReceiptImage(f, f.name || "receipt");
+      if (id) {
+        setImages((prev) => [
+          ...prev,
+          { id, name: f.name || "票据", url: URL.createObjectURL(f) },
+        ]);
+      }
+    }
+    e.target.value = "";
+  };
+  const removeImage = (id: string) => {
+    setImages((prev) => prev.filter((im) => im.id !== id));
+    deleteReceiptImage(id);
+  };
+
   const submit = async () => {
     const name = isNew
       ? form.itemName.trim()
@@ -286,19 +332,29 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       isNew || !isExisting
         ? form.unit
         : inv.find((i) => i.id === id)?.unit || form.unit;
+    // 单位换算：采购单位数量 → 最小单位；单价摊回最小单位（总金额不变）
+    const qty = num(form.quantity) * factor;
+    const pid = newPurchaseId();
     const ok = await createPurchase({
+      id: pid,
       supplier: form.supplier,
       inventory_item_id: id,
       item_name: name,
-      quantity: num(form.quantity),
+      quantity: qty,
       unit,
-      unit_price: num(form.unit_price),
+      unit_price: pricePerMin,
       notes: form.notes,
       purchased_at: form.purchased_at
         ? new Date(form.purchased_at).toISOString()
         : undefined,
     });
     if (!ok) return toast.error("采购入库失败（检查库存/采购表权限）");
+    if (images.length)
+      linkReceipts(
+        pid,
+        images.map((im) => im.id),
+      );
+    images.forEach((im) => URL.revokeObjectURL(im.url));
     toast.success("采购已入库");
     setOpen(false);
     setForm({
@@ -309,6 +365,8 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       unit_price: "",
       notes: "",
     });
+    setBuyUnit("");
+    setImages([]);
     setIsNew(false);
     load();
   };
@@ -759,7 +817,10 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           ) : (
             <select
               value={form.itemId}
-              onChange={(e) => setForm({ ...form, itemId: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, itemId: e.target.value });
+                setBuyUnit("");
+              }}
               className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
             >
               <option value="">选择原料…</option>
@@ -778,6 +839,69 @@ export default function Procurement({ version = 0 }: { version?: number }) {
             onChange={(e) => setForm({ ...form, supplier: e.target.value })}
             className="w-full bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white"
           />
+
+          {!isNew && buyUnits.length > 0 && (
+            <div className="flex items-center gap-3">
+              <select
+                value={buyUnit}
+                onChange={(e) => setBuyUnit(e.target.value)}
+                className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+              >
+                <option value="">按最小单位（{selectedUnit}）</option>
+                {buyUnits.map((u) => (
+                  <option key={u} value={u}>
+                    {u}（1{u}={selectedMeta!.conversions[u]}
+                    {selectedUnit}）
+                  </option>
+                ))}
+              </select>
+              {factor !== 1 && (
+                <span className="text-xs text-zinc-400 whitespace-nowrap">
+                  = {num(form.quantity) * factor} {selectedUnit}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div>
+            <div className="text-xs text-zinc-400 mb-1.5">
+              票据照片（存本机，可拍多张）
+            </div>
+            <label className="inline-flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-950 border border-white/5 rounded-xl cursor-pointer active:scale-[0.99] transition-transform">
+              <Camera size={16} /> 拍照 / 上传
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={onPickImages}
+              />
+            </label>
+            {images.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {images.map((im) => (
+                  <div
+                    key={im.id}
+                    className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10"
+                  >
+                    <img
+                      src={im.url}
+                      alt={im.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      onClick={() => removeImage(im.id)}
+                      className="absolute top-0 right-0 bg-black/60 text-white w-5 h-5 flex items-center justify-center rounded-bl-lg"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <input
               type="number"
