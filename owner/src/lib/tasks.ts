@@ -34,6 +34,21 @@ export const STAGE_NEXT: Record<IssueStage, IssueStage | null> = {
   resolved: null,
 };
 
+export type Routine = "none" | "daily" | "weekly" | "monthly";
+
+export const ROUTINE_LABEL: Record<Routine, string> = {
+  none: "不重复",
+  daily: "每天",
+  weekly: "每周",
+  monthly: "每月",
+};
+
+const ROUTINE_MS: Record<Exclude<Routine, "none">, number> = {
+  daily: 86400000,
+  weekly: 7 * 86400000,
+  monthly: 30 * 86400000,
+};
+
 export interface Task {
   id: string;
   kind: string;
@@ -48,6 +63,8 @@ export interface Task {
   resolvedAt?: number;
   reopenedCount: number;
   tab: string;
+  routine?: Routine;
+  nextDueAt?: number;
 }
 
 const KEY = "owner:tasks";
@@ -141,4 +158,48 @@ export function removeTask(id: string): Task[] {
   const list = read().filter((t) => t.id !== id);
   persist(list);
   return list;
+}
+
+/** 设为例行（每天/每周/每月），已解决后按周期自动重开 */
+export function setRoutine(id: string, routine: Routine): Task[] {
+  const list = read().map((t) =>
+    t.id === id
+      ? {
+          ...t,
+          routine,
+          nextDueAt:
+            routine === "none" ? undefined : Date.now() + ROUTINE_MS[routine],
+        }
+      : t,
+  );
+  persist(list);
+  return list;
+}
+
+/** 处理到期例行任务：已解决且到期 → 自动新建「发现」实例 */
+export function processRoutines(now = Date.now()): Task[] {
+  const list = read();
+  const additions: Task[] = [];
+  const next = list.map((t) => {
+    if (
+      t.routine &&
+      t.routine !== "none" &&
+      t.stage === "resolved" &&
+      t.nextDueAt &&
+      t.nextDueAt <= now
+    ) {
+      additions.push({
+        ...t,
+        id: `${t.id}-${now}`,
+        stage: "found",
+        resolvedAt: undefined,
+        createdAt: now,
+        nextDueAt: now + ROUTINE_MS[t.routine],
+      });
+      return { ...t, nextDueAt: now + ROUTINE_MS[t.routine] };
+    }
+    return t;
+  });
+  if (additions.length) persist([...next, ...additions]);
+  return additions.length ? [...next, ...additions] : next;
 }

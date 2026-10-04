@@ -16,6 +16,7 @@ import {
   CircleCheck,
   Copy,
   AlertTriangle,
+  Percent,
 } from "lucide-react";
 import {
   AreaChart,
@@ -58,11 +59,17 @@ import {
   fetchInventory,
   fetchPurchases,
   fetchTransactions,
+  fetchBoms,
   lowStockItems,
+  num,
   type InventoryItem,
+  type InventoryTransaction,
+  type RecipeBom,
 } from "../lib/inventory";
 import { buildPriceAlerts, flaggedAlerts } from "../lib/priceAlert";
 import { todayWasteAmount } from "../lib/waste";
+import { dishMargins, sumCost } from "../lib/cost";
+import { loadTasks } from "../lib/tasks";
 import { buildTodos } from "../lib/todo";
 import { lateOrders, useLateConfig } from "../lib/lateOrders";
 import { buildSummary, summaryLines, type SummaryInput } from "../lib/summary";
@@ -166,6 +173,9 @@ export default function Dashboard({
     todayWaste: number;
     pending: number;
     purchaseCount: number;
+    inv: InventoryItem[];
+    boms: RecipeBom[];
+    waste14: InventoryTransaction[];
     ready: boolean;
   }>({
     low: [],
@@ -173,6 +183,9 @@ export default function Dashboard({
     todayWaste: 0,
     pending: 0,
     purchaseCount: 0,
+    inv: [],
+    boms: [],
+    waste14: [],
     ready: false,
   });
 
@@ -184,7 +197,8 @@ export default function Dashboard({
       todayStart.setHours(0, 0, 0, 0);
       const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
       const tomorrow = new Date(Date.now() + 86400000).toISOString();
-      const [inv, pur, wt, pg] = await Promise.all([
+      const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+      const [inv, pur, wt, pg, boms, wt14] = await Promise.all([
         fetchInventory(),
         fetchPurchases(300),
         fetchTransactions(300, "waste", todayStart.toISOString()),
@@ -194,6 +208,8 @@ export default function Dashboard({
           status: "pending",
           limit: 1,
         }),
+        fetchBoms(),
+        fetchTransactions(2000, "waste", twoWeeksAgo),
       ]);
       if (!alive) return;
       setOps({
@@ -202,6 +218,9 @@ export default function Dashboard({
         todayWaste: todayWasteAmount(wt),
         pending: pg.count,
         purchaseCount: pur.length,
+        inv,
+        boms,
+        waste14: wt14,
         ready: true,
       });
     })();
@@ -318,6 +337,37 @@ export default function Dashboard({
     purchaseCount: ops.purchaseCount,
     stocktakeDone: lastStocktakeAt() !== null,
   });
+
+  // 毛利与食材成本率（当前区间）：成本 = 菜品销量 × 配方成本
+  const cogs = useMemo(
+    () => sumCost(dishMargins(dishes, ops.boms, ops.inv)),
+    [dishes, ops.boms, ops.inv],
+  );
+  const profit = kpi.revenue - cogs;
+  const foodCostRate = kpi.revenue ? (cogs / kpi.revenue) * 100 : 0;
+
+  // 本周 vs 上周损耗（用于「本周改善」）
+  const weekWaste = useMemo(() => {
+    const now = Date.now();
+    const week = 7 * 86400000;
+    const sum = (from: number, to: number) =>
+      ops.waste14
+        .filter((t) => {
+          const m = t.created_at ? new Date(t.created_at).getTime() : 0;
+          return m >= from && m < to;
+        })
+        .reduce((s, t) => s + Math.abs(num(t.quantity)) * num(t.unit_cost), 0);
+    return {
+      thisWeek: sum(now - week, now),
+      lastWeek: sum(now - 2 * week, now - week),
+    };
+  }, [ops.waste14]);
+  const solvedThisWeek = loadTasks().filter(
+    (t) =>
+      t.stage === "resolved" &&
+      t.resolvedAt &&
+      t.resolvedAt >= Date.now() - 7 * 86400000,
+  ).length;
 
   const todos = useMemo(
     () =>
@@ -503,6 +553,24 @@ export default function Dashboard({
               bg="bg-purple-500/10"
             />
           </div>
+          <KpiCard
+            icon={Wallet}
+            label="毛利"
+            value={fmtMoney(profit)}
+            valueNum={profit}
+            format={fmtMoney}
+            accent={profit >= 0 ? "text-green-400" : "text-red-400"}
+            bg={profit >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
+          />
+          <KpiCard
+            icon={Percent}
+            label="食材成本率"
+            value={`${foodCostRate.toFixed(1)}%`}
+            valueNum={foodCostRate}
+            format={(n) => `${n.toFixed(1)}%`}
+            accent={foodCostRate > 35 ? "text-red-400" : "text-teal-400"}
+            bg={foodCostRate > 35 ? "bg-red-500/10" : "bg-teal-500/10"}
+          />
         </div>
       </div>
 
@@ -653,6 +721,38 @@ export default function Dashboard({
               暂无异常问题，继续保持
             </div>
           )}
+        </ChartCard>
+      )}
+
+      {ops.ready && (
+        <ChartCard title="本周改善" subtitle="较上周 · 损耗 / 解决问题">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-zinc-950 rounded-xl px-3 py-3">
+              <div className="text-[11px] text-zinc-500">本周损耗</div>
+              <div className="text-lg font-black tnum text-zinc-100 mt-1">
+                {fmtMoney(weekWaste.thisWeek)}
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-0.5">
+                上周 {fmtMoney(weekWaste.lastWeek)}
+              </div>
+            </div>
+            <div className="bg-zinc-950 rounded-xl px-3 py-3">
+              <div className="text-[11px] text-zinc-500">本周解决问题</div>
+              <div className="text-lg font-black tnum text-green-400 mt-1">
+                {solvedThisWeek}
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-0.5">个已解决</div>
+            </div>
+            <div className="bg-zinc-950 rounded-xl px-3 py-3">
+              <div className="text-[11px] text-zinc-500">食材成本率</div>
+              <div
+                className={`text-lg font-black tnum mt-1 ${foodCostRate > 35 ? "text-red-400" : "text-teal-400"}`}
+              >
+                {foodCostRate.toFixed(1)}%
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-0.5">本期口径</div>
+            </div>
+          </div>
         </ChartCard>
       )}
 

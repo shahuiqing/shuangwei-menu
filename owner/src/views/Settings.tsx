@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import {
   Store,
   KeyRound,
@@ -10,6 +10,8 @@ import {
   AlertTriangle,
   Bell,
   Gauge,
+  Download,
+  Upload,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -23,6 +25,7 @@ import {
 } from "../lib/notify";
 import { useLateConfig } from "../lib/lateOrders";
 import { getDailyQuota, setDailyQuota, todayQuotaKey } from "../lib/dailyQuota";
+import { exportLocalData, importLocalData, downloadText } from "../lib/backup";
 import { isConfigured, STORE_NAME } from "../lib/supabase";
 import { saveSettingsField } from "../lib/data";
 import { tableStats, prune, type TableStats } from "../lib/aggregate";
@@ -65,6 +68,31 @@ export default function Settings({
     const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
     setQuotaDraft(v === null ? "" : String(v));
     toast.success(v === null ? "已清除今日定额" : `今日定额已设为 ${v} 元`);
+  };
+
+  const exportBackup = () => {
+    downloadText(
+      `shuangwei-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      exportLocalData(),
+    );
+    toast.success("已导出本地数据备份");
+  };
+
+  const importBackup = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const n = importLocalData(String(reader.result || ""));
+        e.target.value = "";
+        toast.success(`已导入 ${n} 项本地数据`);
+        onSaved();
+      } catch {
+        toast.error("导入失败：文件格式不对");
+      }
+    };
+    reader.readAsText(f);
   };
 
   const saveLate = () => {
@@ -314,6 +342,34 @@ export default function Settings({
         </div>
         <p className="text-[11px] text-zinc-600 mt-1.5">
           实际食材成本超过定额的差额，会在盘点/损耗分析中标记为「定额超出」。
+        </p>
+      </ChartCard>
+
+      <ChartCard
+        title="数据导出"
+        subtitle="备份本机暂存数据（订单标记/任务/定额/换算等）"
+        action={<Download size={18} className="text-orange-500" />}
+      >
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportBackup}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white text-sm font-semibold active:scale-[0.98] transition-transform"
+          >
+            <Download size={16} /> 导出本地数据
+          </button>
+          <label className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-semibold cursor-pointer active:scale-[0.98] transition-transform">
+            <Upload size={16} /> 导入备份
+            <input
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={importBackup}
+            />
+          </label>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2">
+          云端数据在 Supabase
+          自动保存；这里只备份「本机暂存」的部分（换机/清缓存后可用导入还原）。
         </p>
       </ChartCard>
 

@@ -6,6 +6,7 @@ import {
   Trash2,
   ArrowRight,
   User,
+  Repeat,
 } from "lucide-react";
 import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -21,9 +22,13 @@ import {
   reopenTask,
   setAssignee,
   removeTask,
+  setRoutine,
+  processRoutines,
   STAGE_LABEL,
   STAGE_NEXT,
+  ROUTINE_LABEL,
   type Task,
+  type Routine,
 } from "../lib/tasks";
 
 const STAGE_CLS: Record<string, string> = {
@@ -63,8 +68,15 @@ export default function Tasks({
   );
 
   useEffect(() => {
-    setTasks(loadTasks());
+    setTasks(processRoutines());
   }, [version]);
+
+  const cycleRoutine = (t: Task) => {
+    const order: Routine[] = ["none", "daily", "weekly", "monthly"];
+    const cur = t.routine || "none";
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    setTasks(setRoutine(t.id, next));
+  };
 
   const open = tasks.filter((t) => t.stage !== "resolved");
   const resolved = tasks.filter((t) => t.stage === "resolved");
@@ -154,6 +166,11 @@ export default function Tasks({
                       复发 {t.reopenedCount} 次
                     </span>
                   )}
+                  {t.routine && t.routine !== "none" && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400">
+                      <Repeat size={11} /> {ROUTINE_LABEL[t.routine]}
+                    </span>
+                  )}
                   <span className="flex-1 text-sm text-zinc-100 truncate">
                     {t.title}
                   </span>
@@ -173,6 +190,17 @@ export default function Tasks({
                     placeholder="负责人（选填）"
                     className="flex-1 min-w-0 bg-zinc-900 border border-white/5 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-orange-500"
                   />
+                  <button
+                    onClick={() => cycleRoutine(t)}
+                    title="设为例行（每天/每周/每月）"
+                    className={`shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold border ${
+                      t.routine && t.routine !== "none"
+                        ? "bg-sky-500/10 border-sky-500/40 text-sky-400"
+                        : "bg-zinc-900 border-white/5 text-zinc-500"
+                    }`}
+                  >
+                    <Repeat size={12} /> {ROUTINE_LABEL[t.routine || "none"]}
+                  </button>
                   <button
                     onClick={() => setTasks(advanceTask(t.id))}
                     className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200"

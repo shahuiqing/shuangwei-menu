@@ -20,6 +20,23 @@ export function normalizeReason(raw: string | undefined | null): Reason {
   return (REASONS as readonly string[]).includes(v) ? (v as Reason) : "其他";
 }
 
+/* ============ 损耗分类（正常/异常/不明） ============ */
+
+export type WasteCategory = "normal" | "abnormal" | "unknown";
+
+export const WASTE_CATEGORY: Record<Reason, { label: string; color: string }> =
+  {
+    过期: { label: "异常", color: "#f43f5e" },
+    做坏: { label: "异常", color: "#f43f5e" },
+    出品不合格: { label: "异常", color: "#f43f5e" },
+    丢失: { label: "异常", color: "#f43f5e" },
+    其他: { label: "不明", color: "#a1a1aa" },
+  };
+
+export function wasteCategory(raw: string | undefined | null): WasteCategory {
+  return normalizeReason(raw) === "其他" ? "unknown" : "abnormal";
+}
+
 const withinTxn = (t: InventoryTransaction, b: Bounds) => {
   const ts = parseTs(t.created_at);
   return ts >= b.start && ts <= b.end;

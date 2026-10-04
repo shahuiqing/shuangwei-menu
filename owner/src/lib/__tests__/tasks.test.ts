@@ -6,8 +6,11 @@ import {
   reopenTask,
   setAssignee,
   removeTask,
+  setRoutine,
+  processRoutines,
   STAGE_LABEL,
   STAGE_NEXT,
+  ROUTINE_LABEL,
 } from "../tasks";
 
 const store = new Map<string, string>();
@@ -76,5 +79,36 @@ describe("任务生命周期", () => {
     expect(STAGE_LABEL.resolved).toBe("已解决");
     expect(STAGE_NEXT.observing).toBe("resolved");
     expect(STAGE_NEXT.resolved).toBeNull();
+  });
+});
+
+describe("任务例行化", () => {
+  it("设为每周后，已解决且到期会自动重开新实例", () => {
+    const t = mk();
+    let list = setRoutine(t.id, "weekly");
+    expect(list[0].routine).toBe("weekly");
+    expect(list[0].nextDueAt).toBeGreaterThan(Date.now());
+
+    // 推进到已解决，并把到期时间拨到过去
+    while (list[0].stage !== "resolved") list = advanceTask(t.id);
+    const past = Date.now() - 1000;
+    const raw = JSON.parse(
+      (globalThis as any).localStorage.getItem("owner:tasks") || "[]",
+    );
+    raw[0].nextDueAt = past;
+    (globalThis as any).localStorage.setItem(
+      "owner:tasks",
+      JSON.stringify(raw),
+    );
+
+    list = processRoutines();
+    const found = list.filter((x) => x.stage === "found");
+    expect(found.length).toBe(1);
+    expect(found[0].title).toBe("订单超时");
+  });
+
+  it("例行标签齐全", () => {
+    expect(ROUTINE_LABEL.daily).toBe("每天");
+    expect(ROUTINE_LABEL.monthly).toBe("每月");
   });
 });

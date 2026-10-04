@@ -46,6 +46,9 @@ import {
   daysSinceStocktake,
   lastStocktakeDay,
   markStocktake,
+  stocktakeCount,
+  stocktakeConfidence,
+  STOCKTAKE_CONF_LABEL,
 } from "../lib/stocktakeReminder";
 
 const EMPTY: Partial<InventoryItem> = {
@@ -784,6 +787,13 @@ export default function Inventory({ version = 0 }: { version?: number }) {
               {lastStocktakeDay() ?? "从未"}
               {daysSinceStocktake() !== null &&
                 `（${daysSinceStocktake()} 天前）`}
+            </b>
+          </span>
+          <span className="text-zinc-400">
+            盘点置信度{" "}
+            <b className="text-white">
+              {STOCKTAKE_CONF_LABEL[stocktakeConfidence()]}（已盘{" "}
+              {stocktakeCount()} 次）
             </b>
           </span>
           <span className="text-zinc-400">

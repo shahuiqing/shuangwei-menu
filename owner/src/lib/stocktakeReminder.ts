@@ -5,14 +5,42 @@ import { businessDayKey } from "./businessDay";
  */
 
 const KEY = "owner:last-stocktake";
+const COUNT_KEY = "owner:stocktake:count";
 
 export function markStocktake(now: number | Date = Date.now()): void {
   const ms = now instanceof Date ? now.getTime() : now;
   try {
     localStorage.setItem(KEY, String(ms));
+    localStorage.setItem(COUNT_KEY, String(stocktakeCount() + 1));
   } catch {
     /* ignore */
   }
+}
+
+/** 累计盘点次数（周期积累的代理） */
+export function stocktakeCount(): number {
+  try {
+    const n = Number(localStorage.getItem(COUNT_KEY));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export type StocktakeConfidence = "low" | "medium" | "high";
+
+export const STOCKTAKE_CONF_LABEL: Record<StocktakeConfidence, string> = {
+  low: "低",
+  medium: "中",
+  high: "高",
+};
+
+/** 盘点置信度：随盘点次数积累，人工修正可额外加权 */
+export function stocktakeConfidence(
+  manualCorrections = 0,
+): StocktakeConfidence {
+  const pts = Math.min(stocktakeCount(), 5) + Math.min(manualCorrections, 2);
+  return pts >= 5 ? "high" : pts >= 3 ? "medium" : "low";
 }
 
 export function lastStocktakeAt(): number | null {

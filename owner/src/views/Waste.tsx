@@ -48,6 +48,7 @@ import {
   normalizeReason,
   wasteRows,
   wasteSummary,
+  WASTE_CATEGORY,
   type Reason,
 } from "../lib/waste";
 import { useChartTheme } from "../lib/theme";
@@ -380,8 +381,16 @@ export default function Waste({ version = 0 }: { version?: number }) {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                      {normalizeReason(t.reason)}
+                    <span
+                      className="px-2 py-0.5 rounded-full text-[11px] border"
+                      style={{
+                        background: `${WASTE_CATEGORY[normalizeReason(t.reason)].color}1f`,
+                        color: WASTE_CATEGORY[normalizeReason(t.reason)].color,
+                        borderColor: `${WASTE_CATEGORY[normalizeReason(t.reason)].color}44`,
+                      }}
+                    >
+                      {normalizeReason(t.reason)} ·{" "}
+                      {WASTE_CATEGORY[normalizeReason(t.reason)].label}
                     </span>
                     <span className="text-xs text-zinc-400">
                       -{num(t.quantity)} {t.unit}
@@ -430,8 +439,17 @@ export default function Waste({ version = 0 }: { version?: number }) {
                         {fmtMoney(Math.abs(num(t.quantity)) * num(t.unit_cost))}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                          {normalizeReason(t.reason)}
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[11px] border"
+                          style={{
+                            background: `${WASTE_CATEGORY[normalizeReason(t.reason)].color}1f`,
+                            color:
+                              WASTE_CATEGORY[normalizeReason(t.reason)].color,
+                            borderColor: `${WASTE_CATEGORY[normalizeReason(t.reason)].color}44`,
+                          }}
+                        >
+                          {normalizeReason(t.reason)} ·{" "}
+                          {WASTE_CATEGORY[normalizeReason(t.reason)].label}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-zinc-500 max-w-[200px] truncate">

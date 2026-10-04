@@ -23,6 +23,7 @@ import {
   type RecipeBom,
 } from "../lib/inventory";
 import { dishMargins, buildMenuPoints, type MenuPoint } from "../lib/cost";
+import { buildDishTrends, TREND_LABEL } from "../lib/dishTrend";
 import { useChartTheme } from "../lib/theme";
 
 type Mode = "revenue" | "profit";
@@ -43,6 +44,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
   const [range, setRange] = useState<RangeKey>("30d");
   const [mode, setMode] = useState<Mode>("profit");
   const [dishes, setDishes] = useState<DishStat[]>([]);
+  const [prevDishes, setPrevDishes] = useState<DishStat[]>([]);
   const [boms, setBoms] = useState<RecipeBom[]>([]);
   const [inv, setInv] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,13 +54,15 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
     (async () => {
       setLoading(true);
       const b = rangeToIso(range);
-      const [d, bm, iv] = await Promise.all([
+      const [d, pd, bm, iv] = await Promise.all([
         dishStats(b.start, b.end),
+        dishStats(b.prevStart, b.prevEnd),
         fetchBoms(),
         fetchInventory(),
       ]);
       if (!alive) return;
       setDishes(d);
+      setPrevDishes(pd);
       setBoms(bm);
       setInv(iv);
       setLoading(false);
@@ -78,6 +82,15 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
   const noRecipe = useMemo(
     () => margins.filter((m) => !m.hasCost).length,
     [margins],
+  );
+
+  const trends = useMemo(
+    () =>
+      buildDishTrends(
+        dishes.map((d) => ({ name: d.name, qty: d.qty })),
+        prevDishes.map((d) => ({ name: d.name, qty: d.qty })),
+      ),
+    [dishes, prevDishes],
   );
 
   const quads: MatrixQuad[] = ["star", "plowhorse", "puzzle", "dog"];
@@ -281,6 +294,54 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
           );
         })}
       </div>
+
+      <ChartCard title="菜品趋势" subtitle={`本期 vs 上期销量 · 阈值 ±20%`}>
+        {loading ? (
+          <EmptyState text="加载中…" />
+        ) : trends.length === 0 ? (
+          <EmptyState text="暂无数据" />
+        ) : (
+          <div className="space-y-1.5">
+            {trends.slice(0, 20).map((t) => (
+              <div
+                key={t.name}
+                className="flex items-center justify-between bg-zinc-950 rounded-lg px-3 py-2 text-sm"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      background: `${TREND_LABEL[t.kind].color}1f`,
+                      color: TREND_LABEL[t.kind].color,
+                    }}
+                  >
+                    {TREND_LABEL[t.kind].label}
+                  </span>
+                  <span className="text-zinc-200 truncate">{t.name}</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 text-xs">
+                  <span className="text-zinc-500">
+                    {t.prevQty > 0 ? `${t.prevQty} → ` : ""}
+                    {t.currentQty}
+                  </span>
+                  <span
+                    className={`font-semibold w-14 text-right ${
+                      t.changePct > 0
+                        ? "text-green-400"
+                        : t.changePct < 0
+                          ? "text-red-400"
+                          : "text-zinc-500"
+                    }`}
+                  >
+                    {t.changePct > 0 ? "+" : ""}
+                    {Math.round(t.changePct)}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </ChartCard>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import {
   daysSinceStocktake,
   stocktakeDue,
   lastStocktakeDay,
+  stocktakeCount,
+  stocktakeConfidence,
 } from "../stocktakeReminder";
 
 const store = new Map<string, string>();
@@ -52,5 +54,22 @@ describe("盘点提醒", () => {
     const at = new Date(2026, 9, 3, 10, 0, 0);
     markStocktake(at);
     expect(lastStocktakeDay()).toBe("2026-10-03");
+  });
+});
+
+describe("盘点置信度", () => {
+  it("累计次数并给出置信度", () => {
+    expect(stocktakeCount()).toBe(0);
+    expect(stocktakeConfidence()).toBe("low");
+
+    markStocktake();
+    markStocktake();
+    markStocktake();
+    expect(stocktakeCount()).toBe(3);
+    expect(stocktakeConfidence()).toBe("medium");
+
+    markStocktake();
+    markStocktake();
+    expect(stocktakeConfidence()).toBe("high");
   });
 });

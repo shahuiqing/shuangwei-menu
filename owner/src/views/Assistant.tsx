@@ -12,6 +12,7 @@ import { lateOrders, loadLateConfig } from "../lib/lateOrders";
 import { useOpsSignals } from "../lib/useOpsSignals";
 import { buildDailyBrief } from "../lib/brief";
 import { ask, PRESET_QUESTIONS } from "../lib/assistant";
+import { actionDraft } from "../lib/actionDraft";
 
 export default function Assistant({
   recentOrders,
@@ -25,6 +26,7 @@ export default function Assistant({
   const ops = useOpsSignals(version);
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
+  const [draft, setDraft] = useState<string[] | null>(null);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -84,6 +86,7 @@ export default function Assistant({
       topProblem: topProblem(problems)?.title ?? null,
     };
   }, [summary, ops.todayWaste, problems]);
+  const topP = topProblem(problems);
 
   const storeName = settings?.restaurantName || STORE_NAME;
   const brief = useMemo(
@@ -188,6 +191,32 @@ export default function Assistant({
           </>
         )}
       </ChartCard>
+
+      {topP && (
+        <ChartCard title="执行草稿" subtitle="基于当前最大问题自动生成操作步骤">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-zinc-300 truncate">{topP.title}</span>
+            <button
+              onClick={() => setDraft(actionDraft(topP.kind))}
+              className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 active:scale-95 transition-transform"
+            >
+              生成步骤
+            </button>
+          </div>
+          {draft && (
+            <ol className="mt-3 space-y-1.5">
+              {draft.map((s, i) => (
+                <li key={i} className="flex gap-2 text-sm text-zinc-200">
+                  <span className="text-orange-400 font-bold shrink-0">
+                    {i + 1}.
+                  </span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </ChartCard>
+      )}
     </div>
   );
 }
