@@ -1,5 +1,6 @@
 import { safeGetItem, safeSetItem } from "../utils/storage";
 import { checkpointService } from "../services/checkpoint";
+import { usbPrinter } from "../lib/usbPrinter";
 import { lanSync } from "../services/lanSync";
 import {
   verifyAdminPassword,
@@ -95,6 +96,35 @@ function shouldPrintOnce(key: string, ttlMs = 8000): boolean {
     }
   }
   return true;
+}
+
+async function printTicket(
+  order: any,
+  currency: string,
+  receiptSettings: any,
+  ticketType: "kitchen" | "addition" | "receipt",
+) {
+  if (usbPrinter.connected) {
+    try {
+      const ok = await usbPrinter.printOrder(
+        order,
+        receiptSettings,
+        ticketType,
+        currency,
+      );
+      if (ok) return;
+    } catch (e) {
+      console.error("[print] USB 打印失败，回退浏览器打印", e);
+    }
+  }
+  const m = await import("../lib/print");
+  if (ticketType === "kitchen") {
+    m.printReceipt(order, currency, receiptSettings, true);
+  } else if (ticketType === "addition") {
+    m.printReceipt(order, currency, receiptSettings, false, "addition");
+  } else {
+    m.printReceipt(order, currency, receiptSettings);
+  }
 }
 
 export default function AdminPanel({
@@ -442,9 +472,9 @@ export default function AdminPanel({
             if (order.unprintedNewOrder) {
               const printKey = `order:${order._id || order.id}`;
               if (shouldPrintOnce(printKey)) {
-                import("../lib/print").then((m) => {
-                  m.printReceipt(order, currency, receiptSettings, true); // print kitchen ticket
-                });
+                printTicket(order, currency, receiptSettings, "kitchen").catch(
+                  console.error,
+                );
               }
               needsUpdate = true;
               updatePayload.unprintedNewOrder = false;
@@ -460,16 +490,13 @@ export default function AdminPanel({
                   .join(",");
                 const printKey = `add:${order._id || order.id}:${itemsKey}`;
                 if (shouldPrintOnce(printKey)) {
-                  import("../lib/print").then((m) => {
-                    const dummyOrder = { ...order, items: addition.items };
-                    m.printReceipt(
-                      dummyOrder,
-                      currency,
-                      receiptSettings,
-                      false,
-                      "addition",
-                    );
-                  });
+                  const dummyOrder = { ...order, items: addition.items };
+                  printTicket(
+                    dummyOrder,
+                    currency,
+                    receiptSettings,
+                    "addition",
+                  ).catch(console.error);
                 }
               });
               needsUpdate = true;

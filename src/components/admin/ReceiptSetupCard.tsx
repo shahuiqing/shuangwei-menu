@@ -1,5 +1,7 @@
-import { Printer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Printer, Usb, Unplug } from "lucide-react";
 import type { ReceiptSettings } from "../../types/menu";
+import { usbPrinter } from "../../lib/usbPrinter";
 
 export function ReceiptSetupCard({
   receiptSettings,
@@ -16,6 +18,41 @@ export function ReceiptSetupCard({
   isPrintServer: boolean;
   setIsPrintServer: (value: boolean) => void;
 }) {
+  const [usbState, setUsbState] = useState(usbPrinter.state);
+  const [usbBusy, setUsbBusy] = useState(false);
+  const [usbMsg, setUsbMsg] = useState("");
+
+  useEffect(() => usbPrinter.subscribe(setUsbState), []);
+
+  const handleConnectUsb = async () => {
+    setUsbBusy(true);
+    setUsbMsg("");
+    try {
+      await usbPrinter.requestAndConnect();
+    } catch (e) {
+      setUsbMsg(String((e as Error)?.message || e));
+    } finally {
+      setUsbBusy(false);
+    }
+  };
+
+  const handleDisconnectUsb = async () => {
+    await usbPrinter.disconnect();
+  };
+
+  const handleTestUsb = async () => {
+    setUsbBusy(true);
+    setUsbMsg("");
+    try {
+      const ok = await usbPrinter.printTest(receiptSettings);
+      if (!ok) setUsbMsg("未连接 USB 打印机，请先连接");
+    } catch (e) {
+      setUsbMsg(String((e as Error)?.message || e));
+    } finally {
+      setUsbBusy(false);
+    }
+  };
+
   return (
     <div className="mb-6 bg-zinc-950 rounded-2xl border border-zinc-800/50 overflow-hidden">
       <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 bg-zinc-900/50">
@@ -364,6 +401,63 @@ export function ReceiptSetupCard({
                 </span>
               </div>
             </label>
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <div className="p-4 bg-zinc-900 border border-zinc-700 rounded-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Usb
+                    size={20}
+                    className={
+                      usbState.connected ? "text-green-500" : "text-zinc-500"
+                    }
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-white block">
+                      USB 热敏打印机（全自动出纸）
+                    </span>
+                    <span className="text-xs text-zinc-400">
+                      {usbState.connected
+                        ? `已连接：${usbState.name}`
+                        : usbState.supported
+                          ? "通过 WebUSB 直连打印机，新订单自动出纸，无需人工确认"
+                          : "当前浏览器不支持 WebUSB，请使用 Chrome 或 Edge"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {usbState.connected ? (
+                    <>
+                      <button
+                        onClick={handleTestUsb}
+                        disabled={usbBusy}
+                        className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white font-semibold rounded-lg px-3 py-2 text-xs flex items-center gap-1.5 border border-zinc-700"
+                      >
+                        <Printer size={14} /> 测试出纸
+                      </button>
+                      <button
+                        onClick={handleDisconnectUsb}
+                        disabled={usbBusy}
+                        className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 font-semibold rounded-lg px-3 py-2 text-xs flex items-center gap-1.5 border border-zinc-700"
+                      >
+                        <Unplug size={14} /> 断开
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={handleConnectUsb}
+                      disabled={usbBusy || !usbState.supported}
+                      className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold rounded-lg px-3 py-2 text-xs flex items-center gap-1.5"
+                    >
+                      <Usb size={14} /> {usbBusy ? "连接中..." : "连接打印机"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {usbMsg && (
+                <p className="text-xs text-amber-400 mt-2">{usbMsg}</p>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-semibold text-zinc-300 mb-2">
