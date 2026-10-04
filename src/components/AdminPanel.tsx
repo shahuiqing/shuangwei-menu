@@ -104,6 +104,14 @@ async function printTicket(
   receiptSettings: any,
   ticketType: "kitchen" | "addition" | "receipt",
 ) {
+  console.log(
+    "[print] printTicket",
+    ticketType,
+    "order=",
+    order._id || order.id,
+    "usbConnected=",
+    usbPrinter.connected,
+  );
   if (usbPrinter.connected) {
     try {
       const ok = await usbPrinter.printOrder(
@@ -112,6 +120,7 @@ async function printTicket(
         ticketType,
         currency,
       );
+      console.log("[print] USB printOrder 结果 =", ok);
       if (ok) return;
     } catch (e) {
       console.error("[print] USB 打印失败，回退浏览器打印", e);
@@ -462,6 +471,12 @@ export default function AdminPanel({
   }, []);
 
   useEffect(() => {
+    console.log(
+      "[print] 自动打印订阅已启动 isPrintServer=",
+      isPrintServer,
+      "usbConnected=",
+      usbPrinter.connected,
+    );
     const unsubscribe = api.subscribeToOrders((data) => {
       if (Array.isArray(data)) {
         data.forEach((order) => {
@@ -470,6 +485,11 @@ export default function AdminPanel({
             const updatePayload: any = {};
 
             if (order.unprintedNewOrder) {
+              console.log(
+                "[print] 收到未打印新订单",
+                order._id || order.id,
+                order.customerName,
+              );
               const printKey = `order:${order._id || order.id}`;
               if (shouldPrintOnce(printKey)) {
                 printTicket(order, currency, receiptSettings, "kitchen").catch(
