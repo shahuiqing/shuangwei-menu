@@ -98,6 +98,29 @@ describe("parseOrdersCsv · 汇总模式（本端导出格式）", () => {
   });
 });
 
+describe("平台来源识别", () => {
+  it("来源列命中 → isExternal；缺列/堂食 → false", () => {
+    const csv = [
+      "时间,桌号,金额,单号,来源",
+      "2026-10-04 12:00,A1,50,S1,美团外卖",
+      "2026-10-04 12:01,A2,60,S2,",
+      "2026-10-04 12:02,A3,70,S3,堂食",
+    ].join("\n");
+    const r = parseOrdersCsv(csv);
+    expect(r.orders.map((o) => o.isExternal)).toEqual([true, false, false]);
+  });
+
+  it("英文列头 platform / 无来源列", () => {
+    const withCol = [
+      "time,table,amount,orderno,platform",
+      "2026-10-04 12:00,A1,50,S1,EleMe",
+    ].join("\n");
+    expect(parseOrdersCsv(withCol).orders[0].isExternal).toBe(true);
+    const noCol = ["时间,桌号,金额,单号", "2026-10-04,A1,50,S9"].join("\n");
+    expect(parseOrdersCsv(noCol).orders[0].isExternal).toBe(false);
+  });
+});
+
 describe("幂等 id", () => {
   it("同 key 确定性、不同 key 不同", () => {
     expect(hashKey("O1|x")).toBe(hashKey("O1|x"));

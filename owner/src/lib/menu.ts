@@ -191,3 +191,33 @@ export async function deleteDish(
     deletedId: dishId,
   }));
 }
+
+/** 平台/导入订单菜品一键加菜单：分类不存在自动创建，同名菜不重复加 */
+export async function addDishAutoCategory(
+  title: string,
+  price: string,
+  categoryName = "平台外卖",
+): Promise<{ ok: boolean; createdCategory: boolean }> {
+  const name = title.trim();
+  if (!name) return { ok: false, createdCategory: false };
+  let createdCategory = false;
+  const ok = await mutate((cats) => {
+    let target = cats.find((c) => c.name === categoryName);
+    if (!target) {
+      createdCategory = true;
+      target = { id: genId("cat"), name: categoryName, items: [] };
+      cats = [...cats, target];
+    }
+    if ((target.items || []).some((it) => it.title === name)) {
+      return { cats };
+    }
+    const items = [
+      ...(target.items || []),
+      { id: genId("dish"), title: name, price },
+    ];
+    return {
+      cats: cats.map((c) => (c.id === target!.id ? { ...c, items } : c)),
+    };
+  });
+  return { ok, createdCategory };
+}

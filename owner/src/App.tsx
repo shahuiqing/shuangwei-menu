@@ -282,7 +282,9 @@ export default function App() {
                   onTab={setTab}
                 />
               )}
-              {tab === "orders" && <Orders version={version} />}
+              {tab === "orders" && (
+                <Orders version={version} settings={settings} />
+              )}
               {tab === "reports" && (
                 <Reports settings={settings} version={version} />
               )}

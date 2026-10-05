@@ -21,6 +21,8 @@ export interface ImportOrder {
   paymentMethod: string;
   total: number;
   items: ImportItem[];
+  /** 来源为美团/饿了么等外部平台（「来源」列命中关键词） */
+  isExternal?: boolean;
 }
 
 export interface ParseOrdersResult {
@@ -79,7 +81,11 @@ const COL = {
   total: ["金额", "总额", "合计", "总价", "total", "amount"],
   status: ["状态", "status"],
   pay: ["支付方式", "支付", "payment", "pay"],
+  source: ["来源", "平台", "渠道", "source", "channel", "platform"],
 };
+
+const EXTERNAL_SRC =
+  /美团|饿了么|外卖|meituan|eleme|ele\.me|waimai|dianping|外部|platform/i;
 
 function findCol(headers: string[], keys: string[]): number {
   const norm = headers.map((h) => h.trim().toLowerCase().replace(/[\s_]/g, ""));
@@ -155,6 +161,7 @@ export function parseOrdersCsv(text: string): ParseOrdersResult {
   const iTotal = findCol(headers, COL.total);
   const iStatus = findCol(headers, COL.status);
   const iPay = findCol(headers, COL.pay);
+  const iSrc = findCol(headers, COL.source);
 
   if (iT < 0) throw new Error("找不到「时间」列（时间/日期/datetime）");
   const mode: "detail" | "summary" =
@@ -187,6 +194,7 @@ export function parseOrdersCsv(text: string): ParseOrdersResult {
         ? STATUS_ALIAS[(row[iStatus] || "").trim().toLowerCase()]
         : "") || "completed";
     const pay = (iPay >= 0 ? (row[iPay] || "").trim() : "") || "";
+    const src = (iSrc >= 0 ? (row[iSrc] || "").trim() : "") || "";
     const key = no || `${time}|${table}`;
 
     let o = map.get(key);
@@ -200,6 +208,7 @@ export function parseOrdersCsv(text: string): ParseOrdersResult {
         paymentMethod: pay,
         total: 0,
         items: [],
+        isExternal: EXTERNAL_SRC.test(src),
       };
       map.set(key, o);
     }

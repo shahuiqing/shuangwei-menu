@@ -37,6 +37,9 @@ import {
 } from "../lib/aggregate";
 import { parseOrdersCsv } from "../lib/csv";
 import { logAction } from "../lib/auditLog";
+import { addDishAutoCategory } from "../lib/menu";
+
+const EXTERNAL_TAG = "外卖";
 import {
   getOrderTag,
   setOrderTag,
@@ -116,7 +119,13 @@ function exportCsv(rows: any[]) {
   URL.revokeObjectURL(a.href);
 }
 
-export default function Orders({ version = 0 }: { version?: number }) {
+export default function Orders({
+  version = 0,
+  settings = null,
+}: {
+  version?: number;
+  settings?: any;
+}) {
   const [range, setRange] = useState<RangeKey>("today");
   const [status, setStatus] = useState("all");
   const [q, setQ] = useState("");
@@ -134,6 +143,20 @@ export default function Orders({ version = 0 }: { version?: number }) {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [reload, setReload] = useState(0);
+
+  // 菜单已有菜名（判断订单菜品是否需要「加入菜单」）
+  const menuTitles = useMemo(() => {
+    const s = new Set<string>();
+    const cats = settings?.categories;
+    if (Array.isArray(cats)) {
+      for (const c of cats) {
+        for (const it of c?.items || []) {
+          if (it?.title) s.add(String(it.title));
+        }
+      }
+    }
+    return s;
+  }, [settings]);
 
   // 超时高亮：阈值可配，每分钟重算
   const [lateCfg] = useLateConfig();
@@ -328,12 +351,14 @@ export default function Orders({ version = 0 }: { version?: number }) {
     }
     const sum = parsed.orders.reduce((s, o) => s + o.total, 0);
     const days = new Set(parsed.orders.map((o) => o.timestamp.slice(0, 10)));
+    const ext = parsed.orders.filter((o) => o.isExternal).length;
     const warn =
       parsed.mode === "summary"
         ? "\n（汇总模式：只有金额，无菜品明细，菜品报表不含这些单）"
         : "";
     const ok = confirm(
       `解析到 ${parsed.orders.length} 单 · ${days.size} 天 · 合计 ${fmtMoney(sum)}` +
+        `${ext ? ` · 平台 ${ext} 单` : ""}` +
         `${parsed.skipped ? `\n跳过 ${parsed.skipped} 行` : ""}` +
         `${warn}\n\n导入为已完成的历史订单，不会扣减库存；重复导入会自动跳过。确认导入？`,
     );
@@ -351,6 +376,23 @@ export default function Orders({ version = 0 }: { version?: number }) {
         : `已导入 ${n} 单（其余为重复记录）`,
     );
     setReload((v) => v + 1);
+  };
+
+  // 平台/导入订单的菜品不在菜单时，详情里一键加入（自动建「平台外卖」分类）
+  const addToMenu = async (it: any) => {
+    const title = String(it?.name || it?.title || "").trim();
+    if (!title) return;
+    const price = String(Number(it?.price) || 0);
+    setBusy(true);
+    const r = await addDishAutoCategory(title, price);
+    setBusy(false);
+    if (!r.ok) return toast.error("加入失败：请确认已连接数据库");
+    logAction("菜品加入菜单", title);
+    toast.success(
+      r.createdCategory
+        ? `已加入「平台外卖」分类：${title}`
+        : `已加入菜单：${title}`,
+    );
   };
 
   // 异常订单队列：退菜/赠送/员工餐/试菜（本地标记）在当前页内过滤
@@ -511,6 +553,11 @@ export default function Orders({ version = 0 }: { version?: number }) {
                               "normal"
                             }
                           />
+                          {Boolean(o.isExternal) && (
+                            <span className="inline-flex text-[11px] px-1.5 py-0.5 rounded-full font-bold bg-sky-500/15 text-sky-400">
+                              {EXTERNAL_TAG}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mt-1.5">
                           <Clock size={12} className="shrink-0" />
@@ -604,6 +651,11 @@ export default function Orders({ version = 0 }: { version?: number }) {
                                 "normal"
                               }
                             />
+                            {Boolean(o.isExternal) && (
+                              <span className="inline-flex text-[11px] px-1.5 py-0.5 rounded-full font-bold bg-sky-500/15 text-sky-400">
+                                {EXTERNAL_TAG}
+                              </span>
+                            )}
                             {late && (
                               <span className="inline-flex items-center mt-1.5 text-[11px] px-2 py-0.5 rounded-full font-bold bg-red-500/15 text-red-400">
                                 超时 {late.overdueMin} 分
@@ -756,24 +808,41 @@ export default function Orders({ version = 0 }: { version?: number }) {
               </div>
 
               <div className="space-y-2">
-                {orderItems(detail).map((it, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between items-center bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
-                  >
-                    <span className="text-zinc-200 truncate mr-2">
-                      {it?.name || it?.title}
-                    </span>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
-                        ×{itemQty(it)}
+                {orderItems(detail).map((it, i) => {
+                  const title = String(it?.name || it?.title || "").trim();
+                  const needMenu =
+                    !!title &&
+                    !menuTitles.has(title) &&
+                    detail?.status !== "cancelled";
+                  return (
+                    <div
+                      key={i}
+                      className="flex justify-between items-center bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
+                    >
+                      <span className="text-zinc-200 truncate mr-2">
+                        {title}
                       </span>
-                      <span className="tnum text-zinc-300 w-16 text-right">
-                        {fmtMoney(itemRevenue(it))}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {needMenu && (
+                          <button
+                            disabled={busy}
+                            onClick={() => addToMenu(it)}
+                            title="把这道菜加入菜单（自动建「平台外卖」分类）"
+                            className="text-[11px] font-semibold px-2 py-1 rounded-md bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50"
+                          >
+                            + 菜单
+                          </button>
+                        )}
+                        <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
+                          ×{itemQty(it)}
+                        </span>
+                        <span className="tnum text-zinc-300 w-16 text-right">
+                          {fmtMoney(itemRevenue(it))}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-4 rounded-2xl bg-zinc-950 border border-white/5 px-4 py-3.5 flex items-center justify-between">
