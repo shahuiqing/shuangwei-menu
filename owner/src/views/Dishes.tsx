@@ -164,7 +164,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
   };
 
   return (
-    <div className="space-y-3.5 sm:space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
         <button
           onClick={load}

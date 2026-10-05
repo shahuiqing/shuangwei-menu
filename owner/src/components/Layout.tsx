@@ -66,6 +66,16 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "assistant", label: "AI 助手", icon: Sparkles },
 ];
 
+// 侧栏分组：15 项平铺难以扫读，按业务域分组（成熟管理端的通行做法）
+const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
+  { title: "经营", items: ["dashboard", "reports", "assistant"] },
+  { title: "订单与任务", items: ["orders", "tasks"] },
+  { title: "菜品", items: ["dishes", "menu", "recipe"] },
+  { title: "采购与库存", items: ["procurement", "inventory", "waste"] },
+  { title: "成本", items: ["cost", "consumption"] },
+  { title: "系统", items: ["staff", "settings"] },
+];
+
 // 页面副标题（移动端大标题下方的一行说明）
 const SUBTITLE: Partial<Record<OwnerTab, string>> = {
   dashboard: "今日经营概览 · 实时数据",
@@ -112,7 +122,7 @@ function TabItem({
       className="relative flex-1 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"
     >
       {on && (
-        <span className="absolute top-0 h-[3px] w-7 rounded-b-full bg-gradient-to-r from-orange-400 to-orange-600 shadow-[0_0_10px_rgba(249,115,22,0.8)]" />
+        <span className="absolute top-0 h-[3px] w-7 rounded-b-full bg-orange-500" />
       )}
       <span
         className={`flex items-center justify-center w-12 h-8 rounded-full transition-all ${
@@ -256,9 +266,9 @@ function ThemeToggle() {
       onClick={toggle}
       aria-label={theme === "dark" ? "切换到浅色" : "切换到深色"}
       title={theme === "dark" ? "浅色模式" : "深色模式"}
-      className="active:scale-90 transition-transform w-10 h-10 flex items-center justify-center text-zinc-300 hover:text-white bg-white/5 rounded-full ring-1 ring-white/10"
+      className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
     >
-      {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
     </button>
   );
 }
@@ -330,23 +340,38 @@ export function Layout({
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {NAV.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                tab === id
-                  ? "bg-gradient-to-r from-orange-500/20 to-orange-600/5 text-orange-300 ring-1 ring-orange-500/25 shadow-[0_6px_18px_-10px_rgba(234,88,12,0.8)]"
-                  : "text-zinc-400 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              {tab === id && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-orange-400" />
-              )}
-              <Icon size={18} />
-              {label}
-            </button>
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+          {NAV_GROUPS.map((g) => (
+            <div key={g.title} className="mb-4 last:mb-0">
+              <div className="px-3 mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-zinc-600">
+                {g.title}
+              </div>
+              <div className="space-y-0.5">
+                {g.items.map((id) => {
+                  const item = NAV.find((n) => n.id === id)!;
+                  const Icon = item.icon;
+                  const on = tab === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setTab(id)}
+                      aria-current={on ? "page" : undefined}
+                      className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+                        on
+                          ? "bg-orange-500/10 text-orange-300"
+                          : "text-zinc-400 hover:text-zinc-100 hover:bg-white/5"
+                      }`}
+                    >
+                      {on && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r-full bg-orange-400" />
+                      )}
+                      <Icon size={16} className={on ? "text-orange-400" : ""} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="p-3 border-t border-white/5 space-y-2">
@@ -385,7 +410,7 @@ export function Layout({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* 顶部栏：移动端 App 风格（头像+店名+状态+刷新）；桌面端标题 */}
         <header
-          className={`sticky top-0 z-30 glass-bar transition-shadow duration-300 ${
+          className={`sticky top-0 z-30 glass-bar border-b border-white/[0.06] transition-shadow duration-300 ${
             scrolled
               ? "shadow-[0_14px_30px_-22px_rgba(0,0,0,0.85)]"
               : "shadow-none"
@@ -425,10 +450,10 @@ export function Layout({
               </div>
             </div>
             <div className="hidden lg:block">
-              <div className="text-lg font-bold text-white leading-tight">
+              <div className="text-xl font-semibold tracking-tight text-white leading-tight">
                 {active?.label}
               </div>
-              <div className="text-[11px] text-zinc-500 mt-0.5">
+              <div className="text-[13px] text-zinc-500 mt-0.5 leading-snug">
                 {SUBTITLE[tab]}
               </div>
             </div>
@@ -454,10 +479,10 @@ export function Layout({
               <button
                 onClick={onRefresh}
                 title="刷新"
-                className="active:scale-90 transition-transform w-10 h-10 flex items-center justify-center text-zinc-300 hover:text-white bg-white/5 rounded-full ring-1 ring-white/10"
+                className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
               >
                 <RefreshCw
-                  size={17}
+                  size={16}
                   className={loading ? "animate-spin" : ""}
                 />
               </button>
@@ -511,15 +536,14 @@ export function Layout({
                 : undefined,
             }}
           >
-            {/* 移动端大标题（App 风格：标题 + 副标题 + 渐变装饰线） */}
+            {/* 移动端大标题（App 风格：标题 + 副标题） */}
             <div className="lg:hidden pb-4">
-              <h1 className="text-[26px] font-black tracking-tight text-white leading-tight">
+              <h1 className="text-2xl font-bold tracking-tight text-white leading-tight">
                 {active?.label}
               </h1>
               <p className="text-[13px] text-zinc-500 mt-1 leading-snug">
                 {SUBTITLE[tab] ?? " "}
               </p>
-              <div className="title-rule mt-2.5 h-[3px] w-24 rounded-full" />
             </div>
             {children}
           </div>

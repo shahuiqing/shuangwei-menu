@@ -306,7 +306,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
     : rows;
 
   return (
-    <div className="space-y-3.5 sm:space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
         <Segmented
           value={range}
@@ -433,7 +433,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg font-black text-white leading-none">
+                          <span className="text-lg font-bold text-white leading-none">
                             {tableName(o)}
                           </span>
                           <span className="text-[11px] text-zinc-500">
@@ -466,7 +466,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                             超时 {late.overdueMin} 分
                           </span>
                         )}
-                        <span className="tnum text-orange-400 font-black text-base leading-none">
+                        <span className="tnum text-orange-400 font-bold text-base leading-none">
                           {fmtMoney(orderTotal(o))}
                         </span>
                       </div>
@@ -478,7 +478,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
           </div>
 
           {/* 桌面表格 */}
-          <div className="hidden sm:block bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
+          <div className="hidden sm:block card-surface overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -611,7 +611,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
             >
               <div>
                 <div className="flex items-center gap-2.5">
-                  <span className="text-3xl font-black text-white leading-none">
+                  <span className="text-3xl font-bold text-white leading-none">
                     {tableName(detail)}
                   </span>
                   <span
@@ -713,7 +713,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
               <div className="mt-4 rounded-2xl bg-zinc-950 border border-white/5 px-4 py-3.5 flex items-center justify-between">
                 <span className="text-sm text-zinc-400">合计</span>
                 <span
-                  className="tnum text-2xl font-black"
+                  className="tnum text-2xl font-bold"
                   style={{ color: "#f97316" }}
                 >
                   {fmtMoney(detail.finalTotal ?? orderTotal(detail))}

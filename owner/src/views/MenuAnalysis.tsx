@@ -98,7 +98,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
   const valueLabel = mode === "revenue" ? "营收" : "毛利";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex items-center gap-3 flex-wrap">
         <Segmented
           value={range}
@@ -135,10 +135,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
           const list = points.filter((p) => p.quad === q);
           const total = list.reduce((s, p) => s + p.value, 0);
           return (
-            <div
-              key={q}
-              className="bg-zinc-900 border border-white/5 rounded-2xl p-4"
-            >
+            <div key={q} className="card-surface p-4">
               <div className="flex items-center gap-2">
                 <span
                   className="w-3 h-3 rounded-sm"
@@ -155,7 +152,7 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
                 {QUAD_LABEL[q].hint}
               </div>
               <div
-                className="text-xl font-black mt-2"
+                className="text-xl font-bold mt-2"
                 style={{ color: QUAD_LABEL[q].color }}
               >
                 {fmtMoney(total)}

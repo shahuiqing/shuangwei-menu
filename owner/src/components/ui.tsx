@@ -63,12 +63,12 @@ export function KpiCard({
   const anim = useCountUp(valueNum);
   const display = valueNum !== undefined ? format(anim ?? 0) : value;
   return (
-    <div className="card-surface p-4 sm:p-5 active:scale-[0.99] transition-all duration-200 overflow-hidden hover:border-white/10">
+    <div className="card-surface p-4 sm:p-5 transition-colors duration-200 overflow-hidden hover:border-white/15">
       <div className="flex items-start justify-between">
         <div
-          className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl ${bg} ${accent} flex items-center justify-center ring-1 ring-white/5`}
+          className={`w-10 h-10 sm:w-10 sm:h-10 rounded-xl ${bg} ${accent} flex items-center justify-center ring-1 ring-white/5`}
         >
-          <Icon size={20} />
+          <Icon size={19} />
         </div>
         {change !== undefined && (
           <span
@@ -91,10 +91,10 @@ export function KpiCard({
           </span>
         )}
       </div>
-      <div className="text-zinc-400 text-xs sm:text-sm mt-3 sm:mt-4">
+      <div className="text-zinc-400 text-xs sm:text-[13px] mt-3 sm:mt-4">
         {label}
       </div>
-      <div className={`tnum text-2xl sm:text-3xl font-black mt-0.5 ${accent}`}>
+      <div className={`tnum text-2xl sm:text-3xl font-bold mt-0.5 ${accent}`}>
         {display}
       </div>
       {sub && <div className="text-[11px] text-zinc-500 mt-1">{sub}</div>}
@@ -230,7 +230,7 @@ export function SkeletonTable({ rows = 5 }: { rows?: number }) {
         ))}
       </div>
 
-      <div className="hidden sm:block bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="hidden sm:block card-surface overflow-hidden">
         <div className="flex items-center gap-4 px-4 py-3 border-b border-white/5">
           <Skeleton className="h-3 w-14" />
           <Skeleton className="h-3 w-32" />

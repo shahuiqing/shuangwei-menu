@@ -103,7 +103,7 @@ export default function Recipe({
   const noRecipe = dishes.filter((d) => !byDish.has(d.name));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={load}

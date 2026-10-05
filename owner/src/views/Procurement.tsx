@@ -414,7 +414,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard
           icon={Wallet}

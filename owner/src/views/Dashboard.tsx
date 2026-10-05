@@ -447,7 +447,7 @@ export default function Dashboard({
       <div className="space-y-3">
         {/* Hero：营业收入大卡（品牌渐变 + 迷你走势 + 环比） */}
         <div
-          className="relative overflow-hidden rounded-[26px] p-5 sm:p-6 text-white"
+          className="relative overflow-hidden rounded-2xl p-5 sm:p-6 text-white"
           style={{
             background: "linear-gradient(135deg, #fb923c 0%, #ea580c 100%)",
             boxShadow: "0 22px 45px -26px rgba(234,88,12,0.95)",
@@ -701,7 +701,7 @@ export default function Dashboard({
                   <div className="text-xs text-zinc-500 mt-0.5">{top.desc}</div>
                 </div>
                 {top.impact > 0 && (
-                  <span className="shrink-0 text-red-400 font-black tnum text-lg">
+                  <span className="shrink-0 text-red-400 font-bold tnum text-lg">
                     {fmtMoney(top.impact)}
                   </span>
                 )}
@@ -739,7 +739,7 @@ export default function Dashboard({
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-zinc-950 rounded-xl px-3 py-3">
               <div className="text-[11px] text-zinc-500">本周损耗</div>
-              <div className="text-lg font-black tnum text-zinc-100 mt-1">
+              <div className="text-lg font-bold tnum text-zinc-100 mt-1">
                 {fmtMoney(weekWaste.thisWeek)}
               </div>
               <div className="text-[11px] text-zinc-500 mt-0.5">
@@ -748,7 +748,7 @@ export default function Dashboard({
             </div>
             <div className="bg-zinc-950 rounded-xl px-3 py-3">
               <div className="text-[11px] text-zinc-500">本周解决问题</div>
-              <div className="text-lg font-black tnum text-green-400 mt-1">
+              <div className="text-lg font-bold tnum text-green-400 mt-1">
                 {solvedThisWeek}
               </div>
               <div className="text-[11px] text-zinc-500 mt-0.5">个已解决</div>
@@ -756,7 +756,7 @@ export default function Dashboard({
             <div className="bg-zinc-950 rounded-xl px-3 py-3">
               <div className="text-[11px] text-zinc-500">食材成本率</div>
               <div
-                className={`text-lg font-black tnum mt-1 ${foodCostRate > 35 ? "text-red-400" : "text-teal-400"}`}
+                className={`text-lg font-bold tnum mt-1 ${foodCostRate > 35 ? "text-red-400" : "text-teal-400"}`}
               >
                 {foodCostRate.toFixed(1)}%
               </div>

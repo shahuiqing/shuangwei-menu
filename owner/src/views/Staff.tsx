@@ -64,7 +64,7 @@ export default function StaffView() {
   ).length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex items-center flex-wrap gap-3">
         <button
           onClick={load}

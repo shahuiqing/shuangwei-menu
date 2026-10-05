@@ -100,7 +100,7 @@ export default function Tasks({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <ChartCard
         title="问题池"
         subtitle={`${problems.length} 个待处理问题 · 点「任务化」进入执行`}

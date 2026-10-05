@@ -127,7 +127,7 @@ export default function Assistant({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <ChartCard
         title="每日简报"
         subtitle="模板 + 真实数据自动生成"

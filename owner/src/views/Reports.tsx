@@ -133,7 +133,7 @@ export default function Reports({
   const maxVal = Math.max(1, ...rows.map((r) => r.value));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <Segmented
           value={range}

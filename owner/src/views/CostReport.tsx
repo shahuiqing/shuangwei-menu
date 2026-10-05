@@ -89,7 +89,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex items-center gap-3 flex-wrap">
         <Segmented
           value={range}
