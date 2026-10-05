@@ -6,6 +6,7 @@
  */
 import { supabase } from "./supabase";
 import { saveSnap, snapFallback } from "./snapshot";
+import { fetchBackfill, backfillTotals, applyBackfill } from "./backfill";
 import type { RangeKey } from "./analytics";
 
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -110,17 +111,21 @@ export async function salesSummary(
   start: string,
   end: string,
 ): Promise<SalesSummary> {
-  const rows = await call<SalesSummary[]>(
-    "owner_sales_summary",
-    { p_start: start, p_end: end },
-    [],
-  );
+  const [rows, bf] = await Promise.all([
+    call<SalesSummary[]>(
+      "owner_sales_summary",
+      { p_start: start, p_end: end },
+      [],
+    ),
+    fetchBackfill(),
+  ]);
   const r = rows[0];
+  const t = backfillTotals(bf, start, end);
   return {
-    revenue: Number(r?.revenue || 0),
-    orders: Number(r?.orders || 0),
+    revenue: Number(r?.revenue || 0) + t.revenue,
+    orders: Number(r?.orders || 0) + t.orders,
     items: Number(r?.items || 0),
-    completed: Number(r?.completed || 0),
+    completed: Number(r?.completed || 0) + t.orders,
   };
 }
 
@@ -136,16 +141,20 @@ export async function dailySeries(
   start: string,
   end: string,
 ): Promise<DailyPoint[]> {
-  const rows = await call<DailyPoint[]>(
-    "owner_daily",
-    { p_start: start, p_end: end, p_tz: TZ },
-    [],
-  );
-  return rows.map((r) => ({
+  const [rows, bf] = await Promise.all([
+    call<DailyPoint[]>(
+      "owner_daily",
+      { p_start: start, p_end: end, p_tz: TZ },
+      [],
+    ),
+    fetchBackfill(),
+  ]);
+  const mapped = rows.map((r) => ({
     day: String(r.day),
     revenue: Number(r.revenue || 0),
     orders: Number(r.orders || 0),
   }));
+  return applyBackfill(mapped, bf, start, end);
 }
 
 export interface DishStat {
