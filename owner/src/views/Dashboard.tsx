@@ -77,7 +77,7 @@ import { buildSummary, summaryLines, type SummaryInput } from "../lib/summary";
 import { stocktakeDue, lastStocktakeAt } from "../lib/stocktakeReminder";
 import { buildProblems, topProblem } from "../lib/problems";
 import { dataConfidence, CONFIDENCE_LABEL } from "../lib/confidence";
-import type { OwnerTab } from "../components/Layout";
+import { NAV, type OwnerTab } from "../components/Layout";
 import { useChartTheme } from "../lib/theme";
 
 const RANGE_LABEL: Record<string, string> = {
@@ -442,6 +442,22 @@ export default function Dashboard({
         <span className="hidden sm:inline text-[11px] text-zinc-500">
           服务端聚合 · 环比上一周期
         </span>
+      </div>
+
+      {/* 快捷直达：首页一键跳所有页面（移动端横滑、桌面自动换行） */}
+      <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible">
+        {NAV.filter((n) => n.id !== "dashboard").map(
+          ({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => onTab?.(id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[12.5px] font-medium text-zinc-300 hover:text-orange-300 hover:border-orange-500/40 transition-colors shrink-0"
+            >
+              <Icon size={14} className="text-zinc-500" />
+              {label}
+            </button>
+          ),
+        )}
       </div>
 
       <div className="space-y-3">

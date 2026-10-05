@@ -17,11 +17,8 @@ import {
   NotebookText,
   BadgeDollarSign,
   Flame,
-  LayoutGrid,
   Sun,
   Moon,
-  X,
-  ChevronRight,
   PackageX,
   Download,
   ClipboardCheck,
@@ -67,7 +64,8 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
 ];
 
 // 侧栏分组：15 项平铺难以扫读，按业务域分组（成熟管理端的通行做法）
-const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
+// 同时作为设置页「全部功能」统一入口的数据源
+export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
   { title: "经营", items: ["dashboard", "reports", "assistant"] },
   { title: "订单与任务", items: ["orders", "tasks"] },
   { title: "菜品", items: ["dishes", "menu", "recipe"] },
@@ -143,16 +141,6 @@ function TabItem({
     </button>
   );
 }
-
-// 移动端「更多」里的分组
-const MOBILE_GROUPS: { title: string; items: OwnerTab[] }[] = [
-  { title: "经营", items: ["dishes", "reports", "menu", "assistant"] },
-  {
-    title: "供应与成本",
-    items: ["procurement", "inventory", "waste", "recipe"],
-  },
-  { title: "管理", items: ["tasks", "staff", "settings"] },
-];
 
 /** 移动端下拉刷新：仅在页面顶部、向下拖动超过阈值时触发刷新 */
 function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
@@ -259,6 +247,21 @@ function useInstallHint() {
   return { can, install };
 }
 
+/** 「安装到主屏幕」按钮（浏览器不可安装时返回 null）；给设置页统一入口用 */
+export function InstallButton() {
+  const { can, install } = useInstallHint();
+  if (!can) return null;
+  return (
+    <button
+      onClick={install}
+      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-orange-300 bg-orange-500/10 ring-1 ring-orange-500/25 hover:bg-orange-500/15 transition-colors"
+    >
+      <Download size={16} />
+      安装到主屏幕
+    </button>
+  );
+}
+
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
   return (
@@ -296,13 +299,9 @@ export function Layout({
   configured: boolean;
   children: ReactNode;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
   const active = NAV.find((n) => n.id === tab);
-  const go = (t: OwnerTab) => {
-    setTab(t);
-    setMoreOpen(false);
-  };
+  const go = setTab;
   const pull = usePullToRefresh(onRefresh, true);
   const pulling = pull > 4;
   const ready = pull > 56;
@@ -550,129 +549,14 @@ export function Layout({
         </main>
       </div>
 
-      {/* 移动端底部 Tab 栏（5 个目的地 + 中间凸起「更多」） */}
+      {/* 移动端底部 Tab 栏（4 个高频目的地均分；全部功能统一在设置页） */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 glass-bar border-t border-white/[0.06] safe-bottom">
         <div className="flex items-stretch h-[58px]">
-          {MOBILE_PRIMARY.slice(0, 2).map((id) => (
-            <TabItem key={id} id={id} tab={tab} go={go} />
-          ))}
-
-          {/* 中间凸起按钮：打开全部功能 */}
-          <div className="relative flex-1 flex items-end justify-center">
-            <button
-              onClick={() => setMoreOpen(true)}
-              aria-label="全部功能"
-              className="absolute -top-6 w-14 h-14 rounded-full btn-brand text-white flex items-center justify-center ring-4 ring-zinc-950 active:scale-95 transition-transform shadow-[0_10px_24px_-8px_rgba(234,88,12,0.9)]"
-            >
-              <LayoutGrid size={24} strokeWidth={2.3} />
-            </button>
-            <span className="pb-1.5 text-[10px] font-medium text-zinc-500">
-              更多
-            </span>
-          </div>
-
-          {MOBILE_PRIMARY.slice(2).map((id) => (
+          {MOBILE_PRIMARY.map((id) => (
             <TabItem key={id} id={id} tab={tab} go={go} />
           ))}
         </div>
       </nav>
-
-      {/* 移动端「更多」面板（分组 + 抽屉动画） */}
-      {moreOpen && (
-        <div
-          className="scrim lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end animate-[fadeIn_.15s_ease]"
-          onClick={() => setMoreOpen(false)}
-        >
-          <div
-            className="w-full bg-zinc-900 border-t border-white/10 rounded-t-[28px] px-5 pt-3 pb-8 shadow-2xl animate-[slideUp_.22s_cubic-bezier(.2,.8,.2,1)] safe-bottom"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto h-1.5 w-10 rounded-full bg-zinc-700 mb-4" />
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <span className="text-white font-bold text-base block">
-                  全部功能
-                </span>
-                <span className="text-[11px] text-zinc-500">
-                  {storeName} · 老板管理端
-                </span>
-              </div>
-              <button
-                onClick={() => setMoreOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/5 text-zinc-400 flex items-center justify-center active:scale-90 transition-transform"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-5">
-              {MOBILE_GROUPS.map((g) => (
-                <div key={g.title}>
-                  <div className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2 px-1">
-                    {g.title}
-                  </div>
-                  <div className="rounded-2xl bg-zinc-950/60 border border-white/5 overflow-hidden divide-y divide-white/5">
-                    {g.items.map((id) => {
-                      const item = NAV.find((n) => n.id === id)!;
-                      const Icon = item.icon;
-                      const on = tab === id;
-                      return (
-                        <button
-                          key={id}
-                          onClick={() => go(id)}
-                          className={`w-full flex items-center gap-3.5 px-4 py-3.5 active:bg-white/5 transition-colors ${
-                            on ? "text-orange-400" : "text-zinc-200"
-                          }`}
-                        >
-                          <span
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                              on
-                                ? "bg-orange-500/15 text-orange-400"
-                                : "bg-white/5 text-zinc-400"
-                            }`}
-                          >
-                            <Icon size={18} />
-                          </span>
-                          <span className="text-[15px] font-medium flex-1 text-left">
-                            {item.label}
-                          </span>
-                          <ChevronRight
-                            size={18}
-                            className={on ? "text-orange-400" : "text-zinc-600"}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              {install.can && (
-                <button
-                  onClick={install.install}
-                  className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-500/25 font-medium active:scale-[0.99] transition-transform"
-                >
-                  <span className="w-9 h-9 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
-                    <Download size={18} />
-                  </span>
-                  把「{storeName}」装到主屏幕
-                  <ChevronRight size={18} className="text-orange-400/70" />
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={() => {
-                setMoreOpen(false);
-                onLogout();
-              }}
-              className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-500/10 text-red-400 font-semibold active:scale-[0.98] transition-transform"
-            >
-              <LogOut size={18} /> 退出登录
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
