@@ -18,6 +18,7 @@ const Dishes = lazy(() => import("./views/Dishes"));
 const MenuAnalysis = lazy(() => import("./views/MenuAnalysis"));
 const Procurement = lazy(() => import("./views/Procurement"));
 const Inventory = lazy(() => import("./views/Inventory"));
+const Trace = lazy(() => import("./views/Trace"));
 const Waste = lazy(() => import("./views/Waste"));
 const Recipe = lazy(() => import("./views/Recipe"));
 const CostReport = lazy(() => import("./views/CostReport"));
@@ -292,6 +293,7 @@ export default function App() {
               {tab === "menu" && <MenuAnalysis version={version} />}
               {tab === "procurement" && <Procurement version={version} />}
               {tab === "inventory" && <Inventory version={version} />}
+              {tab === "trace" && <Trace version={version} />}
               {tab === "waste" && <Waste version={version} />}
               {tab === "recipe" && (
                 <Recipe settings={settings} version={version} />

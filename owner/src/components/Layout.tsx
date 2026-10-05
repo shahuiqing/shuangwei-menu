@@ -21,6 +21,7 @@ import {
   Download,
   ClipboardCheck,
   Sparkles,
+  Route,
 } from "lucide-react";
 import { useTheme, THEMES, type Theme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
@@ -35,6 +36,7 @@ export type OwnerTab =
   | "menu"
   | "procurement"
   | "inventory"
+  | "trace"
   | "waste"
   | "recipe"
   | "cost"
@@ -52,6 +54,7 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "menu", label: "菜单分析", icon: BarChart3 },
   { id: "procurement", label: "采购管理", icon: ShoppingCart },
   { id: "inventory", label: "库存管理", icon: Boxes },
+  { id: "trace", label: "全链路溯源", icon: Route },
   { id: "waste", label: "损耗分析", icon: PackageX },
   { id: "recipe", label: "配方 BOM", icon: NotebookText },
   { id: "cost", label: "成本毛利", icon: BadgeDollarSign },
@@ -67,7 +70,10 @@ export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
   { title: "经营", items: ["dashboard", "reports", "assistant"] },
   { title: "订单与任务", items: ["orders", "tasks"] },
   { title: "菜品", items: ["dishes", "menu", "recipe"] },
-  { title: "采购与库存", items: ["procurement", "inventory", "waste"] },
+  {
+    title: "采购与库存",
+    items: ["procurement", "inventory", "trace", "waste"],
+  },
   { title: "成本", items: ["cost", "consumption"] },
   { title: "系统", items: ["staff", "settings"] },
 ];
@@ -81,6 +87,7 @@ const SUBTITLE: Partial<Record<OwnerTab, string>> = {
   menu: "单品盈利与销量排行",
   procurement: "进货记录与供应商",
   inventory: "原料库存与预警",
+  trace: "订单→菜品→原料→采购批次",
   waste: "报损登记与损耗率",
   recipe: "菜品用料与成本基准",
   cost: "配方成本 × 单价的毛利核算",
