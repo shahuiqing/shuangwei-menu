@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "project": "炙·双味居 老板管理端",
+  "brief": "所有候选共同表达同一份内容：营业看板首屏——今日营收 ¥12,480、订单 186 单、客单价 ¥67.1、毛利 ¥7,320、成本率 32.1%，含近 7 日营收趋势、分类销量占比、本周改善。主要任务是让老板一秒读懂今天的经营状况，并看到数据间的层次。",
+  "round": "01",
+  "candidates": [
+    {
+      "id": "baseline",
+      "name": "现状",
+      "concept": "现有设计：纯色深底 + 品牌橙 + 卡片网格。",
+      "typography": "Microsoft YaHei 无衬线，营收 40px 粗体，KPI 26px。",
+      "palette": ["#0a0a0c", "#131317", "#f97316"],
+      "traits": ["卡片网格", "橙色渐变 Hero", "柔和阴影"],
+      "kind": "html",
+      "source": "baseline.html",
+      "baseline": true
+    },
+    {
+      "id": "a-charcoal",
+      "name": "炭火账房",
+      "concept": "像坐在打烊后留着炭火余温的柜台前，借着一点光翻看今天的流水。",
+      "typography": "无衬线正文 + tabular 数字；营收 44px 粗体带余烬微光，KPI 26px。",
+      "palette": ["#0b0a09", "#f97316", "#fb923c"],
+      "traits": ["炭火渐变 Hero", "暖黑卡片 + 暖色描边", "数字是唯一发光体"],
+      "kind": "html",
+      "source": "a-charcoal.html"
+    },
+    {
+      "id": "b-ledger",
+      "name": "明档流水",
+      "concept": "像翻一张张当日流水单，数字即全部，没有一句废话。",
+      "typography": "等宽数字（SF Mono/Consolas）承担识别，正文无衬线；营收 46px 冷青。",
+      "palette": ["#0b0c0e", "#141519", "#38bdf8"],
+      "traits": ["收银条式汇总", "高密度流水表", "冷青唯一强调色"],
+      "kind": "html",
+      "source": "b-ledger.html"
+    },
+    {
+      "id": "c-zhangben",
+      "name": "东家账本",
+      "concept": "像翻开一本毛笔竖排的老账本，安静、克制、留白，数字一笔一划。",
+      "typography": "宋体（Songti SC / SimSun）标题与数字，营收 88px 大字 + 朱砂印。",
+      "palette": ["#f5f1e8", "#1a1611", "#c0392b"],
+      "traits": ["宣纸暖白留白", "宋体大字 + 竖排标题", "朱砂印章"],
+      "kind": "html",
+      "source": "c-zhangben.html"
+    }
+  ]
+}

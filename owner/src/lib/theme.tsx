@@ -8,7 +8,8 @@ import {
 import type { ReactNode } from "react";
 import { localRaw, localSetRaw } from "./localdb";
 
-export type Theme = "dark" | "tech" | "emerald" | "violet" | "light";
+export type Theme =
+  "zhangben" | "dark" | "tech" | "emerald" | "violet" | "light";
 
 /** 可选主题（设置抽屉里切换）：色板圆点 + 名称 */
 export const THEMES: {
@@ -17,6 +18,7 @@ export const THEMES: {
   dot: string;
   meta: string;
 }[] = [
+  { id: "zhangben", label: "东家账本", dot: "#c0392b", meta: "#f5f1e8" },
   { id: "dark", label: "暗夜橙", dot: "#f97316", meta: "#0a0a0c" },
   { id: "tech", label: "科技蓝", dot: "#38bdf8", meta: "#080c12" },
   { id: "emerald", label: "翡翠绿", dot: "#10b981", meta: "#080d0b" },
@@ -32,13 +34,13 @@ interface ThemeCtxValue {
 }
 
 const ThemeCtx = createContext<ThemeCtxValue>({
-  theme: "dark",
+  theme: "zhangben",
   setTheme: () => {},
 });
 
 export function readInitialTheme(): Theme {
   const v = localRaw(KEY);
-  return THEMES.some((t) => t.id === v) ? (v as Theme) : "dark";
+  return THEMES.some((t) => t.id === v) ? (v as Theme) : "zhangben";
 }
 
 /** 在 React 挂载前就把主题写到 <html data-theme>，避免首屏闪黑 */
@@ -89,6 +91,7 @@ export interface ChartTheme {
 }
 
 const BRAND: Record<Theme, Pick<ChartTheme, "brand" | "brandSoft">> = {
+  zhangben: { brand: "#c0392b", brandSoft: "rgba(192,57,43,0.30)" },
   dark: { brand: "#fb923c", brandSoft: "rgba(251,146,60,0.35)" },
   tech: { brand: "#38bdf8", brandSoft: "rgba(56,189,248,0.35)" },
   emerald: { brand: "#34d399", brandSoft: "rgba(52,211,153,0.35)" },
@@ -118,6 +121,7 @@ const LIGHT_CHART: Omit<ChartTheme, "brand" | "brandSoft"> = {
 
 export function useChartTheme(): ChartTheme {
   const { theme } = useTheme();
-  const base = theme === "light" ? LIGHT_CHART : DARK_CHART;
+  const base =
+    theme === "light" || theme === "zhangben" ? LIGHT_CHART : DARK_CHART;
   return { ...base, ...BRAND[theme] };
 }

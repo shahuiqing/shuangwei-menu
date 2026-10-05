@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>现状 · 营业看板</title>
+<style>
+  :root{
+    --bg:#0a0a0c; --card:#131317; --line:rgba(255,255,255,.07);
+    --brand:#f97316; --brand2:#fb923c; --brand3:#ea580c;
+    --txt:#fafafa; --sub:#71717a; --dim:#52525b;
+    --pos:#22c55e; --neg:#f43f5e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .tnum{font-variant-numeric:tabular-nums}
+  .wrap{max-width:1120px;margin:0 auto;padding:24px 20px 64px}
+  /* 顶部栏 */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#fb923c,#c2410c);
+    display:grid;place-items:center;color:#fff;font-weight:900}
+  .name{font-weight:600;font-size:15px}
+  .sync{font-size:11px;color:var(--sub);display:flex;align-items:center;gap:6px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#22c55e}
+  /* 营收 Hero */
+  .hero{border-radius:16px;padding:24px;color:#fff;
+    background:linear-gradient(135deg,#fb923c 0%,#ea580c 100%);
+    box-shadow:0 22px 45px -26px rgba(234,88,12,.95);margin-bottom:16px}
+  .hero .lbl{font-size:13px;opacity:.9}
+  .hero .num{font-size:40px;font-weight:800;letter-spacing:-.5px;margin:6px 0 2px}
+  .hero .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;
+    background:rgba(255,255,255,.18);border-radius:999px;padding:3px 9px}
+  /* KPI 网格 */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .kpi .row{display:flex;align-items:flex-start;justify-content:space-between}
+  .ic{width:36px;height:36px;border-radius:10px;background:rgba(249,115,22,.1);
+    display:grid;place-items:center;color:var(--brand2);font-size:17px}
+  .kpi .lbl{font-size:12px;color:var(--sub);margin-top:12px}
+  .kpi .val{font-size:26px;font-weight:700;margin-top:2px}
+  .val.pos{color:var(--brand2)} .val.blue{color:#38bdf8} .val.green{color:#22c55e}
+  .chipup{font-size:11px;font-weight:700;color:#34d399;background:rgba(34,197,94,.1);
+    border-radius:999px;padding:2px 8px}
+  /* 卡片 */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .card h3{font-size:15px;font-weight:600}
+  .card .sub{font-size:11px;color:var(--sub);margin-top:2px}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:120px;margin-top:16px}
+  .bars i{flex:1;background:var(--brand2);border-radius:4px 4px 0 0;opacity:.85}
+  .bars i:nth-child(odd){opacity:.55}
+  .cats{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .cat{display:flex;align-items:center;gap:10px;font-size:13px}
+  .cat .bar{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden}
+  .cat .fill{height:100%;background:var(--brand2);border-radius:4px}
+  .cat .v{color:var(--sub);font-size:12px;width:56px;text-align:right}
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .cell{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .cell .l{font-size:11px;color:var(--sub)}
+  .cell .v{font-size:18px;font-weight:700;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="logo">双</div><div class="name">炙·双味居</div></div>
+    <div class="sync"><span class="dot"></span>实时同步中 · 更新于 23:48</div>
+  </div>
+
+  <div class="hero">
+    <div class="lbl">今日营收</div>
+    <div class="num tnum">¥12,480</div>
+    <div><span class="chip">▲ 较昨日 +12.4%</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="kpi"><div class="row"><div class="ic">单</div><span class="chipup">▲ 8.2%</span></div>
+      <div class="lbl">订单数</div><div class="val tnum">186</div></div>
+    <div class="kpi"><div class="row"><div class="ic">¥</div><span class="chipup">▲ 3.9%</span></div>
+      <div class="lbl">客单价</div><div class="val blue tnum">67.1</div></div>
+    <div class="kpi"><div class="row"><div class="ic">利</div><span class="chipup">▲ 15.2%</span></div>
+      <div class="lbl">毛利</div><div class="val green tnum">¥7,320</div></div>
+  </div>
+
+  <div class="card">
+    <h3>近 7 日营收</h3><div class="sub">单位：元</div>
+    <div class="bars"><i style="height:42%"></i><i style="height:60%"></i><i style="height:38%"></i><i style="height:72%"></i><i style="height:55%"></i><i style="height:88%"></i><i style="height:66%"></i></div>
+  </div>
+
+  <div class="card">
+    <h3>分类占比</h3><div class="sub">今日销量</div>
+    <div class="cats">
+      <div class="cat">炭烤<span class="bar"><span class="fill" style="width:42%"></span></span><span class="v tnum">42%</span></div>
+      <div class="cat">火锅<span class="bar"><span class="fill" style="width:38%"></span></span><span class="v tnum">38%</span></div>
+      <div class="cat">酒水<span class="bar"><span class="fill" style="width:12%"></span></span><span class="v tnum">12%</span></div>
+      <div class="cat">主食<span class="bar"><span class="fill" style="width:8%"></span></span><span class="v tnum">8%</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>本周改善</h3><div class="sub">较上周</div>
+    <div class="row3">
+      <div class="cell"><div class="l">本周损耗</div><div class="v tnum" style="color:#f43f5e">¥186</div></div>
+      <div class="cell"><div class="l">解决问题</div><div class="v tnum" style="color:#22c55e">12 个</div></div>
+      <div class="cell"><div class="l">成本率</div><div class="v tnum">32.1%</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

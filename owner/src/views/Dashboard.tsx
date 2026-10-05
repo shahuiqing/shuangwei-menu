@@ -446,9 +446,9 @@ export default function Dashboard({
       </div>
 
       <div className="space-y-3">
-        {/* Hero：营业收入大卡（点击直达订单管理；渐变随主题换色） */}
+        {/* Hero：本日营收（账本体：宣纸卡 + 宋体大字 + 竖排「今日结」+ 朱砂印） */}
         <div
-          className="relative overflow-hidden rounded-2xl p-5 sm:p-6 text-white cursor-pointer transition-transform duration-200 hover:-translate-y-0.5"
+          className="relative card-surface overflow-hidden rounded-2xl p-5 sm:p-7 cursor-pointer transition-transform duration-200 hover:-translate-y-0.5"
           role="button"
           tabIndex={0}
           title="查看订单管理"
@@ -456,35 +456,21 @@ export default function Dashboard({
           onKeyDown={(e) => {
             if (e.key === "Enter") onTab?.("orders");
           }}
-          style={{
-            background:
-              "linear-gradient(135deg, var(--color-orange-400) 0%, var(--color-orange-600) 100%)",
-            boxShadow:
-              "0 22px 45px -26px color-mix(in srgb, var(--color-orange-500) 85%, transparent)",
-            color: "#ffffff",
-          }}
         >
-          <div className="pointer-events-none absolute -right-12 -top-16 w-56 h-56 rounded-full bg-white/15 blur-2xl" />
-          <div className="pointer-events-none absolute right-24 -bottom-24 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
-
           {trendPoints.length >= 2 && (
-            <div className="absolute inset-x-0 bottom-0 h-24 opacity-40 pointer-events-none">
+            <div className="absolute inset-x-0 bottom-0 h-20 opacity-30 pointer-events-none">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={trendPoints}>
                   <defs>
                     <linearGradient id="heroRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#ffffff"
-                        stopOpacity={0.55}
-                      />
-                      <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
+                      <stop offset="0%" stopColor={C.brand} stopOpacity={0.5} />
+                      <stop offset="100%" stopColor={C.brand} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <Area
                     type="monotone"
                     dataKey="revenue"
-                    stroke="rgba(255,255,255,0.85)"
+                    stroke={C.brand}
                     strokeWidth={2}
                     fill="url(#heroRev)"
                     isAnimationActive={false}
@@ -494,26 +480,32 @@ export default function Dashboard({
             </div>
           )}
 
-          <div className="relative">
-            <div className="flex items-center gap-2 text-[13px] font-medium text-white/85">
-              <Wallet size={16} />
-              营业收入 · {RANGE_LABEL[range]}
-            </div>
-            <div className="mt-2.5 flex items-end gap-3 flex-wrap">
+          <div className="relative pb-10">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-2 text-[12px] text-zinc-500 tracking-[0.18em]">
+                <Wallet size={14} />
+                本日营收 · {RANGE_LABEL[range]}
+              </div>
               <span
-                className="tnum text-[38px] sm:text-[46px] font-black leading-none"
-                style={{ color: "#ffffff" }}
+                className="font-serif text-sm text-zinc-400 tracking-[0.4em] shrink-0"
+                style={{ writingMode: "vertical-rl" }}
               >
+                今日结
+              </span>
+            </div>
+
+            <div className="mt-4 flex items-end gap-3 flex-wrap">
+              <span className="tnum font-serif text-[42px] sm:text-[56px] font-bold leading-none text-zinc-900">
                 {fmtMoney(kpi.revenue)}
               </span>
               {kpi.revenueChange !== undefined && (
                 <span
                   className={`inline-flex items-center gap-1 text-[12px] font-bold px-2 py-1 rounded-full ${
                     kpi.revenueChange > 0.05
-                      ? "bg-white/25 text-white"
+                      ? "bg-orange-500/10 text-orange-500"
                       : kpi.revenueChange < -0.05
-                        ? "bg-black/20 text-white"
-                        : "bg-white/20 text-white"
+                        ? "bg-zinc-800 text-zinc-400"
+                        : "bg-zinc-800 text-zinc-400"
                   }`}
                 >
                   {kpi.revenueChange > 0.05 ? (
@@ -527,13 +519,21 @@ export default function Dashboard({
                 </span>
               )}
             </div>
-            <div className="mt-2 text-[12px] text-white/80">
+
+            <div className="mt-2 text-[12px] text-zinc-500">
               共 {kpi.orders} 笔订单 · 数据实时聚合
             </div>
           </div>
+
+          <span
+            className="seal-cinnabar absolute right-4 sm:right-6 bottom-4 w-11 h-11 rounded text-lg"
+            style={{ transform: "rotate(-4deg)" }}
+          >
+            结
+          </span>
         </div>
 
-        {/* 次级 KPI */}
+        {/* 次级 KPI（账本账目行） */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
           <KpiCard
             icon={ShoppingBag}

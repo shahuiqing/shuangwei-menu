@@ -116,7 +116,9 @@ export function KpiCard({
       <div className="text-zinc-400 text-xs sm:text-[13px] mt-3 sm:mt-4">
         {label}
       </div>
-      <div className={`tnum text-2xl sm:text-3xl font-bold mt-0.5 ${accent}`}>
+      <div
+        className={`tnum font-serif text-2xl sm:text-3xl font-bold mt-0.5 ${accent}`}
+      >
         {display}
       </div>
       {sub && <div className="text-[11px] text-zinc-500 mt-1">{sub}</div>}
@@ -141,7 +143,7 @@ export function ChartCard({
     <div className={`card-surface p-4 sm:p-5 ${className}`}>
       <div className="flex items-start justify-between mb-3.5 sm:mb-4 gap-3">
         <div className="min-w-0">
-          <h3 className="text-white font-semibold text-[15px] sm:text-base tracking-tight">
+          <h3 className="font-serif text-white font-semibold text-[15px] sm:text-base tracking-tight">
             {title}
           </h3>
           {subtitle && (

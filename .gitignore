@@ -18,3 +18,5 @@ workspace/
 .npm-cache/
 *.zip
 cart-hub.json
+.agents/
+skills-lock.json

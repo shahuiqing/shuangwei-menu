@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>方向 C · 东家账本</title>
+<style>
+  :root{
+    --paper:#f5f1e8; --paper2:#fbf8f1;
+    --ink:#1a1611; --ink2:#4a443b; --ink3:#8b8377;
+    --line:rgba(26,22,17,.14); --line-soft:rgba(26,22,17,.08);
+    --cinnabar:#c0392b; --cinnabar2:#a93226;
+    --serif:"Songti SC","STSong","SimSun",serif;
+    --sans:"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    background-image:linear-gradient(rgba(26,22,17,.025) 1px,transparent 1px);
+    background-size:100% 32px;}
+  .tnum{font-variant-numeric:tabular-nums}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 24px 72px}
+  /* 页头：店名 + 竖排「今日结」 */
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:36px;
+    border-bottom:1px solid var(--line);padding-bottom:20px}
+  .brand .zh{font-family:var(--serif);font-size:24px;font-weight:700;letter-spacing:6px}
+  .brand .en{font-size:11px;color:var(--ink3);letter-spacing:2px;margin-top:6px}
+  .vert{writing-mode:vertical-rl;font-family:var(--serif);font-size:16px;letter-spacing:8px;color:var(--ink2)}
+  /* 营收：宋体大字 + 朱砂印 */
+  .hero{position:relative;padding:12px 0 40px;margin-bottom:40px}
+  .hero .lbl{font-size:13px;color:var(--ink3);letter-spacing:4px;margin-bottom:14px}
+  .hero .num{font-family:var(--serif);font-size:88px;font-weight:700;line-height:1;letter-spacing:0;
+    color:var(--ink)}
+  .hero .unit{font-family:var(--serif);font-size:22px;color:var(--ink2);margin-left:8px}
+  .hero .delta{font-size:13px;color:var(--cinnabar);margin-top:14px}
+  .seal{position:absolute;right:4px;top:22px;width:52px;height:52px;background:var(--cinnabar);
+    color:#fdf8f0;font-family:var(--serif);font-size:22px;display:grid;place-items:center;
+    border-radius:4px;transform:rotate(-4deg);
+    box-shadow:0 4px 12px -4px rgba(192,57,43,.5), inset 0 0 0 3px rgba(255,255,255,.18)}
+  /* KPI 账目行 */
+  .ledger{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);padding:22px 0;margin-bottom:44px}
+  .ledger .item{padding:0 18px;border-left:1px solid var(--line-soft)}
+  .ledger .item:first-child{border-left:0;padding-left:0}
+  .ledger .k{font-size:12px;color:var(--ink3);letter-spacing:2px}
+  .ledger .v{font-family:var(--serif);font-size:30px;font-weight:700;margin-top:10px}
+  .ledger .v small{font-size:14px;font-weight:400;color:var(--ink2)}
+  /* 区块 */
+  .block{margin-bottom:44px}
+  .block h3{font-family:var(--serif);font-size:17px;font-weight:700;letter-spacing:3px;margin-bottom:18px}
+  .block h3::before{content:"";display:inline-block;width:14px;height:14px;margin-right:10px;
+    background:var(--cinnabar);transform:rotate(45deg)}
+  .bars{display:flex;align-items:flex-end;gap:14px;height:110px;border-bottom:1px solid var(--line)}
+  .bars i{flex:1;background:var(--ink);opacity:.16;border-radius:2px 2px 0 0}
+  .bars i:last-child{background:var(--cinnabar);opacity:.9}
+  .bars-lbl{display:flex;gap:14px;margin-top:8px}
+  .bars-lbl span{flex:1;font-size:10px;color:var(--ink3);letter-spacing:1px}
+  .cats{display:flex;flex-direction:column;gap:16px}
+  .cat{display:flex;align-items:center;gap:14px;font-size:14px;color:var(--ink2)}
+  .cat .bar{flex:1;height:10px;background:var(--line-soft);border-radius:1px;overflow:hidden}
+  .cat .fill{height:100%;background:var(--ink);opacity:.7}
+  .cat:first-child .fill{background:var(--cinnabar);opacity:.85}
+  .cat .v{font-size:13px;color:var(--ink3);width:56px;text-align:right}
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
+  .cell .l{font-size:12px;color:var(--ink3);letter-spacing:2px}
+  .cell .v{font-family:var(--serif);font-size:28px;font-weight:700;margin-top:10px}
+  .cell .v.red{color:var(--cinnabar)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="zh">炙·双味居</div><div class="en">SHUANG WEI · 炭烤 &amp; 火锅</div></div>
+    <div class="vert">今日结</div>
+  </div>
+
+  <div class="hero">
+    <div class="lbl">本 日 营 收</div>
+    <div><span class="num tnum">12,480</span><span class="unit">元</span></div>
+    <div class="delta">较昨日 +12.4%</div>
+    <div class="seal">结</div>
+  </div>
+
+  <div class="ledger">
+    <div class="item"><div class="k">订单</div><div class="v tnum">186<small> 单</small></div></div>
+    <div class="item"><div class="k">客单价</div><div class="v tnum">67.1<small> 元</small></div></div>
+    <div class="item"><div class="k">毛利</div><div class="v tnum">7,320<small> 元</small></div></div>
+    <div class="item"><div class="k">成本率</div><div class="v tnum">32.1<small> %</small></div></div>
+  </div>
+
+  <div class="block">
+    <h3>近七日营收</h3>
+    <div class="bars"><i style="height:42%"></i><i style="height:60%"></i><i style="height:38%"></i><i style="height:72%"></i><i style="height:55%"></i><i style="height:88%"></i><i style="height:66%"></i></div>
+    <div class="bars-lbl"><span>二九</span><span>三十</span><span>初一</span><span>初二</span><span>初三</span><span>初四</span><span>今日</span></div>
+  </div>
+
+  <div class="block">
+    <h3>分类销账</h3>
+    <div class="cats">
+      <div class="cat">炭烤<span class="bar"><span class="fill" style="width:42%"></span></span><span class="v tnum">42%</span></div>
+      <div class="cat">火锅<span class="bar"><span class="fill" style="width:38%"></span></span><span class="v tnum">38%</span></div>
+      <div class="cat">酒水<span class="bar"><span class="fill" style="width:12%"></span></span><span class="v tnum">12%</span></div>
+      <div class="cat">主食<span class="bar"><span class="fill" style="width:8%"></span></span><span class="v tnum">8%</span></div>
+    </div>
+  </div>
+
+  <div class="block">
+    <h3>本周损益</h3>
+    <div class="row3">
+      <div class="cell"><div class="l">本周损耗</div><div class="v red tnum">186 元</div></div>
+      <div class="cell"><div class="l">解决问题</div><div class="v tnum">12 件</div></div>
+      <div class="cell"><div class="l">成本率</div><div class="v tnum">32.1%</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

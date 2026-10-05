@@ -3,6 +3,8 @@
 @theme {
   --font-sans:
     "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* 账本体标题/大数字（宋体） */
+  --font-serif: "Songti SC", "STSong", "SimSun", "Noto Serif SC", serif;
 
   /* 品牌橙 */
   --color-brand-50: #fff7ed;
@@ -372,4 +374,149 @@ body {
 [data-theme="light"] .bg-blue-600.text-white,
 [data-theme="light"] .from-orange-400.to-orange-700.text-white {
   color: #ffffff;
+}
+
+/* ============================================================
+   东家账本主题（默认）：宣纸暖白 + 墨色 + 朱砂
+   语义反转同 light，但色相换成暖纸/墨，accent 换成朱砂。
+   ============================================================ */
+[data-theme="zhangben"] {
+  /* 墨色文字层级（深→浅） */
+  --color-white: #1a1611;
+  --color-zinc-50: #14110d;
+  --color-zinc-100: #1c1813;
+  --color-zinc-200: #2a251e;
+  --color-zinc-300: #3a342a;
+  --color-zinc-400: #575043;
+  --color-zinc-500: #7a7162;
+  --color-zinc-600: #998f7e;
+  --color-zinc-700: #c8bfae;
+  --color-zinc-800: #e4ddcf;
+  --color-zinc-900: #f5f1e8;
+  --color-zinc-950: #fbf8f1;
+
+  /* 朱砂 accent */
+  --color-orange-400: #c0392b;
+  --color-orange-500: #a93226;
+  --color-orange-600: #922b21;
+
+  /* 彩色文字在宣纸底上的可读性 */
+  --color-emerald-400: #16a34a;
+  --color-green-400: #16a34a;
+  --color-rose-400: #b91c1c;
+  --color-red-400: #b91c1c;
+  --color-sky-400: #0369a1;
+  --color-cyan-400: #0e7490;
+  --color-amber-400: #b45309;
+  --color-violet-400: #6d28d9;
+  --color-blue-400: #1d4ed8;
+  --color-pink-400: #be185d;
+  --color-teal-400: #0f766e;
+
+  --color-emerald-50: #14532d;
+  --color-rose-50: #7f1d1d;
+  --color-sky-50: #0c4a6e;
+}
+
+[data-theme="zhangben"] body {
+  color: #1a1611;
+  background-color: #f5f1e8;
+  /* 宣纸纹理：极淡的横向纤维 */
+  background-image:
+    linear-gradient(rgba(26, 22, 17, 0.028) 1px, transparent 1px),
+    radial-gradient(
+      1100px 560px at 100% -12%,
+      rgba(192, 57, 43, 0.05),
+      transparent 62%
+    );
+  background-size:
+    100% 30px,
+    auto;
+}
+
+[data-theme="zhangben"] .card-surface {
+  background: #fbf8f1;
+  border-color: rgba(26, 22, 17, 0.12);
+  box-shadow:
+    0 1px 2px rgba(26, 22, 17, 0.05),
+    0 8px 24px -20px rgba(26, 22, 17, 0.28);
+}
+
+[data-theme="zhangben"] .glass-bar {
+  background: rgba(245, 241, 232, 0.86);
+  border-bottom: 1px solid rgba(26, 22, 17, 0.08);
+}
+
+[data-theme="zhangben"] input:not(:focus),
+[data-theme="zhangben"] select:not(:focus),
+[data-theme="zhangben"] textarea:not(:focus) {
+  background-color: #f7f3ea;
+  border-color: rgba(26, 22, 17, 0.12);
+}
+[data-theme="zhangben"] input::placeholder,
+[data-theme="zhangben"] textarea::placeholder {
+  color: #998f7e;
+}
+
+[data-theme="zhangben"] ::-webkit-scrollbar-thumb {
+  background: #c8bfae;
+}
+
+[data-theme="zhangben"] .scrim {
+  background: rgba(26, 22, 17, 0.36);
+}
+
+[data-theme="zhangben"] .seg-track {
+  background: #ece5d7;
+  border-color: rgba(26, 22, 17, 0.06);
+}
+[data-theme="zhangben"] .seg-on {
+  background: #ffffff;
+  color: #1a1611;
+  box-shadow:
+    0 1px 3px rgba(26, 22, 17, 0.14),
+    0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
+  border-radius: 0.5rem;
+}
+[data-theme="zhangben"] .seg-fade {
+  background: linear-gradient(to left, #f5f1e8, transparent);
+}
+
+/* 朱砂底上的文字保持暖白 */
+[data-theme="zhangben"] .btn-brand,
+[data-theme="zhangben"] .bg-orange-500.text-white,
+[data-theme="zhangben"] .bg-orange-600.text-white,
+[data-theme="zhangben"] .bg-orange-700.text-white,
+[data-theme="zhangben"] .bg-green-600.text-white,
+[data-theme="zhangben"] .bg-emerald-500.text-white,
+[data-theme="zhangben"] .bg-emerald-600.text-white,
+[data-theme="zhangben"] .bg-rose-500.text-white,
+[data-theme="zhangben"] .bg-red-500.text-white,
+[data-theme="zhangben"] .bg-red-600\/90.text-white,
+[data-theme="zhangben"] .bg-red-600.text-white,
+[data-theme="zhangben"] .bg-sky-500.text-white,
+[data-theme="zhangben"] .bg-sky-600.text-white,
+[data-theme="zhangben"] .bg-blue-600.text-white,
+[data-theme="zhangben"] .from-orange-400.to-orange-700.text-white {
+  color: #fdf8f0;
+}
+
+/* 朱砂渐变品牌按钮（账本主题下 btn-brand 用朱砂） */
+[data-theme="zhangben"] .btn-brand {
+  background: linear-gradient(135deg, #c0392b, #922b21);
+  box-shadow:
+    0 6px 18px -6px rgba(146, 43, 33, 0.55),
+    0 1px 0 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+/* 朱砂印章（账本专用元素） */
+.seal-cinnabar {
+  display: inline-grid;
+  place-items: center;
+  background: #c0392b;
+  color: #fdf8f0;
+  font-family: var(--font-serif);
+  box-shadow:
+    0 3px 10px -3px rgba(146, 43, 33, 0.55),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.22);
 }
