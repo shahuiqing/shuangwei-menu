@@ -17,16 +17,15 @@ import {
   NotebookText,
   BadgeDollarSign,
   Flame,
-  Sun,
-  Moon,
   PackageX,
   Download,
   ClipboardCheck,
   Sparkles,
 } from "lucide-react";
-import { useTheme } from "../lib/theme";
+import { useTheme, THEMES, type Theme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
 import { cacheUsedAt, onCacheUse } from "../lib/snapshot";
+import { Sheet } from "./Sheet";
 
 export type OwnerTab =
   | "dashboard"
@@ -63,8 +62,7 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "assistant", label: "AI 助手", icon: Sparkles },
 ];
 
-// 侧栏分组：15 项平铺难以扫读，按业务域分组（成熟管理端的通行做法）
-// 同时作为设置页「全部功能」统一入口的数据源
+// 侧栏分组：按业务域分组，作为设置抽屉「全部功能」的统一入口数据源
 export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
   { title: "经营", items: ["dashboard", "reports", "assistant"] },
   { title: "订单与任务", items: ["orders", "tasks"] },
@@ -92,55 +90,6 @@ const SUBTITLE: Partial<Record<OwnerTab, string>> = {
   tasks: "问题→任务→解决闭环",
   assistant: "简报与经营问答",
 };
-
-// 移动端底部主导航（4 个高频目的地，中间凸起按钮打开「更多」）
-const MOBILE_PRIMARY: OwnerTab[] = [
-  "dashboard",
-  "orders",
-  "cost",
-  "consumption",
-];
-
-function TabItem({
-  id,
-  tab,
-  go,
-}: {
-  id: OwnerTab;
-  tab: OwnerTab;
-  go: (t: OwnerTab) => void;
-}) {
-  const item = NAV.find((n) => n.id === id)!;
-  const Icon = item.icon;
-  const on = tab === id;
-  return (
-    <button
-      onClick={() => go(id)}
-      aria-current={on ? "page" : undefined}
-      className="relative flex-1 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"
-    >
-      {on && (
-        <span className="absolute top-0 h-[3px] w-7 rounded-b-full bg-orange-500" />
-      )}
-      <span
-        className={`flex items-center justify-center w-12 h-8 rounded-full transition-all ${
-          on ? "bg-orange-500/15 ring-1 ring-orange-500/25" : ""
-        }`}
-      >
-        <Icon
-          size={21}
-          strokeWidth={on ? 2.4 : 2}
-          className={on ? "text-orange-400" : "text-zinc-500"}
-        />
-      </span>
-      <span
-        className={`text-[10px] leading-none ${on ? "text-orange-400 font-semibold" : "text-zinc-500 font-medium"}`}
-      >
-        {item.label}
-      </span>
-    </button>
-  );
-}
 
 /** 移动端下拉刷新：仅在页面顶部、向下拖动超过阈值时触发刷新 */
 function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
@@ -247,7 +196,7 @@ function useInstallHint() {
   return { can, install };
 }
 
-/** 「安装到主屏幕」按钮（浏览器不可安装时返回 null）；给设置页统一入口用 */
+/** 「安装到主屏幕」按钮（浏览器不可安装时返回 null）；给设置抽屉用 */
 export function InstallButton() {
   const { can, install } = useInstallHint();
   if (!can) return null;
@@ -258,20 +207,6 @@ export function InstallButton() {
     >
       <Download size={16} />
       安装到主屏幕
-    </button>
-  );
-}
-
-function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  return (
-    <button
-      onClick={toggle}
-      aria-label={theme === "dark" ? "切换到浅色" : "切换到深色"}
-      title={theme === "dark" ? "浅色模式" : "深色模式"}
-      className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
-    >
-      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
     </button>
   );
 }
@@ -299,9 +234,13 @@ export function Layout({
   configured: boolean;
   children: ReactNode;
 }) {
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
   const active = NAV.find((n) => n.id === tab);
-  const go = setTab;
+  const go = (t: OwnerTab) => {
+    setTab(t);
+    setMenuOpen(false);
+  };
   const pull = usePullToRefresh(onRefresh, true);
   const pulling = pull > 4;
   const ready = pull > 56;
@@ -310,7 +249,6 @@ export function Layout({
   // 断网回落到本地快照时，告知数据时间
   const [cacheAt, setCacheAt] = useState(cacheUsedAt);
   useEffect(() => onCacheUse(setCacheAt), []);
-  const install = useInstallHint();
 
   useEffect(() => {
     const onScroll = () =>
@@ -323,91 +261,9 @@ export function Layout({
   }, []);
 
   return (
-    <div className="min-h-full flex bg-zinc-950">
-      {/* 桌面侧边栏 */}
-      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-white/5 bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen">
-        <div className="h-16 flex items-center gap-3 px-5 border-b border-white/5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40">
-            双
-          </div>
-          <div className="min-w-0">
-            <div className="text-white font-bold leading-none truncate">
-              {storeName}
-            </div>
-            <div className="text-[10px] text-zinc-500 mt-0.5">
-              老板管理端 v2
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          {NAV_GROUPS.map((g) => (
-            <div key={g.title} className="mb-4 last:mb-0">
-              <div className="px-3 mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-zinc-600">
-                {g.title}
-              </div>
-              <div className="space-y-0.5">
-                {g.items.map((id) => {
-                  const item = NAV.find((n) => n.id === id)!;
-                  const Icon = item.icon;
-                  const on = tab === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => setTab(id)}
-                      aria-current={on ? "page" : undefined}
-                      className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
-                        on
-                          ? "bg-orange-500/10 text-orange-300"
-                          : "text-zinc-400 hover:text-zinc-100 hover:bg-white/5"
-                      }`}
-                    >
-                      {on && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r-full bg-orange-400" />
-                      )}
-                      <Icon size={16} className={on ? "text-orange-400" : ""} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-        <div className="p-3 border-t border-white/5 space-y-2">
-          {install.can && (
-            <button
-              onClick={install.install}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-orange-300 bg-orange-500/10 ring-1 ring-orange-500/25 hover:bg-orange-500/15"
-            >
-              <Download size={18} />
-              安装到桌面
-            </button>
-          )}
-          <div className="flex items-center gap-2 px-3 text-[11px] text-zinc-500">
-            <span
-              className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}
-            />
-            {configured ? "已连接数据库" : "未配置数据库"}
-          </div>
-          <button
-            onClick={toggleTheme}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-white/5"
-          >
-            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-            {theme === "dark" ? "浅色模式" : "深色模式"}
-          </button>
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-red-400 hover:bg-zinc-900"
-          >
-            <LogOut size={18} />
-            退出登录
-          </button>
-        </div>
-      </aside>
-
+    <div className="min-h-full flex flex-col bg-zinc-950">
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* 顶部栏：移动端 App 风格（头像+店名+状态+刷新）；桌面端标题 */}
+        {/* 顶部栏：左=Logo(回看板)+页标题；右=设置/刷新（功能入口统一在设置抽屉） */}
         <header
           className={`sticky top-0 z-30 glass-bar border-b border-white/[0.06] transition-shadow duration-300 ${
             scrolled
@@ -416,15 +272,27 @@ export function Layout({
           }`}
         >
           <div className="safe-top px-4 lg:px-6 flex items-center justify-between gap-3">
-            <div className="lg:hidden flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40 ring-1 ring-white/10">
+            <button
+              onClick={() => go("dashboard")}
+              title="回到看板"
+              className="flex items-center gap-3 min-w-0 text-left group"
+            >
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40 ring-1 ring-white/10 group-hover:scale-105 transition-transform">
                 双
               </div>
               <div className="min-w-0">
-                <div className="text-white font-semibold leading-tight truncate text-[15px]">
+                {/* 桌面：当前页标题 */}
+                <div className="hidden lg:block text-xl font-semibold tracking-tight text-white leading-tight truncate">
+                  {active?.label}
+                </div>
+                <div className="hidden lg:block text-[13px] text-zinc-500 mt-0.5 leading-snug truncate">
+                  {SUBTITLE[tab]}
+                </div>
+                {/* 移动：店名 + 同步状态 */}
+                <div className="lg:hidden text-white font-semibold leading-tight truncate text-[15px]">
                   {storeName}
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] leading-tight mt-0.5">
+                <div className="lg:hidden flex items-center gap-1.5 text-[11px] leading-tight mt-0.5">
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${!online ? "bg-amber-400" : live ? "bg-emerald-400 animate-pulse" : configured ? "bg-zinc-500" : "bg-rose-500"}`}
                   />
@@ -447,15 +315,7 @@ export function Layout({
                   </span>
                 </div>
               </div>
-            </div>
-            <div className="hidden lg:block">
-              <div className="text-xl font-semibold tracking-tight text-white leading-tight">
-                {active?.label}
-              </div>
-              <div className="text-[13px] text-zinc-500 mt-0.5 leading-snug">
-                {SUBTITLE[tab]}
-              </div>
-            </div>
+            </button>
             <div className="flex items-center gap-1.5">
               <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-500">
                 {online ? (
@@ -474,7 +334,14 @@ export function Layout({
                       ? `更新于 ${lastUpdated}`
                       : "同步中…"}
               </span>
-              <ThemeToggle />
+              <button
+                onClick={() => setMenuOpen(true)}
+                aria-label="设置与功能"
+                title="设置与功能"
+                className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
+              >
+                <SettingsIcon size={16} />
+              </button>
               <button
                 onClick={onRefresh}
                 title="刷新"
@@ -549,14 +416,101 @@ export function Layout({
         </main>
       </div>
 
-      {/* 移动端底部 Tab 栏（4 个高频目的地均分；全部功能统一在设置页） */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 glass-bar border-t border-white/[0.06] safe-bottom">
-        <div className="flex items-stretch h-[58px]">
-          {MOBILE_PRIMARY.map((id) => (
-            <TabItem key={id} id={id} tab={tab} go={go} />
-          ))}
+      {/* 设置抽屉：主题切换 + 全部功能 + 安装/退出（功能入口统一收在这里） */}
+      <Sheet
+        open={menuOpen}
+        title="设置与功能"
+        subtitle={`${storeName} · 主题、全部页面与账号`}
+        onClose={() => setMenuOpen(false)}
+        maxW="max-w-lg"
+      >
+        <div className="space-y-5">
+          {/* 主题切换 */}
+          <div>
+            <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500 mb-2">
+              主题
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTheme(t.id as Theme)}
+                  className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border transition-colors ${
+                    theme === t.id
+                      ? "border-orange-500/50 bg-orange-500/10"
+                      : "border-white/5 bg-zinc-950 hover:border-white/15"
+                  }`}
+                >
+                  <span
+                    className={`w-6 h-6 rounded-full ring-1 ${t.id === "light" ? "ring-zinc-300" : "ring-white/25"}`}
+                    style={{ background: t.dot }}
+                  />
+                  <span
+                    className={`text-[11px] leading-none ${theme === t.id ? "text-orange-300 font-semibold" : "text-zinc-400"}`}
+                  >
+                    {t.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 全部功能（数据页由首页数据框直达，这里是统一兜底入口） */}
+          <div>
+            <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500 mb-2">
+              全部功能
+            </div>
+            <div className="space-y-3">
+              {NAV_GROUPS.map((g) => (
+                <div key={g.title}>
+                  <div className="text-[11px] tracking-[0.06em] text-zinc-600 mb-1.5">
+                    {g.title}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {g.items.map((id) => {
+                      const item = NAV.find((n) => n.id === id)!;
+                      const Icon = item.icon;
+                      const on = id === tab;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => go(id)}
+                          className={`flex items-center gap-2 px-2.5 py-2.5 rounded-xl border text-[13px] font-medium transition-colors ${
+                            on
+                              ? "bg-orange-500/10 border-orange-500/30 text-orange-300"
+                              : "bg-zinc-950 border-white/5 text-zinc-300 hover:border-orange-500/40 hover:text-white"
+                          }`}
+                        >
+                          <Icon size={15} className="shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 状态与账号 */}
+          <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+            <span
+              className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}
+            />
+            {configured ? "已连接数据库" : "未配置数据库"}
+          </div>
+          <InstallButton />
+          <button
+            onClick={() => {
+              setMenuOpen(false);
+              onLogout();
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/30 text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/15 transition-colors"
+          >
+            <LogOut size={15} /> 退出登录
+          </button>
         </div>
-      </nav>
+      </Sheet>
     </div>
   );
 }

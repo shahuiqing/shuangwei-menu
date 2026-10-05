@@ -13,16 +13,8 @@ import {
   Download,
   Upload,
   History,
-  LayoutGrid,
-  LogOut,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
-import {
-  NAV,
-  NAV_GROUPS,
-  InstallButton,
-  type OwnerTab,
-} from "../components/Layout";
 import { toast } from "../components/Toast";
 import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
 import {
@@ -58,13 +50,9 @@ import { fmtDateTime } from "../lib/format";
 export default function Settings({
   settings,
   onSaved,
-  onGo,
-  onLogout,
 }: {
   settings: any;
   onSaved: () => void;
-  onGo: (t: OwnerTab) => void;
-  onLogout: () => void;
 }) {
   const [storeName, setStoreName] = useState(
     settings?.restaurantName || STORE_NAME,
@@ -248,53 +236,6 @@ export default function Settings({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      {/* 全部功能：所有页面的统一入口（底部导航去掉「更多」后收拢到这里） */}
-      <ChartCard
-        title="全部功能"
-        subtitle="所有页面统一入口 · 首页也有直达"
-        action={<LayoutGrid size={18} className="text-orange-500" />}
-      >
-        <div className="space-y-3">
-          {NAV_GROUPS.map((g) => (
-            <div key={g.title}>
-              <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500 mb-1.5">
-                {g.title}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {g.items.map((id) => {
-                  const item = NAV.find((n) => n.id === id)!;
-                  const Icon = item.icon;
-                  const on = id === "settings";
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => onGo(id)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-[13px] font-medium transition-colors ${
-                        on
-                          ? "bg-orange-500/10 border-orange-500/30 text-orange-300"
-                          : "bg-zinc-950 border-white/5 text-zinc-300 hover:border-orange-500/40 hover:text-white"
-                      }`}
-                    >
-                      <Icon size={15} className="shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <InstallButton />
-            <button
-              onClick={onLogout}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-red-500/30 text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/15 transition-colors"
-            >
-              <LogOut size={15} /> 退出登录
-            </button>
-          </div>
-        </div>
-      </ChartCard>
-
       <ChartCard
         title="店铺信息"
         subtitle="同步到顾客端与云端"

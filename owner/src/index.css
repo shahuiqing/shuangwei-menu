@@ -59,7 +59,8 @@ body {
 }
 
 .mobile-safe-bottom {
-  padding-bottom: calc(5.25rem + var(--sab));
+  /* 底部导航已移除，仅保留安全区 */
+  padding-bottom: calc(1.5rem + var(--sab));
 }
 @media (min-width: 1024px) {
   .mobile-safe-bottom {
@@ -165,15 +166,92 @@ body {
   backdrop-filter: blur(16px) saturate(140%);
 }
 
-/* 品牌按钮 */
+/* 品牌按钮（色值走主题变量，随主题换色） */
 .btn-brand {
-  background: linear-gradient(135deg, #fb923c, #ea580c);
+  background: linear-gradient(
+    135deg,
+    var(--color-orange-400),
+    var(--color-orange-600)
+  );
   box-shadow:
-    0 6px 18px -6px rgba(234, 88, 12, 0.6),
+    0 6px 18px -6px color-mix(in srgb, var(--color-orange-600) 65%, transparent),
     0 1px 0 0 rgba(255, 255, 255, 0.18) inset;
 }
 .btn-brand:hover {
   filter: brightness(1.06);
+}
+
+/* ============================================================
+   多主题：Tailwind 工具类编译为 var(--color-orange-*)，
+   在 <html data-theme> 上重映射 orange 色阶 = 全站换 accent。
+   （未分层规则优先于 @layer theme 的默认值）
+   ============================================================ */
+[data-theme="tech"] {
+  --color-orange-50: #f0f9ff;
+  --color-orange-100: #e0f2fe;
+  --color-orange-200: #bae6fd;
+  --color-orange-300: #7dd3fc;
+  --color-orange-400: #38bdf8;
+  --color-orange-500: #0ea5e9;
+  --color-orange-600: #0284c7;
+  --color-orange-700: #0369a1;
+  --color-orange-900: #0c4a6e;
+}
+[data-theme="tech"] body {
+  background-color: #080c12;
+  /* 科技网格 + 顶部冷光 */
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.045) 1px, transparent 1px),
+    radial-gradient(
+      1000px 520px at 100% -12%,
+      rgba(14, 165, 233, 0.14),
+      transparent 62%
+    );
+  background-size:
+    36px 36px,
+    36px 36px,
+    auto;
+}
+
+[data-theme="emerald"] {
+  --color-orange-50: #ecfdf5;
+  --color-orange-100: #d1fae5;
+  --color-orange-200: #a7f3d0;
+  --color-orange-300: #6ee7b7;
+  --color-orange-400: #34d399;
+  --color-orange-500: #10b981;
+  --color-orange-600: #059669;
+  --color-orange-700: #047857;
+  --color-orange-900: #064e3b;
+}
+[data-theme="emerald"] body {
+  background-color: #080d0b;
+  background-image: radial-gradient(
+    1100px 560px at 100% -12%,
+    rgba(16, 185, 129, 0.12),
+    transparent 62%
+  );
+}
+
+[data-theme="violet"] {
+  --color-orange-50: #f5f3ff;
+  --color-orange-100: #ede9fe;
+  --color-orange-200: #ddd6fe;
+  --color-orange-300: #c4b5fd;
+  --color-orange-400: #a78bfa;
+  --color-orange-500: #8b5cf6;
+  --color-orange-600: #7c3aed;
+  --color-orange-700: #6d28d9;
+  --color-orange-900: #4c1d95;
+}
+[data-theme="violet"] body {
+  background-color: #0b0812;
+  background-image: radial-gradient(
+    1100px 560px at 100% -12%,
+    rgba(139, 92, 246, 0.14),
+    transparent 62%
+  );
 }
 
 .animate-rise {

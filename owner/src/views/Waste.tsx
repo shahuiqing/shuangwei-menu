@@ -60,6 +60,7 @@ const pctFmt = (n: number) => `${(n || 0).toFixed(1)}%`;
 
 export default function Waste({ version = 0 }: { version?: number }) {
   const C = useChartTheme();
+  const pie = [C.brand, ...PIE_COLORS.slice(1)];
   const tooltipStyle = {
     background: C.tipBg,
     border: `1px solid ${C.tipBorder}`,
@@ -251,7 +252,7 @@ export default function Waste({ version = 0 }: { version?: number }) {
                     paddingAngle={2}
                   >
                     {reasonData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      <Cell key={i} fill={pie[i % pie.length]} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -266,7 +267,7 @@ export default function Waste({ version = 0 }: { version?: number }) {
                     <span
                       className="w-2.5 h-2.5 rounded-sm shrink-0"
                       style={{
-                        background: PIE_COLORS[i % PIE_COLORS.length],
+                        background: pie[i % pie.length],
                       }}
                     />
                     <span className="text-zinc-300 truncate flex-1">
@@ -311,9 +312,9 @@ export default function Waste({ version = 0 }: { version?: number }) {
                   <Tooltip
                     contentStyle={tooltipStyle}
                     formatter={(v: number) => fmtMoney(v)}
-                    cursor={{ stroke: "rgba(251,146,60,0.35)" }}
+                    cursor={{ stroke: C.brandSoft }}
                   />
-                  <Bar dataKey="value" fill="#fb923c" radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="value" fill={C.brand} radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -346,9 +347,9 @@ export default function Waste({ version = 0 }: { version?: number }) {
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(v: number) => fmtMoney(v)}
-                  cursor={{ stroke: "rgba(251,146,60,0.35)" }}
+                  cursor={{ stroke: C.brandSoft }}
                 />
-                <Bar dataKey="value" fill="#f97316" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="value" fill={C.brand} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

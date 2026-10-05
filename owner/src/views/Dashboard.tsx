@@ -77,7 +77,7 @@ import { buildSummary, summaryLines, type SummaryInput } from "../lib/summary";
 import { stocktakeDue, lastStocktakeAt } from "../lib/stocktakeReminder";
 import { buildProblems, topProblem } from "../lib/problems";
 import { dataConfidence, CONFIDENCE_LABEL } from "../lib/confidence";
-import { NAV, type OwnerTab } from "../components/Layout";
+import type { OwnerTab } from "../components/Layout";
 import { useChartTheme } from "../lib/theme";
 
 const RANGE_LABEL: Record<string, string> = {
@@ -145,6 +145,7 @@ export default function Dashboard({
   onTab?: (t: OwnerTab) => void;
 }) {
   const C = useChartTheme();
+  const pie = [C.brand, ...PIE_COLORS.slice(1)];
   const tooltipStyle = {
     background: C.tipBg,
     border: `1px solid ${C.tipBorder}`,
@@ -444,29 +445,22 @@ export default function Dashboard({
         </span>
       </div>
 
-      {/* 快捷直达：首页一键跳所有页面（移动端横滑、桌面自动换行） */}
-      <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible">
-        {NAV.filter((n) => n.id !== "dashboard").map(
-          ({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => onTab?.(id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[12.5px] font-medium text-zinc-300 hover:text-orange-300 hover:border-orange-500/40 transition-colors shrink-0"
-            >
-              <Icon size={14} className="text-zinc-500" />
-              {label}
-            </button>
-          ),
-        )}
-      </div>
-
       <div className="space-y-3">
-        {/* Hero：营业收入大卡（品牌渐变 + 迷你走势 + 环比） */}
+        {/* Hero：营业收入大卡（点击直达订单管理；渐变随主题换色） */}
         <div
-          className="relative overflow-hidden rounded-2xl p-5 sm:p-6 text-white"
+          className="relative overflow-hidden rounded-2xl p-5 sm:p-6 text-white cursor-pointer transition-transform duration-200 hover:-translate-y-0.5"
+          role="button"
+          tabIndex={0}
+          title="查看订单管理"
+          onClick={() => onTab?.("orders")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onTab?.("orders");
+          }}
           style={{
-            background: "linear-gradient(135deg, #fb923c 0%, #ea580c 100%)",
-            boxShadow: "0 22px 45px -26px rgba(234,88,12,0.95)",
+            background:
+              "linear-gradient(135deg, var(--color-orange-400) 0%, var(--color-orange-600) 100%)",
+            boxShadow:
+              "0 22px 45px -26px color-mix(in srgb, var(--color-orange-500) 85%, transparent)",
             color: "#ffffff",
           }}
         >
@@ -549,6 +543,7 @@ export default function Dashboard({
             change={kpi.ordersChange}
             accent="text-blue-400"
             bg="bg-blue-500/10"
+            onClick={() => onTab?.("orders")}
           />
           <KpiCard
             icon={TrendingUp}
@@ -559,6 +554,7 @@ export default function Dashboard({
             change={kpi.aovChange}
             accent="text-teal-400"
             bg="bg-teal-500/10"
+            onClick={() => onTab?.("reports")}
           />
           <div className="col-span-2 sm:col-span-1">
             <KpiCard
@@ -568,6 +564,7 @@ export default function Dashboard({
               valueNum={kpi.items}
               accent="text-purple-400"
               bg="bg-purple-500/10"
+              onClick={() => onTab?.("menu")}
             />
           </div>
           <KpiCard
@@ -578,6 +575,7 @@ export default function Dashboard({
             format={fmtMoney}
             accent={profit >= 0 ? "text-green-400" : "text-red-400"}
             bg={profit >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
+            onClick={() => onTab?.("cost")}
           />
           <KpiCard
             icon={Percent}
@@ -586,6 +584,7 @@ export default function Dashboard({
             valueNum={foodCostRate}
             format={(n) => `${n.toFixed(1)}%`}
             sub={`行业参考 ${pctText(benchmarks().foodCost)}`}
+            onClick={() => onTab?.("cost")}
             accent={
               rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
                 ? "text-red-400"
@@ -753,7 +752,11 @@ export default function Dashboard({
       {ops.ready && (
         <ChartCard title="本周改善" subtitle="较上周 · 损耗 / 解决问题">
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-zinc-950 rounded-xl px-3 py-3">
+            <button
+              onClick={() => onTab?.("waste")}
+              title="查看损耗登记"
+              className="bg-zinc-950 rounded-xl px-3 py-3 text-left hover:border hover:border-orange-500/40 transition-colors"
+            >
               <div className="text-[11px] text-zinc-500">本周损耗</div>
               <div className="text-lg font-bold tnum text-zinc-100 mt-1">
                 {fmtMoney(weekWaste.thisWeek)}
@@ -761,15 +764,23 @@ export default function Dashboard({
               <div className="text-[11px] text-zinc-500 mt-0.5">
                 上周 {fmtMoney(weekWaste.lastWeek)}
               </div>
-            </div>
-            <div className="bg-zinc-950 rounded-xl px-3 py-3">
+            </button>
+            <button
+              onClick={() => onTab?.("tasks")}
+              title="查看今日待办"
+              className="bg-zinc-950 rounded-xl px-3 py-3 text-left hover:border hover:border-orange-500/40 transition-colors"
+            >
               <div className="text-[11px] text-zinc-500">本周解决问题</div>
               <div className="text-lg font-bold tnum text-green-400 mt-1">
                 {solvedThisWeek}
               </div>
               <div className="text-[11px] text-zinc-500 mt-0.5">个已解决</div>
-            </div>
-            <div className="bg-zinc-950 rounded-xl px-3 py-3">
+            </button>
+            <button
+              onClick={() => onTab?.("cost")}
+              title="查看成本分析"
+              className="bg-zinc-950 rounded-xl px-3 py-3 text-left hover:border hover:border-orange-500/40 transition-colors"
+            >
               <div className="text-[11px] text-zinc-500">食材成本率</div>
               <div
                 className={`text-lg font-bold tnum mt-1 ${foodCostRate > 35 ? "text-red-400" : "text-teal-400"}`}
@@ -777,7 +788,7 @@ export default function Dashboard({
                 {foodCostRate.toFixed(1)}%
               </div>
               <div className="text-[11px] text-zinc-500 mt-0.5">本期口径</div>
-            </div>
+            </button>
           </div>
         </ChartCard>
       )}
@@ -791,8 +802,8 @@ export default function Dashboard({
               <AreaChart data={trendPoints}>
                 <defs>
                   <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#fb923c" stopOpacity={0.55} />
-                    <stop offset="100%" stopColor="#fb923c" stopOpacity={0} />
+                    <stop offset="0%" stopColor={C.brand} stopOpacity={0.55} />
+                    <stop offset="100%" stopColor={C.brand} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -815,13 +826,13 @@ export default function Dashboard({
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  cursor={{ stroke: "rgba(251,146,60,0.35)" }}
+                  cursor={{ stroke: C.brandSoft }}
                   formatter={(v: number) => [fmtMoney(v), "营收"]}
                 />
                 <Area
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#fb923c"
+                  stroke={C.brand}
                   strokeWidth={2.5}
                   fill="url(#rev)"
                   activeDot={{ r: 4, strokeWidth: 0 }}
@@ -849,7 +860,7 @@ export default function Dashboard({
                     paddingAngle={2}
                   >
                     {cats.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      <Cell key={i} fill={pie[i % pie.length]} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -863,7 +874,7 @@ export default function Dashboard({
                   <div key={c.name} className="flex items-center gap-2 text-xs">
                     <span
                       className="w-2.5 h-2.5 rounded-sm shrink-0"
-                      style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                      style={{ background: pie[i % pie.length] }}
                     />
                     <span className="text-zinc-300 truncate flex-1">
                       {c.name}

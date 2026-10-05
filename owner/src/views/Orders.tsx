@@ -714,7 +714,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
                 <span className="text-sm text-zinc-400">合计</span>
                 <span
                   className="tnum text-2xl font-bold"
-                  style={{ color: "#f97316" }}
+                  style={{ color: "var(--color-orange-500)" }}
                 >
                   {fmtMoney(detail.finalTotal ?? orderTotal(detail))}
                 </span>

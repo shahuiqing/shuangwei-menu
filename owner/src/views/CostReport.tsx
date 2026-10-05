@@ -181,7 +181,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
                 <Bar
                   dataKey="revenue"
                   name="营收"
-                  fill="#f97316"
+                  fill={C.brand}
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar

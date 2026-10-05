@@ -294,15 +294,7 @@ export default function App() {
               {tab === "consumption" && <Consumption version={version} />}
               {tab === "staff" && <StaffView />}
               {tab === "settings" && (
-                <Settings
-                  settings={settings}
-                  onSaved={load}
-                  onGo={setTab}
-                  onLogout={() => {
-                    clearAuthed();
-                    setAuthed(false);
-                  }}
-                />
+                <Settings settings={settings} onSaved={load} />
               )}
               {tab === "tasks" && (
                 <Tasks recentOrders={recentOrders} version={version} />

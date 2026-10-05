@@ -47,6 +47,7 @@ export function KpiCard({
   change,
   accent = "text-orange-400",
   bg = "bg-orange-500/10",
+  onClick,
 }: {
   icon: LucideIcon;
   label: string;
@@ -57,13 +58,34 @@ export function KpiCard({
   change?: number;
   accent?: string;
   bg?: string;
+  /** 数据框点击直达对应页面（首页即导航） */
+  onClick?: () => void;
 }) {
   const up = (change ?? 0) > 0.05;
   const down = (change ?? 0) < -0.05;
   const anim = useCountUp(valueNum);
   const display = valueNum !== undefined ? format(anim ?? 0) : value;
   return (
-    <div className="card-surface p-4 sm:p-5 transition-colors duration-200 overflow-hidden hover:border-white/15">
+    <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={`card-surface p-4 sm:p-5 transition-all duration-200 overflow-hidden ${
+        onClick
+          ? "cursor-pointer hover:border-orange-500/30 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-20px_rgba(0,0,0,0.9)]"
+          : "hover:border-white/15"
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div
           className={`w-10 h-10 sm:w-10 sm:h-10 rounded-xl ${bg} ${accent} flex items-center justify-center ring-1 ring-white/5`}
