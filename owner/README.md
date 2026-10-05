@@ -98,9 +98,11 @@ npm run build             # 产出 owner/dist
 
 如需分步（均幂等）：
 
-1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql` → 7. `supabase_owner_auth.sql` → 8. `supabase_owner_waste.sql`（报损 `reason` 列）
+1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql` → 7. `supabase_owner_auth.sql` → 8. `supabase_owner_waste.sql`（报损 `reason` 列）→ 9. `supabase_owner_cloudsync.sql`（操作日志/盘点历史上云）
 
 > 已在用「损耗分析」页的库：只需单独执行 `supabase_owner_waste.sql`（约 5 秒）；未执行前报损记录仍会写入（仅 `reason` 缺失，前端已降级为不分类）。
+>
+> 未执行 `supabase_owner_cloudsync.sql` 时，操作日志与盘点历史仍正常存本机，仅不上云（设置页点「立即同步」会提示失败）。
 
 ## PWA（添加到主屏幕）
 

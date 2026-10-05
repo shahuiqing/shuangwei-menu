@@ -23,6 +23,7 @@ import {
   testLlm,
   type LlmConfig,
 } from "../lib/llm";
+import { syncNow, clearCloudAudit } from "../lib/cloudSync";
 import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
 import {
   notifyEnabled,
@@ -73,6 +74,7 @@ export default function Settings({
   const [llm, setLlm] = useState<LlmConfig>(() => getLlmConfig());
   const [showKey, setShowKey] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const [stats, setStats] = useState<TableStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -121,6 +123,15 @@ export default function Settings({
       alive = false;
     };
   }, []);
+
+  const doSync = async () => {
+    setSyncing(true);
+    const r = await syncNow();
+    setSyncing(false);
+    setLogs(loadAuditLog());
+    if (r.pushed) toast.success("已与云端同步");
+    else toast.error("同步失败：请确认已执行 cloudsync SQL");
+  };
 
   const saveLlm = () => {
     const next = setLlmConfig(llm);
@@ -570,7 +581,7 @@ export default function Settings({
 
       <ChartCard
         title="操作日志"
-        subtitle="本机记录最近的关键操作（上限 500 条）"
+        subtitle="关键操作（上限 500 条）· 自动同步云端"
         action={<History size={18} className="text-orange-500" />}
       >
         {logs.length === 0 ? (
@@ -599,21 +610,31 @@ export default function Settings({
         )}
         <div className="flex items-center justify-between mt-3">
           <span className="text-[11px] text-zinc-600">
-            仅存本机 · 显示最近 20 条
+            云端同步 · 显示最近 20 条
           </span>
-          {logs.length > 0 && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                if (confirm("清空操作日志？")) {
-                  clearAuditLog();
-                  setLogs([]);
-                }
-              }}
-              className="text-xs text-zinc-500 hover:text-red-400"
+              onClick={doSync}
+              disabled={syncing}
+              className="text-xs text-zinc-500 hover:text-orange-400 disabled:opacity-50"
             >
-              清空日志
+              {syncing ? "同步中…" : "立即同步"}
             </button>
-          )}
+            {logs.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm("清空操作日志（本机与云端）？")) {
+                    clearAuditLog();
+                    void clearCloudAudit();
+                    setLogs([]);
+                  }
+                }}
+                className="text-xs text-zinc-500 hover:text-red-400"
+              >
+                清空日志
+              </button>
+            )}
+          </div>
         </div>
       </ChartCard>
 

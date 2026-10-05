@@ -32,6 +32,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isAuthed, clearAuthed } from "./lib/auth";
 import { isConfigured, STORE_NAME } from "./lib/supabase";
 import { fetchSettings } from "./lib/data";
+import { initCloudSync } from "./lib/cloudSync";
 import {
   fetchRecentOrders,
   onRpcSchemaError,
@@ -108,7 +109,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (authed) load();
+    if (authed) {
+      load();
+      initCloudSync();
+    }
   }, [authed, load]);
 
   // PWA：断网期间看的是缓存，恢复联网立即重新拉取并通知各页刷新

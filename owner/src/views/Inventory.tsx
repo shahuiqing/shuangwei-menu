@@ -59,6 +59,7 @@ import {
   type StocktakeRecord,
 } from "../lib/stocktakeHistory";
 import { logAction } from "../lib/auditLog";
+import { clearCloudStock } from "../lib/cloudSync";
 
 const EMPTY: Partial<InventoryItem> = {
   name: "",
@@ -583,7 +584,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
 
       <ChartCard
         title="盘点记录"
-        subtitle="本机保存最近 60 次 · 随「数据导出」可备份"
+        subtitle="最近 60 次 · 自动同步云端 · 随「数据导出」可备份"
         action={<History size={18} className="text-orange-500" />}
       >
         {stocktakes.length === 0 ? (
@@ -627,8 +628,9 @@ export default function Inventory({ version = 0 }: { version?: number }) {
             </div>
             <button
               onClick={() => {
-                if (confirm("清空本机盘点记录？")) {
+                if (confirm("清空盘点记录（本机与云端）？")) {
                   clearStocktakeHistory();
+                  void clearCloudStock();
                   setStocktakes([]);
                   logAction("清空盘点记录");
                 }
