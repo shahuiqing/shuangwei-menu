@@ -98,7 +98,7 @@ npm run build             # 产出 owner/dist
 
 如需分步（均幂等）：
 
-1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql` → 7. `supabase_owner_auth.sql` → 8. `supabase_owner_waste.sql`（报损 `reason` 列）→ 9. `supabase_owner_cloudsync.sql`（操作日志/盘点历史上云）→ 10. `supabase_owner_backfill.sql`（历史汇总补录）
+1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql` → 7. `supabase_owner_auth.sql` → 8. `supabase_owner_waste.sql`（报损 `reason` 列）→ 9. `supabase_owner_cloudsync.sql`（操作日志/盘点历史上云）→ 10. `supabase_owner_backfill.sql`（历史汇总补录）→ 11. `supabase_owner_import.sql`（订单 CSV 导入 RPC，绕 BOM 触发器）
 
 > 已在用「损耗分析」页的库：只需单独执行 `supabase_owner_waste.sql`（约 5 秒）；未执行前报损记录仍会写入（仅 `reason` 缺失，前端已降级为不分类）。
 >

@@ -368,6 +368,13 @@ export async function deleteOrder(id: string): Promise<boolean> {
   return true;
 }
 
+/** 批量导入历史订单（RPC 绕过 BOM 触发器不扣库存；同 id 幂等跳过）。
+ *  返回实际插入条数；未执行 SQL / 失败返回 -1。 */
+export async function importOrders(rows: unknown[]): Promise<number> {
+  if (!rows.length) return 0;
+  return call<number>("owner_import_orders", { p_orders: rows }, -1);
+}
+
 /** 仅拉少量近况订单用于实时流 */
 export async function fetchRecentOrders(limit = 30): Promise<any[]> {
   if (!supabase) return [];

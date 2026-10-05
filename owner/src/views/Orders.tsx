@@ -3,6 +3,7 @@ import {
   Search,
   X,
   Download,
+  Upload,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -31,8 +32,11 @@ import {
   updateOrderStatus,
   updateOrderFields,
   deleteOrder,
+  importOrders,
   NEXT_STATUS,
 } from "../lib/aggregate";
+import { parseOrdersCsv } from "../lib/csv";
+import { logAction } from "../lib/auditLog";
 import {
   getOrderTag,
   setOrderTag,
@@ -129,6 +133,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
   const [qDebounced, setQDebounced] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [reload, setReload] = useState(0);
 
   // 超时高亮：阈值可配，每分钟重算
   const [lateCfg] = useLateConfig();
@@ -185,7 +190,7 @@ export default function Orders({ version = 0 }: { version?: number }) {
     return () => {
       alive = false;
     };
-  }, [range, status, sort, page, qDebounced, version]);
+  }, [range, status, sort, page, qDebounced, version, reload]);
 
   const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const resetPage = () => setPage(0);
@@ -300,6 +305,54 @@ export default function Orders({ version = 0 }: { version?: number }) {
     );
   };
 
+  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    let text = "";
+    try {
+      text = await f.text();
+    } catch {
+      return toast.error("读取文件失败");
+    }
+    let parsed;
+    try {
+      parsed = parseOrdersCsv(text);
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "CSV 解析失败");
+    }
+    if (!parsed.orders.length) {
+      return toast.error(
+        `没有可导入的订单${parsed.errors[0] ? `：${parsed.errors[0]}` : ""}`,
+      );
+    }
+    const sum = parsed.orders.reduce((s, o) => s + o.total, 0);
+    const days = new Set(parsed.orders.map((o) => o.timestamp.slice(0, 10)));
+    const warn =
+      parsed.mode === "summary"
+        ? "\n（汇总模式：只有金额，无菜品明细，菜品报表不含这些单）"
+        : "";
+    const ok = confirm(
+      `解析到 ${parsed.orders.length} 单 · ${days.size} 天 · 合计 ${fmtMoney(sum)}` +
+        `${parsed.skipped ? `\n跳过 ${parsed.skipped} 行` : ""}` +
+        `${warn}\n\n导入为已完成的历史订单，不会扣减库存；重复导入会自动跳过。确认导入？`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    const n = await importOrders(parsed.orders as unknown[]);
+    setBusy(false);
+    if (n < 0) {
+      return toast.error("导入失败：请先执行 supabase_owner_import.sql");
+    }
+    logAction("导入订单 CSV", `${n} 单 · ${fmtMoney(sum)}`);
+    toast.success(
+      n === parsed.orders.length
+        ? `已导入 ${n} 单`
+        : `已导入 ${n} 单（其余为重复记录）`,
+    );
+    setReload((v) => v + 1);
+  };
+
   // 异常订单队列：退菜/赠送/员工餐/试菜（本地标记）在当前页内过滤
   const shown = onlyAbnormal
     ? rows.filter((o) => getOrderTag(String(o.id || o._id)) !== "normal")
@@ -384,6 +437,19 @@ export default function Orders({ version = 0 }: { version?: number }) {
         >
           <Download size={16} /> 导出 CSV
         </button>
+
+        <label
+          title="POS / 平台订单导入（明细行或汇总行均可）"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800 cursor-pointer"
+        >
+          <Upload size={16} /> 导入 CSV
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={onImportFile}
+          />
+        </label>
 
         <button
           onClick={() => setOnlyAbnormal((v) => !v)}
