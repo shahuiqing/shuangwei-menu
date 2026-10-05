@@ -13,9 +13,16 @@ import {
   Download,
   Upload,
   History,
+  Sparkles,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
+import {
+  getLlmConfig,
+  setLlmConfig,
+  testLlm,
+  type LlmConfig,
+} from "../lib/llm";
 import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
 import {
   notifyEnabled,
@@ -62,6 +69,10 @@ export default function Settings({
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [showPw, setShowPw] = useState(false);
+
+  const [llm, setLlm] = useState<LlmConfig>(() => getLlmConfig());
+  const [showKey, setShowKey] = useState(false);
+  const [testingLlm, setTestingLlm] = useState(false);
 
   const [stats, setStats] = useState<TableStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -110,6 +121,22 @@ export default function Settings({
       alive = false;
     };
   }, []);
+
+  const saveLlm = () => {
+    const next = setLlmConfig(llm);
+    setLlm(next);
+    logAction("保存 AI 服务配置", `${next.baseUrl} · ${next.model}`);
+    setLogs(loadAuditLog());
+    toast.success("AI 配置已保存（仅本机）");
+  };
+
+  const checkLlm = async () => {
+    setLlmConfig(llm);
+    setTestingLlm(true);
+    const r = await testLlm();
+    setTestingLlm(false);
+    r.ok ? toast.success(r.msg) : toast.error(r.msg);
+  };
 
   const saveQuota = () => {
     const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
@@ -290,6 +317,63 @@ export default function Settings({
         >
           修改密码
         </button>
+      </ChartCard>
+
+      <ChartCard
+        title="AI 服务（可选）"
+        subtitle="OpenAI 兼容接口 · 未配置时 AI 助手用规则版"
+        action={<Sparkles size={18} className="text-orange-500" />}
+      >
+        <label className="text-sm text-zinc-400">Base URL（到 /v1 为止）</label>
+        <input
+          value={llm.baseUrl}
+          onChange={(e) => setLlm({ ...llm, baseUrl: e.target.value })}
+          placeholder="https://api.deepseek.com/v1"
+          className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+        />
+        <label className="text-sm text-zinc-400 mt-3 block">API Key</label>
+        <div className="relative">
+          <input
+            type={showKey ? "text" : "password"}
+            value={llm.apiKey}
+            onChange={(e) => setLlm({ ...llm, apiKey: e.target.value })}
+            placeholder="sk-…"
+            className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 pr-11 text-white focus:outline-none focus:border-orange-500"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
+          >
+            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+        <label className="text-sm text-zinc-400 mt-3 block">模型名</label>
+        <input
+          value={llm.model}
+          onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+          placeholder="deepseek-chat"
+          className="w-full mt-1.5 bg-zinc-950 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
+        />
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={saveLlm}
+            disabled={testingLlm}
+            className="flex-1 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+          >
+            保存配置
+          </button>
+          <button
+            onClick={checkLlm}
+            disabled={testingLlm}
+            className="flex-1 py-3 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+          >
+            {testingLlm ? "测试中…" : "测试连接"}
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
+          Key 只存本机浏览器，不上传、不随备份导出；请求由浏览器直连该接口。
+        </p>
       </ChartCard>
 
       <ChartCard

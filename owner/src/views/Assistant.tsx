@@ -12,7 +12,8 @@ import { stocktakeDue } from "../lib/stocktakeReminder";
 import { lateOrders, loadLateConfig } from "../lib/lateOrders";
 import { useOpsSignals } from "../lib/useOpsSignals";
 import { buildDailyBrief } from "../lib/brief";
-import { ask, PRESET_QUESTIONS } from "../lib/assistant";
+import { ask, PRESET_QUESTIONS, llmSystemPrompt } from "../lib/assistant";
+import { chatLLM, hasLlm } from "../lib/llm";
 import { actionDraft } from "../lib/actionDraft";
 
 export default function Assistant({
@@ -27,6 +28,8 @@ export default function Assistant({
   const ops = useOpsSignals(version);
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
+  const [aiAnswer, setAiAnswer] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [draft, setDraft] = useState<string[] | null>(null);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
@@ -107,11 +110,24 @@ export default function Assistant({
     [storeName, data, topDish],
   );
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     const t = text.trim();
-    if (!t) return;
-    setAnswer(ask(t, data));
+    if (!t || thinking) return;
     setQ("");
+    setAnswer(null);
+    setAiAnswer(false);
+    if (hasLlm()) {
+      setThinking(true);
+      const reply = await chatLLM(llmSystemPrompt(data, brief), t);
+      setThinking(false);
+      if (reply) {
+        setAnswer(reply);
+        setAiAnswer(true);
+        return;
+      }
+      toast.info("AI 暂不可用，已用规则版回答");
+    }
+    setAnswer(ask(t, data));
   };
 
   const copyBrief = () => {
@@ -186,14 +202,29 @@ export default function Assistant({
               </div>
               <button
                 onClick={() => send(q)}
-                className="shrink-0 w-10 h-10 rounded-xl btn-brand text-white flex items-center justify-center active:scale-95 transition-transform"
+                disabled={thinking}
+                className="shrink-0 w-10 h-10 rounded-xl btn-brand text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50"
               >
                 <Send size={16} />
               </button>
             </div>
+            {thinking && (
+              <div className="mt-3 rounded-xl bg-zinc-950 border border-white/5 px-3.5 py-3 text-sm text-zinc-400 animate-pulse">
+                AI 思考中…
+              </div>
+            )}
             {answer && (
               <div className="mt-3 rounded-xl bg-orange-500/5 border border-orange-500/20 px-3.5 py-3 text-sm text-zinc-200 leading-relaxed">
-                {answer}
+                <span
+                  className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${
+                    aiAnswer
+                      ? "bg-orange-500 text-white"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {aiAnswer ? "AI" : "规则版"}
+                </span>
+                <div className="whitespace-pre-wrap">{answer}</div>
               </div>
             )}
           </>
