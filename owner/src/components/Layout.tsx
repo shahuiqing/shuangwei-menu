@@ -289,7 +289,7 @@ export function Layout({
               </div>
               <div className="min-w-0">
                 {/* 桌面：当前页标题 */}
-                <div className="hidden lg:block text-xl font-semibold tracking-tight text-white leading-tight truncate">
+                <div className="hidden lg:block font-serif text-xl font-semibold tracking-tight text-white leading-tight truncate">
                   {active?.label}
                 </div>
                 <div className="hidden lg:block text-[13px] text-zinc-500 mt-0.5 leading-snug truncate">
@@ -409,11 +409,19 @@ export function Layout({
                 : undefined,
             }}
           >
-            {/* 移动端大标题（App 风格：标题 + 副标题） */}
+            {/* 移动端大标题（账本风：宋体标题 + 右侧竖排点缀） */}
             <div className="lg:hidden pb-4">
-              <h1 className="font-serif text-2xl font-bold tracking-tight text-white leading-tight">
-                {active?.label}
-              </h1>
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="font-serif text-2xl font-bold tracking-tight text-white leading-tight">
+                  {active?.label}
+                </h1>
+                <span
+                  className="font-serif text-[13px] text-zinc-400 tracking-[0.35em] shrink-0 mt-1"
+                  style={{ writingMode: "vertical-rl" }}
+                >
+                  {active?.label}
+                </span>
+              </div>
               <p className="text-[13px] text-zinc-500 mt-1 leading-snug">
                 {SUBTITLE[tab] ?? " "}
               </p>
