@@ -69,6 +69,7 @@ import {
 } from "../lib/inventory";
 import { buildPriceAlerts, flaggedAlerts } from "../lib/priceAlert";
 import { todayWasteAmount } from "../lib/waste";
+import { detectDishDrops } from "../lib/anomaly";
 import { dishMargins, sumCost } from "../lib/cost";
 import { loadTasks } from "../lib/tasks";
 import { buildTodos } from "../lib/todo";
@@ -169,6 +170,9 @@ export default function Dashboard({
   const [trend, setTrend] = useState<DailyPoint[]>([]);
   const [hourly, setHourly] = useState<HourPoint[]>([]);
   const [dishes, setDishes] = useState<DishStat[]>([]);
+  const [dishDrops, setDishDrops] = useState<
+    { name: string; recentQty: number; prevQty: number; dropPct: number }[]
+  >([]);
   const [ops, setOps] = useState<{
     low: InventoryItem[];
     alerts: ReturnType<typeof flaggedAlerts>;
@@ -236,12 +240,17 @@ export default function Dashboard({
     (async () => {
       setLoading(true);
       const b = rangeToIso(range);
-      const [cur, prev, daily, dish, hours] = await Promise.all([
+      const now = new Date();
+      const r3Start = new Date(now.getTime() - 3 * 86400000).toISOString();
+      const p7Start = new Date(now.getTime() - 10 * 86400000).toISOString();
+      const [cur, prev, daily, dish, hours, r3, p7] = await Promise.all([
         salesSummary(b.start, b.end),
         salesSummary(b.prevStart, b.prevEnd),
         dailySeries(rangeToIso("30d").start, rangeToIso("30d").end),
         dishStats(b.start, b.end),
         hourlySeries(b.start, b.end),
+        dishStats(r3Start, now.toISOString()),
+        dishStats(p7Start, r3Start),
       ]);
       if (!alive) return;
       const aov = cur.orders ? cur.revenue / cur.orders : 0;
@@ -258,6 +267,7 @@ export default function Dashboard({
       setTrend(daily);
       setDishes(dish);
       setHourly(hours);
+      setDishDrops(detectDishDrops(r3, p7, 3, 7).slice(0, 5));
       setLoading(false);
     })();
     return () => {
@@ -664,6 +674,37 @@ export default function Dashboard({
               ))}
             </div>
           )}
+        </ChartCard>
+      )}
+
+      {dishDrops.length > 0 && (
+        <ChartCard
+          title="销量腰斩预警"
+          subtitle="近 3 天 vs 前 7 天日均销量"
+          action={<AlertTriangle size={18} className="text-amber-400" />}
+        >
+          <div className="space-y-1.5">
+            {dishDrops.map((d) => (
+              <button
+                key={d.name}
+                onClick={() => onTab?.("menu")}
+                className="w-full flex items-center gap-3 bg-zinc-950 rounded-lg px-3 py-2.5 text-left hover:bg-zinc-900/70 transition-colors"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-zinc-100 truncate">
+                    {d.name}
+                  </span>
+                  <span className="block text-xs text-zinc-500 truncate">
+                    前7天 {d.prevQty} 份 → 近3天 {d.recentQty} 份
+                  </span>
+                </span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 shrink-0">
+                  ↓{d.dropPct}%
+                </span>
+                <ChevronRight size={16} className="text-zinc-600 shrink-0" />
+              </button>
+            ))}
+          </div>
         </ChartCard>
       )}
 
