@@ -31,6 +31,17 @@ import {
   type DailyProfit,
 } from "../lib/aggregate";
 import { useChartTheme } from "../lib/theme";
+import {
+  fetchFixedCosts,
+  saveFixedCost,
+  deleteFixedCost,
+  newFixedCost,
+  dailyFixedCost,
+  breakEvenRevenue,
+  FIXED_CATEGORIES,
+  type FixedCost,
+} from "../lib/fixedCost";
+import { Plus, Trash2, Landmark } from "lucide-react";
 
 export default function CostReport({ version = 0 }: { version?: number }) {
   const C = useChartTheme();
@@ -46,6 +57,12 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   const [revenue, setRevenue] = useState(0);
   const [daily, setDaily] = useState<DailyProfit[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
+  const [fcName, setFcName] = useState("");
+  const [fcCategory, setFcCategory] = useState<string>("其他");
+  const [fcAmount, setFcAmount] = useState("");
+  const [fcNote, setFcNote] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -70,6 +87,10 @@ export default function CostReport({ version = 0 }: { version?: number }) {
     };
   }, [range, version]);
 
+  useEffect(() => {
+    fetchFixedCosts().then(setFixedCosts);
+  }, [version]);
+
   const cogs = useMemo(() => sumCost(margins), [margins]);
   const profit = revenue - cogs;
   const margin = revenue ? (profit / revenue) * 100 : 0;
@@ -77,6 +98,34 @@ export default function CostReport({ version = 0 }: { version?: number }) {
     () => margins.filter((m) => !m.hasCost).map((m) => m.name),
     [margins],
   );
+  const todayFixed = useMemo(
+    () => dailyFixedCost(fixedCosts, new Date()),
+    [fixedCosts],
+  );
+  const net = revenue - cogs - todayFixed;
+  const breakEven = breakEvenRevenue(todayFixed, revenue ? cogs / revenue : 0);
+
+  const addFixedCost = async () => {
+    if (!fcName.trim()) return;
+    const c: FixedCost = {
+      ...newFixedCost(),
+      name: fcName.trim(),
+      category: fcCategory,
+      amount: Number(fcAmount) || 0,
+      note: fcNote.trim(),
+    };
+    const ok = await saveFixedCost(c);
+    if (!ok) return;
+    setFixedCosts(await fetchFixedCosts());
+    setFcName("");
+    setFcAmount("");
+    setFcNote("");
+  };
+  const removeFixedCost = async (id: string) => {
+    if (!confirm("删除这项固定成本？")) return;
+    if (!(await deleteFixedCost(id))) return;
+    setFixedCosts(await fetchFixedCosts());
+  };
   const points = useMemo(
     () =>
       daily.map((d) => ({
@@ -108,7 +157,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard
           icon={Wallet}
           label="营业收入"
@@ -143,7 +192,98 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           accent="text-teal-400"
           bg="bg-teal-500/10"
         />
+        <KpiCard
+          icon={Landmark}
+          label="净利（扣固定成本）"
+          value={fmtMoney(net)}
+          valueNum={net}
+          format={fmtMoney}
+          sub={`盈亏平衡 ${fmtMoney(breakEven)}/日`}
+          accent={net >= 0 ? "text-green-400" : "text-red-400"}
+          bg={net >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
+        />
       </div>
+
+      <ChartCard
+        title="固定成本（房租 / 人工 / 水电）"
+        subtitle={`月合计 ${fmtMoney(fixedCosts.reduce((s, c) => s + Number(c.amount), 0))} · 今日摊派 ${fmtMoney(todayFixed)} · 盈亏平衡 ${fmtMoney(breakEven)}/日`}
+      >
+        {fixedCosts.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {fixedCosts.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center gap-3 rounded-xl bg-zinc-950 border border-white/5 px-3 py-2.5 text-sm"
+              >
+                <span className="text-zinc-200 font-medium truncate">
+                  {c.name}
+                  <span className="text-[11px] text-zinc-500 ml-2">
+                    {c.category}
+                  </span>
+                </span>
+                <span className="ml-auto tnum text-zinc-300 shrink-0">
+                  {fmtMoney(Number(c.amount))}/月
+                </span>
+                <span className="tnum text-zinc-500 text-xs shrink-0">
+                  ≈{fmtMoney(dailyFixedCost([c], new Date()))}/日
+                </span>
+                <button
+                  onClick={() => removeFixedCost(c.id)}
+                  className="text-zinc-500 hover:text-red-400 shrink-0"
+                  title="删除"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <input
+            value={fcName}
+            onChange={(e) => setFcName(e.target.value)}
+            placeholder="名称（如 房租）"
+            className="sm:col-span-1 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <select
+            value={fcCategory}
+            onChange={(e) => setFcCategory(e.target.value)}
+            className="bg-zinc-950 border border-white/5 rounded-lg px-2.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          >
+            {FIXED_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={0}
+            value={fcAmount}
+            onChange={(e) => setFcAmount(e.target.value)}
+            placeholder="月金额"
+            className="bg-zinc-950 border border-white/5 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <input
+            value={fcNote}
+            onChange={(e) => setFcNote(e.target.value)}
+            placeholder="备注（选填）"
+            className="sm:col-span-1 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <button
+            onClick={addFixedCost}
+            disabled={!fcName.trim()}
+            className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg btn-brand text-white font-semibold text-sm disabled:opacity-50"
+          >
+            <Plus size={15} /> 添加
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2 leading-relaxed">
+          按月金额录入，按当月自然天数摊到每日；未执行 supabase_owner_all.sql
+          时保存会失败。
+        </p>
+      </ChartCard>
 
       {unknown.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">

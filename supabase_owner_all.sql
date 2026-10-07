@@ -491,6 +491,24 @@ $$;
 GRANT EXECUTE ON FUNCTION public.owner_import_orders(jsonb) TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.4 固定成本表（房租/人工/水电等，按月金额录入，按当月天数摊到每日）
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.owner_fixed_cost (
+  id         text primary key,
+  name       text not null default '',
+  category   text not null default '其他',
+  amount     numeric not null default 0,
+  start_date text not null default '',  -- YYYY-MM 生效月（含）
+  note       text not null default '',
+  created_at timestamptz not null default now()
+);
+ALTER TABLE public.owner_fixed_cost ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS anon_all_owner_fixed_cost ON public.owner_fixed_cost;
+CREATE POLICY anon_all_owner_fixed_cost ON public.owner_fixed_cost
+  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON public.owner_fixed_cost TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';
@@ -503,7 +521,7 @@ FROM pg_proc
 WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'owner_%'
 ORDER BY proname;
 
--- 校验：owner 相关的扩展表（应返回 owner_audit_log / owner_stocktake / owner_backfill）
+-- 校验：owner 相关的扩展表（应返回 owner_audit_log / owner_stocktake / owner_backfill / owner_fixed_cost）
 SELECT table_name FROM information_schema.tables
  WHERE table_schema = 'public' AND table_name LIKE 'owner_%'
  ORDER BY table_name;
