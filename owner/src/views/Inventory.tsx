@@ -140,7 +140,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     return out;
   }, [list, q, onlyA, metaMap]);
 
-  const take = useMemo(() => buildStocktake(list, counts), [list, counts]);
+  /** 只盘「可盘点」的原料，排除已标记「不可盘（按消耗率估）」的项 */
+  const countableItems = useMemo(
+    () => list.filter((i) => metaMap[i.id]?.countable !== false),
+    [list, metaMap],
+  );
+  const take = useMemo(
+    () => buildStocktake(countableItems, counts),
+    [countableItems, counts],
+  );
+  const excludedCount = list.length - countableItems.length;
 
   const setMetaField = (patch: Partial<ItemMeta>) => {
     if (!editing?.id) return;
@@ -916,6 +925,11 @@ export default function Inventory({ version = 0 }: { version?: number }) {
               {fmtMoney(take.summary.gainValue)}
             </b>
           </span>
+          {excludedCount > 0 && (
+            <span className="text-zinc-500">
+              已排除 <b className="text-zinc-400">{excludedCount}</b> 项不可盘
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-[1fr_88px_64px] gap-3 px-1 pb-1 text-[10px] text-zinc-600">
