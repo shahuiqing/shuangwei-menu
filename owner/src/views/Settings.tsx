@@ -15,6 +15,8 @@ import {
   History,
   Sparkles,
   CalendarPlus,
+  Percent,
+  Scale,
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -61,6 +63,7 @@ import {
 } from "../lib/industry";
 import { loadAuditLog, clearAuditLog, logAction } from "../lib/auditLog";
 import { fmtDateTime, fmtMoney } from "../lib/format";
+import { getCommissionRate, setCommissionRate } from "../lib/platform";
 
 export default function Settings({
   settings,
@@ -111,6 +114,8 @@ export default function Settings({
   });
 
   const [biz, setBiz] = useState<BizType>(() => getBizType());
+
+  const [commission, setCommission] = useState(() => getCommissionRate());
 
   const [logs, setLogs] = useState(() => loadAuditLog());
 
@@ -208,6 +213,12 @@ export default function Settings({
     const v = setDailyQuota(todayQuotaKey(), Number(quotaDraft));
     setQuotaDraft(v === null ? "" : String(v));
     toast.success(v === null ? "已清除今日定额" : `今日定额已设为 ${v} 元`);
+  };
+
+  const saveCommission = () => {
+    const r = setCommissionRate(commission);
+    setCommission(r);
+    toast.success(`平台抽成率已保存（${Math.round(r * 100)}%）`);
   };
 
   const exportBackup = () => {
@@ -594,6 +605,39 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        title="平台订单口径"
+        subtitle="美团/饿了么等外部订单有抽成，营收不能直接当利润"
+        action={<Percent size={18} className="text-orange-500" />}
+      >
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(commission * 100)}
+            onChange={(e) =>
+              setCommission(
+                Math.min(100, Math.max(0, Number(e.target.value) || 0)) / 100,
+              )
+            }
+            className="w-24 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2.5 text-sm text-white text-right focus:outline-none focus:border-orange-500"
+          />
+          <span className="text-sm text-zinc-400">% 平台抽成</span>
+          <button
+            onClick={saveCommission}
+            className="ml-auto px-4 py-2.5 rounded-lg btn-brand text-white text-sm font-semibold"
+          >
+            保存
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2 leading-relaxed">
+          平台净营收 = 营收 ×（1 −
+          抽成率）；导入的「外卖」订单据此估算净利，避免与堂食混算。
+        </p>
+      </ChartCard>
+
+      <ChartCard
         title="历史补录"
         subtitle="没记账的营业日补进报表 · 看板与趋势自动计入"
         action={<CalendarPlus size={18} className="text-orange-500" />}
@@ -855,6 +899,52 @@ export default function Settings({
             </div>
           </>
         )}
+      </ChartCard>
+
+      <ChartCard
+        title="运行原理 / 计算口径"
+        subtitle="每个数字是怎么算出来的 · 便于理解与对账"
+        action={<Scale size={18} className="text-orange-500" />}
+      >
+        <div className="space-y-2.5 text-[13px] text-zinc-300 leading-relaxed">
+          <p>
+            <b className="text-zinc-100">营收</b>
+            ：结账金额（finalTotal 优先，回退 total）。
+          </p>
+          <p>
+            <b className="text-zinc-100">销售成本 COGS</b>
+            ：菜品标准配方用量 × 原料单价（标准值，非后厨实际用量）。
+          </p>
+          <p>
+            <b className="text-zinc-100">毛利</b> = 营收 −
+            COGS（标准口径，偏乐观）。
+          </p>
+          <p>
+            <b className="text-zinc-100">净利</b> = 营收 − COGS − 损耗 −
+            固定成本（固定成本按月金额摊到每日）。
+          </p>
+          <p>
+            <b className="text-zinc-100">固定成本</b>
+            ：房租/人工/水电按月录入，按当月自然天数摊到每日。
+          </p>
+          <p>
+            <b className="text-zinc-100">损耗</b>
+            ：仅报损登记（显性）；后厨未报的隐性损耗需「成本对账」（真实 COGS −
+            标准 COGS）。
+          </p>
+          <p>
+            <b className="text-zinc-100">平台订单</b>
+            ：按来源标记，净营收 = 营收 ×（1−抽成率）。
+          </p>
+          <p>
+            <b className="text-zinc-100">临期预警</b>
+            ：最近采购日 + 保质期天数 = 到期日，剩余 ≤3 天提示临期。
+          </p>
+          <p>
+            <b className="text-zinc-100">销量预警</b>
+            ：近 3 天 vs 前 7 天日均销量降幅 ≥50%。
+          </p>
+        </div>
       </ChartCard>
     </div>
   );
