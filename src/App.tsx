@@ -1343,6 +1343,17 @@ export default function App() {
     );
   };
 
+  const toggleCartAddon = (dishId: string, addonId: string) => {
+    setCartAddons((prev) => {
+      const cur = prev[dishId] || [];
+      const next = cur.includes(addonId)
+        ? cur.filter((x) => x !== addonId)
+        : [...cur, addonId];
+      const { [dishId]: _, ...rest } = prev;
+      return next.length > 0 ? { ...prev, [dishId]: next } : rest;
+    });
+  };
+
   const confirmAddons = () => {
     if (!pendingAddonDish) return;
     const dishId = pendingAddonDish.id;
@@ -2557,6 +2568,50 @@ export default function App() {
                     {getLoc(selectedDish, language, "desc")}
                   </div>
 
+                  {selectedDish.addons && selectedDish.addons.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm font-semibold text-zinc-300 mb-2">
+                        {language === "zh"
+                          ? "选择配菜（可多选）："
+                          : "Select add-ons:"}
+                      </p>
+                      <div className="space-y-2">
+                        {selectedDish.addons.map((addon) => {
+                          const selected = (
+                            cartAddons[selectedDish.id] || []
+                          ).includes(addon.id);
+                          return (
+                            <label
+                              key={addon.id}
+                              className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
+                                selected
+                                  ? "bg-orange-500/10 border-orange-500/50"
+                                  : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() =>
+                                    toggleCartAddon(selectedDish.id, addon.id)
+                                  }
+                                  className="w-4 h-4 accent-orange-500"
+                                />
+                                <span className="text-sm text-zinc-200">
+                                  {addon.name}
+                                </span>
+                              </span>
+                              <span className="text-sm font-semibold text-orange-400">
+                                {addon.price > 0 ? `+${addon.price}` : "免费"}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-auto pt-6 w-full flex-col gap-3 hidden md:flex">
                     {/* Multilingual Preview Section (Optional, nice to have for admin/gastronomy context) */}
                     <details className="text-xs text-zinc-500 mt-2 bg-zinc-950 rounded-xl border border-zinc-800 p-3 group">
@@ -2645,7 +2700,7 @@ export default function App() {
                             onClick={(e) => {
                               e.stopPropagation();
                               if (!selectedDish.isSoldOut) {
-                                tryAddToCart(selectedDish);
+                                updateCart(selectedDish.id, 1);
                               }
                             }}
                             disabled={selectedDish.isSoldOut}
@@ -2673,7 +2728,7 @@ export default function App() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            tryAddToCart(selectedDish);
+                            updateCart(selectedDish.id, 1);
                           }}
                           className="w-full h-12 md:h-14 flex items-center justify-center gap-2 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-base font-bold shadow-lg transition-colors"
                         >
