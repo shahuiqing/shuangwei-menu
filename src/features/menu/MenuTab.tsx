@@ -867,58 +867,89 @@ export function MenuTab(props: MenuTabProps) {
                   配菜选项 / Add-ons（顾客点餐时可多选，可加价）
                 </label>
                 <div className="space-y-2">
-                  {(newDish.addons || []).map((addon: any, idx: number) => (
-                    <div
-                      key={addon.id || idx}
-                      className="flex items-center gap-2"
-                    >
-                      <input
-                        type="text"
-                        placeholder="配菜名（如：加香菜）"
-                        value={addon.name || ""}
-                        onChange={(e) => {
-                          const addons = [...(newDish.addons || [])];
-                          addons[idx] = {
-                            ...addons[idx],
-                            name: e.target.value,
-                          };
-                          setNewDish({ ...newDish, addons });
-                        }}
-                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="加价 0"
-                        value={addon.price ?? ""}
-                        onChange={(e) => {
-                          const addons = [...(newDish.addons || [])];
-                          addons[idx] = {
-                            ...addons[idx],
-                            price:
-                              e.target.value === ""
-                                ? 0
-                                : Number(e.target.value),
-                          };
-                          setNewDish({ ...newDish, addons });
-                        }}
-                        className="w-24 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const addons = (newDish.addons || []).filter(
-                            (_: any, i: number) => i !== idx,
-                          );
-                          setNewDish({ ...newDish, addons });
-                        }}
-                        className="p-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                  {(newDish.addons || []).map((addon: any, idx: number) => {
+                    const setField = (field: string, value: any) => {
+                      const addons = [...(newDish.addons || [])];
+                      addons[idx] = { ...addons[idx], [field]: value };
+                      setNewDish({ ...newDish, addons });
+                    };
+                    return (
+                      <div
+                        key={addon.id || idx}
+                        className="p-3 bg-zinc-950/50 rounded-xl border border-zinc-800 space-y-2"
                       >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="配菜名（如：加香菜）"
+                            value={addon.name || ""}
+                            onChange={(e) => setField("name", e.target.value)}
+                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="加价 0"
+                            value={addon.price ?? ""}
+                            onChange={(e) =>
+                              setField(
+                                "price",
+                                e.target.value === ""
+                                  ? 0
+                                  : Number(e.target.value),
+                              )
+                            }
+                            className="w-24 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const addons = (newDish.addons || []).filter(
+                                (_: any, i: number) => i !== idx,
+                              );
+                              setNewDish({ ...newDish, addons });
+                            }}
+                            className="p-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="英文名 (English)"
+                            value={addon.enName || ""}
+                            onChange={(e) => setField("enName", e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                          />
+                          <input
+                            type="text"
+                            placeholder="法文名 (Français)"
+                            value={addon.frName || ""}
+                            onChange={(e) => setField("frName", e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                          />
+                          <input
+                            type="text"
+                            placeholder="阿拉伯文 (العربية)"
+                            value={addon.arName || ""}
+                            onChange={(e) => setField("arName", e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                            dir="rtl"
+                          />
+                          <input
+                            type="text"
+                            placeholder="摩洛哥方言 (الدارجة)"
+                            value={addon.maName || ""}
+                            onChange={(e) => setField("maName", e.target.value)}
+                            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                            dir="rtl"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => {
@@ -932,6 +963,8 @@ export function MenuTab(props: MenuTabProps) {
                           name: "",
                           enName: "",
                           frName: "",
+                          arName: "",
+                          maName: "",
                           price: 0,
                         },
                       ];

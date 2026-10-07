@@ -803,6 +803,8 @@ export function useMenuManager(deps: MenuManagerDeps) {
                           name: String(a.name).trim(),
                           enName: String(a.enName || ""),
                           frName: String(a.frName || ""),
+                          arName: String(a.arName || ""),
+                          maName: String(a.maName || ""),
                           price: Number(a.price) || 0,
                         })),
                     }
@@ -855,6 +857,8 @@ export function useMenuManager(deps: MenuManagerDeps) {
           name: String(a.name).trim(),
           enName: String(a.enName || ""),
           frName: String(a.frName || ""),
+          arName: String(a.arName || ""),
+          maName: String(a.maName || ""),
           price: Number(a.price) || 0,
         })),
       id:

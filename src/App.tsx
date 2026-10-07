@@ -2599,7 +2599,7 @@ export default function App() {
                                   className="w-4 h-4 accent-orange-500"
                                 />
                                 <span className="text-sm text-zinc-200">
-                                  {addon.name}
+                                  {getLoc(addon, language, "name")}
                                 </span>
                               </span>
                               <span className="text-sm font-semibold text-orange-400">
@@ -2903,7 +2903,7 @@ export default function App() {
                         >
                           {selected ? "✓" : ""}
                         </span>
-                        {addon.name}
+                        {getLoc(addon, language, "name")}
                       </span>
                       <span className="text-sm font-semibold text-orange-400">
                         {addon.price > 0 ? `+${addon.price}` : "免费"}

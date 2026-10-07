@@ -6,6 +6,8 @@ export interface MenuItemAddon {
   name: string;
   enName?: string;
   frName?: string;
+  arName?: string;
+  maName?: string;
   price: number; // 0 = 免费
 }
 

@@ -454,7 +454,7 @@ export default function CartMenu({
                                 ),
                               )
                               .filter(Boolean)
-                              .map((a) => a!.name)
+                              .map((a) => getLoc(a, language, "name"))
                               .join("、")}
                           </p>
                         )}
