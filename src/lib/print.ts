@@ -66,11 +66,18 @@ export const printReceipt = (
         if (uniqueTitles.length === 0 && item.name) {
           uniqueTitles.push(item.name);
         }
+        const addonsHtml = (item.addons || [])
+          .map(
+            (a: any) =>
+              `<div dir="auto" style="font-size:0.85em;opacity:0.85;">+ ${escHtml(a?.name || "")}</div>`,
+          )
+          .join("");
 
         html += `
           <div class="item">
             <div class="item-name">
               ${uniqueTitles.map((t) => `<div dir="auto">${escHtml(t)}</div>`).join("")}
+              ${addonsHtml}
             </div>
             <div class="item-details">
               <span class="qty">x${escHtml(qty)}</span>

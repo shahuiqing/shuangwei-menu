@@ -1,6 +1,14 @@
 export type LayoutStyle = "grid" | "list" | "bento";
 export type ThemeMode = "midnight" | "light";
 
+export interface MenuItemAddon {
+  id: string;
+  name: string;
+  enName?: string;
+  frName?: string;
+  price: number; // 0 = 免费
+}
+
 export interface MenuItem extends Record<string, unknown> {
   id: string;
   title: string;
@@ -18,6 +26,7 @@ export interface MenuItem extends Record<string, unknown> {
   allergens?: string[];
   stock?: number | string | null; // null = unlimited
   isSoldOut?: boolean;
+  addons?: MenuItemAddon[];
 }
 
 export interface MenuCategory {

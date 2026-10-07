@@ -22,6 +22,7 @@ interface CartMenuProps {
   isOpen: boolean;
   onClose: () => void;
   cart: Record<string, number>;
+  cartAddons: Record<string, string[]>;
   updateCart: (id: string, delta: number) => void;
   clearCart: () => void;
   categories: MenuCategory[];
@@ -37,6 +38,7 @@ export default function CartMenu({
   isOpen,
   onClose,
   cart,
+  cartAddons,
   updateCart,
   clearCart,
   categories,
@@ -79,7 +81,11 @@ export default function CartMenu({
     const priceString = String(item.price || "0");
     const priceMatch = priceString.match(/\d+(\.\d+)?/);
     const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
-    return sum + priceNum * qty;
+    const addonTotal = (cartAddons[id] || []).reduce((s, addonId) => {
+      const addon = (item.addons || []).find((a) => a.id === addonId);
+      return s + (addon ? Number(addon.price) || 0 : 0);
+    }, 0);
+    return sum + (priceNum + addonTotal) * qty;
   }, 0);
 
   const isRtl = language === "ar" || language === "ma";
@@ -159,6 +165,16 @@ export default function CartMenu({
           const item = allItems.find((i) => i.id === id);
           const priceString = String(item?.price || "0");
           const priceMatch = priceString.match(/\d+(\.\d+)?/);
+          const addons = (cartAddons[id] || [])
+            .map((addonId) =>
+              (item?.addons || []).find((a) => a.id === addonId),
+            )
+            .filter((a): a is NonNullable<typeof a> => Boolean(a))
+            .map((a) => ({
+              id: a.id,
+              name: a.name,
+              price: Number(a.price) || 0,
+            }));
           return {
             id: item?.id || id,
             name: item?.title || id,
@@ -168,6 +184,7 @@ export default function CartMenu({
             maTitle: item?.maTitle || "",
             quantity: qty,
             price: priceMatch && priceMatch[0] ? parseFloat(priceMatch[0]) : 0,
+            addons,
           };
         }),
         total: totalPrice,
@@ -427,6 +444,20 @@ export default function CartMenu({
                         <p className="text-xs text-orange-500 mt-1">
                           {item.price}
                         </p>
+                        {(cartAddons[id] || []).length > 0 && (
+                          <p className="text-[10px] text-zinc-400 mt-0.5 truncate">
+                            +{" "}
+                            {(cartAddons[id] || [])
+                              .map((addonId) =>
+                                (item.addons || []).find(
+                                  (a) => a.id === addonId,
+                                ),
+                              )
+                              .filter(Boolean)
+                              .map((a) => a!.name)
+                              .join("、")}
+                          </p>
+                        )}
                         {item.isSoldOut && (
                           <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">
                             {language === "zh"

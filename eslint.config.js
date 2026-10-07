@@ -3,7 +3,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'scripts/migrations/**', 'owner/**', 'src/server/*.js', 'server.cjs'] },
+  { ignores: ['dist/**', 'node_modules/**', 'scripts/migrations/**', 'owner/**', 'src/server/*.js', 'server.cjs', '.agents/**'] },
   { rules: { 'no-console': 'off' } },
   ...tseslint.configs.recommended,
   {

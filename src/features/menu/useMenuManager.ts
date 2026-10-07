@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { safeSetItem } from "../../utils/storage";
 import type {
   MenuCategory,
+  MenuItemAddon,
   Promotion,
   ReceiptSettings,
 } from "../../types/menu";
@@ -103,6 +104,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
     image: "",
     allergens: [] as string[],
     stock: "",
+    addons: [] as MenuItemAddon[],
   });
   const [editingDishId, setEditingDishId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
@@ -125,6 +127,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
       image: "",
       allergens: [] as string[],
       stock: "",
+      addons: [] as MenuItemAddon[],
     });
 
   const handleEditDish = (categoryId: string, dishId: string) => {
@@ -152,6 +155,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
         item.stock !== undefined && item.stock !== null
           ? String(item.stock)
           : "",
+      addons: Array.isArray(item.addons) ? item.addons : [],
     });
     setTimeout(() => {
       try {
@@ -788,6 +792,19 @@ export function useMenuManager(deps: MenuManagerDeps) {
                       price: editPrice,
                       stock: editStock,
                       isSoldOut: editStock === 0 ? true : i.isSoldOut,
+                      addons: (newDish.addons || [])
+                        .filter((a) => String(a?.name || "").trim())
+                        .map((a) => ({
+                          id:
+                            a.id ||
+                            "addon-" +
+                              Date.now().toString(36) +
+                              Math.random().toString(36).slice(2, 6),
+                          name: String(a.name).trim(),
+                          enName: String(a.enName || ""),
+                          frName: String(a.frName || ""),
+                          price: Number(a.price) || 0,
+                        })),
                     }
                   : i,
               ),
@@ -827,6 +844,19 @@ export function useMenuManager(deps: MenuManagerDeps) {
       ...newDish,
       price: finalPrice,
       stock: stockNum,
+      addons: (newDish.addons || [])
+        .filter((a) => String(a?.name || "").trim())
+        .map((a) => ({
+          id:
+            a.id ||
+            "addon-" +
+              Date.now().toString(36) +
+              Math.random().toString(36).slice(2, 6),
+          name: String(a.name).trim(),
+          enName: String(a.enName || ""),
+          frName: String(a.frName || ""),
+          price: Number(a.price) || 0,
+        })),
       id:
         "item-" +
         Date.now().toString(36) +

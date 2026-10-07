@@ -1,5 +1,12 @@
-export type OrderStatus = 'pending' | 'cooking' | 'served' | 'completed' | 'cancelled';
-export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
+export type OrderStatus =
+  "pending" | "cooking" | "served" | "completed" | "cancelled";
+export type OrderType = "dine_in" | "takeaway" | "delivery";
+
+export interface OrderItemAddon {
+  id: string;
+  name: string;
+  price: number;
+}
 
 export interface OrderItem {
   id?: string;
@@ -13,6 +20,7 @@ export interface OrderItem {
   subtotal?: number;
   image?: string;
   isAdded?: boolean; // true if added via appendDishes
+  addons?: OrderItemAddon[]; // 选中的配菜快照
 }
 
 export interface OrderAddition {

@@ -159,18 +159,27 @@ export function buildOrderTicket(
   b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
 
   const renderItems = (items: any[]) => {
-    const grouped = new Map<string, { title: string; qty: number }>();
+    const grouped = new Map<
+      string,
+      { title: string; qty: number; addonNames: string[] }
+    >();
     for (const it of items || []) {
-      const key = it.id || it.name || JSON.stringify(it);
+      const addonNames = (it.addons || [])
+        .map((a: any) => String(a?.name || "").trim())
+        .filter(Boolean);
+      const key = `${it.id || it.name || ""}|${addonNames.join(",")}`;
       const title = pickTitles(it, langs)[0] || it.name || "";
       const qty = Number(it.quantity || 1);
       const prev = grouped.get(key);
       if (prev) prev.qty += qty;
-      else grouped.set(key, { title, qty });
+      else grouped.set(key, { title, qty, addonNames });
     }
     for (const g of grouped.values()) {
       const line = `  ${g.qty}x ${g.title}`;
       for (const seg of wrapLine(line, width)) b.line(seg);
+      for (const an of g.addonNames) {
+        for (const seg of wrapLine(`      + ${an}`, width)) b.line(seg);
+      }
     }
   };
 

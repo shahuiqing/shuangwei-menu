@@ -1171,6 +1171,20 @@ export default function App() {
     }
   });
 
+  const [cartAddons, setCartAddons] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = safeGetItem("cartAddons");
+      return saved ? JSON.parse(saved) || {} : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [pendingAddonDish, setPendingAddonDish] = useState<MenuItem | null>(
+    null,
+  );
+  const [addonTempSelection, setAddonTempSelection] = useState<string[]>([]);
+
   const [bucketWarning] = useState<string>("");
 
   const isInternalCartUpdateRef = useRef(false);
@@ -1202,11 +1216,12 @@ export default function App() {
 
   useEffect(() => {
     safeSetItem("cart", JSON.stringify(cart));
+    safeSetItem("cartAddons", JSON.stringify(cartAddons));
     if (!isInternalCartUpdateRef.current && scanSession?.tableNo) {
       api.broadcastCart(scanSession.tableNo, cart);
     }
     isInternalCartUpdateRef.current = false;
-  }, [cart, scanSession]);
+  }, [cart, cartAddons, scanSession]);
 
   // Purge deleted dishes from local cart whenever categories or deletedItemIds change
   useEffect(() => {
@@ -1307,7 +1322,42 @@ export default function App() {
     });
   };
 
-  const clearCart = () => setCart({});
+  const clearCart = () => {
+    setCart({});
+    setCartAddons({});
+  };
+
+  const tryAddToCart = (item: MenuItem) => {
+    if (item.isSoldOut) return;
+    if (item.addons && item.addons.length > 0) {
+      setAddonTempSelection(cartAddons[item.id] || []);
+      setPendingAddonDish(item);
+      return;
+    }
+    updateCart(item.id, 1);
+  };
+
+  const toggleAddon = (id: string) => {
+    setAddonTempSelection((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const confirmAddons = () => {
+    if (!pendingAddonDish) return;
+    const dishId = pendingAddonDish.id;
+    const selectedIds = addonTempSelection;
+    if (selectedIds.length > 0) {
+      setCartAddons((prev) => ({ ...prev, [dishId]: selectedIds }));
+    } else {
+      setCartAddons((prev) => {
+        const { [dishId]: _, ...rest } = prev;
+        return rest;
+      });
+    }
+    updateCart(dishId, 1);
+    setPendingAddonDish(null);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -2330,7 +2380,7 @@ export default function App() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (!item.isSoldOut) {
-                                    updateCart(item.id, 1);
+                                    tryAddToCart(item);
                                   }
                                 }}
                                 disabled={item.isSoldOut}
@@ -2358,7 +2408,7 @@ export default function App() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateCart(item.id, 1);
+                                tryAddToCart(item);
                               }}
                               className="w-full h-10 md:h-12 flex items-center justify-center gap-2 px-3 md:px-4 rounded-xl bg-zinc-800/80 hover:bg-orange-600 text-zinc-300 hover:text-white text-xs md:text-sm font-semibold transition-colors border border-zinc-700 hover:border-orange-500 group-hover:border-zinc-500"
                             >
@@ -2595,7 +2645,7 @@ export default function App() {
                             onClick={(e) => {
                               e.stopPropagation();
                               if (!selectedDish.isSoldOut) {
-                                updateCart(selectedDish.id, 1);
+                                tryAddToCart(selectedDish);
                               }
                             }}
                             disabled={selectedDish.isSoldOut}
@@ -2623,7 +2673,7 @@ export default function App() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            updateCart(selectedDish.id, 1);
+                            tryAddToCart(selectedDish);
                           }}
                           className="w-full h-12 md:h-14 flex items-center justify-center gap-2 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-base font-bold shadow-lg transition-colors"
                         >
@@ -2736,6 +2786,7 @@ export default function App() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cart={cart}
+        cartAddons={cartAddons}
         updateCart={updateCart}
         clearCart={clearCart}
         categories={categories}
@@ -2746,6 +2797,84 @@ export default function App() {
         receiptSettings={receiptSettings}
         onUpdateCategories={handleUpdateCategories}
       />
+
+      {/* Addon Selection Modal */}
+      <AnimatePresence>
+        {pendingAddonDish && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 backdrop-blur-md bg-zinc-950/80">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+            >
+              <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-white">
+                    {pendingAddonDish.title}
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    选择配菜（可多选） / Select add-ons
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPendingAddonDish(null)}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-5 space-y-2 overflow-y-auto">
+                {(pendingAddonDish.addons || []).map((addon) => {
+                  const selected = addonTempSelection.includes(addon.id);
+                  return (
+                    <button
+                      key={addon.id}
+                      onClick={() => toggleAddon(addon.id)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors ${
+                        selected
+                          ? "bg-orange-500/15 border-orange-500 text-white"
+                          : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <span
+                          className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
+                            selected
+                              ? "bg-orange-500 border-orange-500 text-white"
+                              : "border-zinc-600"
+                          }`}
+                        >
+                          {selected ? "✓" : ""}
+                        </span>
+                        {addon.name}
+                      </span>
+                      <span className="text-sm font-semibold text-orange-400">
+                        {addon.price > 0 ? `+${addon.price}` : "免费"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="p-5 border-t border-zinc-800 flex gap-3">
+                <button
+                  onClick={() => setPendingAddonDish(null)}
+                  className="flex-1 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={confirmAddons}
+                  className="flex-1 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold transition-colors"
+                >
+                  确认添加
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Language Modal */}
       <AnimatePresence>

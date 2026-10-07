@@ -863,6 +863,87 @@ export function MenuTab(props: MenuTabProps) {
                 </div>
               </div>
               <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-zinc-400 mb-2">
+                  配菜选项 / Add-ons（顾客点餐时可多选，可加价）
+                </label>
+                <div className="space-y-2">
+                  {(newDish.addons || []).map((addon: any, idx: number) => (
+                    <div
+                      key={addon.id || idx}
+                      className="flex items-center gap-2"
+                    >
+                      <input
+                        type="text"
+                        placeholder="配菜名（如：加香菜）"
+                        value={addon.name || ""}
+                        onChange={(e) => {
+                          const addons = [...(newDish.addons || [])];
+                          addons[idx] = {
+                            ...addons[idx],
+                            name: e.target.value,
+                          };
+                          setNewDish({ ...newDish, addons });
+                        }}
+                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="加价 0"
+                        value={addon.price ?? ""}
+                        onChange={(e) => {
+                          const addons = [...(newDish.addons || [])];
+                          addons[idx] = {
+                            ...addons[idx],
+                            price:
+                              e.target.value === ""
+                                ? 0
+                                : Number(e.target.value),
+                          };
+                          setNewDish({ ...newDish, addons });
+                        }}
+                        className="w-24 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const addons = (newDish.addons || []).filter(
+                            (_: any, i: number) => i !== idx,
+                          );
+                          setNewDish({ ...newDish, addons });
+                        }}
+                        className="p-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const addons = [
+                        ...(newDish.addons || []),
+                        {
+                          id:
+                            "tmp-" +
+                            Date.now().toString(36) +
+                            Math.random().toString(36).slice(2, 5),
+                          name: "",
+                          enName: "",
+                          frName: "",
+                          price: 0,
+                        },
+                      ];
+                      setNewDish({ ...newDish, addons });
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-400 hover:text-orange-400 hover:border-orange-500/50 transition-colors"
+                  >
+                    <Plus size={14} /> 添加配菜
+                  </button>
+                </div>
+              </div>
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-zinc-400 mb-1">
                   描述 (中)
                 </label>
