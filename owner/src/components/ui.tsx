@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowUpRight, ArrowDownRight, Minus, Inbox } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 
 /** 数字滚动（尊重 prefers-reduced-motion） */
 function useCountUp(target: number | undefined) {
@@ -167,15 +167,15 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-14 text-zinc-600">
-      <div className="relative w-16 h-16 flex items-center justify-center mb-3.5">
-        <span className="absolute inset-0 rounded-full border border-dashed border-orange-500/30" />
-        <span className="w-11 h-11 rounded-2xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-center shadow-[0_10px_24px_-16px_rgba(234,88,12,0.9)]">
-          <Inbox size={20} className="text-orange-500" />
-        </span>
+    <div className="flex flex-col items-center justify-center py-14 text-zinc-500">
+      <div
+        className="seal-cinnabar w-14 h-14 rounded-md text-xl mb-4"
+        style={{ transform: "rotate(-4deg)" }}
+      >
+        空
       </div>
-      <span className="text-sm text-zinc-500">{text}</span>
-      {hint && <span className="text-xs text-zinc-600 mt-1">{hint}</span>}
+      <span className="font-serif text-base text-zinc-700">{text}</span>
+      {hint && <span className="text-xs text-zinc-500 mt-1.5">{hint}</span>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );

@@ -76,16 +76,14 @@ export default function Login({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="min-h-full relative flex items-center justify-center p-6 bg-zinc-950 overflow-hidden">
-      <div className="pointer-events-none absolute -top-32 right-[-10%] w-[420px] h-[420px] rounded-full bg-orange-600/20 blur-[110px] animate-[floatY_9s_ease-in-out_infinite]" />
-      <div className="pointer-events-none absolute -bottom-32 left-[-12%] w-[380px] h-[380px] rounded-full bg-orange-900/25 blur-[110px] animate-[floatY_11s_ease-in-out_infinite_reverse]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(rgba(255,255,255,0.09)_1px,transparent_1px)] [background-size:26px_26px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_72%)]" />
+      <div className="pointer-events-none absolute -top-32 right-[-10%] w-[420px] h-[420px] rounded-full bg-orange-500/[0.08] blur-[110px]" />
 
       <div className="relative w-full max-w-sm animate-rise">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-[74px] h-[74px] rounded-[26px] bg-gradient-to-br from-orange-400 to-orange-700 text-white flex items-center justify-center mb-4 shadow-[0_18px_40px_-16px_rgba(234,88,12,0.85)] ring-1 ring-white/15">
-            <span className="text-[34px] font-black leading-none">双</span>
+          <div className="w-[74px] h-[74px] rounded-2xl seal-cinnabar flex items-center justify-center mb-4 shadow-[0_18px_40px_-16px_rgba(146,43,33,0.6)]">
+            <span className="text-[36px] leading-none">双</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">
+          <h1 className="font-serif text-2xl font-bold tracking-[0.12em] text-white">
             {STORE_NAME}
           </h1>
           <p className="text-zinc-500 text-sm mt-1">
