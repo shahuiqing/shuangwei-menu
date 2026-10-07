@@ -40,10 +40,24 @@ describe("上云行映射", () => {
 
   it("盘点映射 netValue → net_value", () => {
     const rows = toStockRows([
-      { at: 10, day: "2026-10-04", items: 5, diffs: 2, netValue: -3.5 },
+      {
+        at: 10,
+        day: "2026-10-04",
+        items: 5,
+        diffs: 2,
+        netValue: -3.5,
+        stockValue: 1000,
+      },
     ]);
     expect(rows).toEqual([
-      { at: 10, day: "2026-10-04", items: 5, diffs: 2, net_value: -3.5 },
+      {
+        at: 10,
+        day: "2026-10-04",
+        items: 5,
+        diffs: 2,
+        net_value: -3.5,
+        stock_value: 1000,
+      },
     ]);
   });
 });
@@ -75,15 +89,37 @@ describe("合并（多设备）", () => {
 
   it("盘点按 at 去重，net_value 还原为 netValue", () => {
     const local: StocktakeRecord[] = [
-      { at: 2, day: "2026-10-03", items: 1, diffs: 0, netValue: 1 },
+      {
+        at: 2,
+        day: "2026-10-03",
+        items: 1,
+        diffs: 0,
+        netValue: 1,
+        stockValue: 500,
+      },
     ];
     const merged = mergeStocktake(local, [
-      { at: 3, day: "2026-10-04", items: 2, diffs: 1, net_value: -4 },
-      { at: 2, day: "2026-10-03", items: 1, diffs: 0, net_value: 1 },
+      {
+        at: 3,
+        day: "2026-10-04",
+        items: 2,
+        diffs: 1,
+        net_value: -4,
+        stock_value: 600,
+      },
+      {
+        at: 2,
+        day: "2026-10-03",
+        items: 1,
+        diffs: 0,
+        net_value: 1,
+        stock_value: 500,
+      },
     ]);
     expect(merged).toHaveLength(2);
     expect(merged[0].netValue).toBe(-4);
     expect(merged[1].netValue).toBe(1);
+    expect(merged[0].stockValue).toBe(600);
   });
 
   it("盘点截断 60 条", () => {
@@ -93,6 +129,7 @@ describe("合并（多设备）", () => {
       items: 0,
       diffs: 0,
       netValue: 0,
+      stockValue: 0,
     }));
     expect(mergeStocktake(many, [])).toHaveLength(60);
   });

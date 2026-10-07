@@ -20,8 +20,15 @@ import {
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { fmtMoney } from "../lib/format";
-import { fetchBoms, fetchInventory, num } from "../lib/inventory";
+import {
+  fetchBoms,
+  fetchInventory,
+  fetchPurchases,
+  num,
+} from "../lib/inventory";
 import { dishMargins, sumCost, type DishMargin } from "../lib/cost";
+import { loadStocktakeHistory } from "../lib/stocktakeHistory";
+import { reconcileFromHistory } from "../lib/reconcile";
 import type { RangeKey } from "../lib/analytics";
 import {
   rangeToIso,
@@ -41,7 +48,7 @@ import {
   FIXED_CATEGORIES,
   type FixedCost,
 } from "../lib/fixedCost";
-import { Plus, Trash2, Landmark } from "lucide-react";
+import { Plus, Trash2, Landmark, Scale } from "lucide-react";
 
 export default function CostReport({ version = 0 }: { version?: number }) {
   const C = useChartTheme();
@@ -91,6 +98,14 @@ export default function CostReport({ version = 0 }: { version?: number }) {
     fetchFixedCosts().then(setFixedCosts);
   }, [version]);
 
+  const [recon, setRecon] = useState<{
+    opening: number;
+    closing: number;
+    purchases: number;
+    realCogs: number;
+    hiddenLoss: number;
+  } | null>(null);
+
   const cogs = useMemo(() => sumCost(margins), [margins]);
   const profit = revenue - cogs;
   const margin = revenue ? (profit / revenue) * 100 : 0;
@@ -104,6 +119,36 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   );
   const net = revenue - cogs - todayFixed;
   const breakEven = breakEvenRevenue(todayFixed, revenue ? cogs / revenue : 0);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const records = loadStocktakeHistory();
+      if (records.length < 2) return;
+      const purchases = await fetchPurchases(500);
+      const latest = records[0].at;
+      const prev = records[1].at;
+      const between = purchases
+        .filter((p) => {
+          const t = p.purchased_at ? new Date(p.purchased_at).getTime() : 0;
+          return t >= prev && t <= latest;
+        })
+        .reduce((s, p) => s + Number(p.total_cost), 0);
+      const r = reconcileFromHistory(records, between, cogs);
+      if (alive && r) {
+        setRecon({
+          opening: Number(records[1].stockValue) || 0,
+          closing: Number(records[0].stockValue) || 0,
+          purchases: between,
+          realCogs: r.realCogs,
+          hiddenLoss: r.hiddenLoss,
+        });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [version, cogs]);
 
   const addFixedCost = async () => {
     if (!fcName.trim()) return;
@@ -283,6 +328,61 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           按月金额录入，按当月自然天数摊到每日；未执行 supabase_owner_all.sql
           时保存会失败。
         </p>
+      </ChartCard>
+
+      <ChartCard
+        title="成本对账（真实 vs 标准）"
+        subtitle="两次盘点之间 · 库存变动法：真实 COGS = 期初 + 采购 − 期末"
+        action={<Scale size={18} className="text-orange-500" />}
+      >
+        {recon ? (
+          <div className="space-y-2 text-sm">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-950 rounded-xl px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500">期初库存</div>
+                <div className="font-bold tnum text-zinc-200 mt-0.5">
+                  {fmtMoney(recon.opening)}
+                </div>
+              </div>
+              <div className="bg-zinc-950 rounded-xl px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500">期间采购</div>
+                <div className="font-bold tnum text-zinc-200 mt-0.5">
+                  {fmtMoney(recon.purchases)}
+                </div>
+              </div>
+              <div className="bg-zinc-950 rounded-xl px-3 py-2.5">
+                <div className="text-[11px] text-zinc-500">期末库存</div>
+                <div className="font-bold tnum text-zinc-200 mt-0.5">
+                  {fmtMoney(recon.closing)}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-zinc-950 px-3 py-2.5">
+              <span className="text-zinc-400">
+                真实 COGS（库存变动）· 隐性损耗
+              </span>
+              <span className="tnum font-semibold">
+                {fmtMoney(recon.realCogs)}
+                <span
+                  className={`ml-2 ${recon.hiddenLoss > 0 ? "text-red-400" : "text-emerald-400"}`}
+                >
+                  {recon.hiddenLoss > 0
+                    ? `多耗 ${fmtMoney(recon.hiddenLoss)}`
+                    : "无隐性损耗"}
+                </span>
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-600 leading-relaxed">
+              隐性损耗 = 真实 COGS − 标准 COGS（当前区间标准成本
+              {fmtMoney(cogs)}），即后厨用了但没报损的部分。
+            </p>
+          </div>
+        ) : (
+          <EmptyState
+            text="需要至少两次盘点才能对账"
+            hint="先做一次盘点记录库存，隔一段时间再做第二次，这里就能算出真实消耗"
+          />
+        )}
       </ChartCard>
 
       {unknown.length > 0 && (

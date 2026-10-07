@@ -107,3 +107,8 @@ export function pendingAdjustments(result: StocktakeResult): StocktakeRow[] {
     (r) => r.actual !== null && r.diff !== null && r.diff !== 0,
   );
 }
+
+/** 盘点后的库存总额（已盘项用实盘数、未盘项用账面数）——作为成本对账的锚点 */
+export function stocktakeValue(result: StocktakeResult): number {
+  return result.rows.reduce((s, r) => s + (r.actual ?? r.book) * r.price, 0);
+}

@@ -414,8 +414,10 @@ CREATE TABLE IF NOT EXISTS public.owner_stocktake (
   day       text not null,
   items     integer not null default 0,
   diffs     integer not null default 0,
-  net_value numeric not null default 0
+  net_value numeric not null default 0,
+  stock_value numeric not null default 0
 );
+ALTER TABLE public.owner_stocktake ADD COLUMN IF NOT EXISTS stock_value numeric not null default 0;
 ALTER TABLE public.owner_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.owner_stocktake ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS anon_all_owner_audit_log ON public.owner_audit_log;

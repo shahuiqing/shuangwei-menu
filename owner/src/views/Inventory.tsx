@@ -36,6 +36,7 @@ import { REASONS, todayWasteAmount, type Reason } from "../lib/waste";
 import {
   buildStocktake,
   pendingAdjustments,
+  stocktakeValue,
   STOCKTAKE_REASON,
 } from "../lib/stocktake";
 import {
@@ -274,6 +275,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         items: take.summary.counted,
         diffs: adj.length,
         netValue: take.summary.diffValue,
+        stockValue: stocktakeValue(take),
       });
       setStocktakes(loadStocktakeHistory());
       logAction(

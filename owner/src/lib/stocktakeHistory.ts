@@ -16,6 +16,8 @@ export interface StocktakeRecord {
   diffs: number;
   /** 净差异金额（正=盘盈，负=盘亏） */
   netValue: number;
+  /** 盘点后的库存总额（成本对账锚点） */
+  stockValue: number;
 }
 
 const KEY = "owner:stocktake:history";
@@ -25,6 +27,7 @@ export function pushStocktake(r: {
   items: number;
   diffs: number;
   netValue: number;
+  stockValue: number;
 }): StocktakeRecord {
   const rec: StocktakeRecord = {
     at: Date.now(),
@@ -32,6 +35,7 @@ export function pushStocktake(r: {
     items: r.items,
     diffs: r.diffs,
     netValue: r.netValue,
+    stockValue: r.stockValue,
   };
   const list = loadStocktakeHistory();
   list.unshift(rec);

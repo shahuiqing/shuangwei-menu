@@ -28,6 +28,7 @@ export interface StockRow {
   items: number;
   diffs: number;
   net_value: number;
+  stock_value: number;
 }
 
 /** 本地 → 云行（detail 截断，保证复合主键稳定） */
@@ -46,6 +47,7 @@ export function toStockRows(list: StocktakeRecord[]): StockRow[] {
     items: Number(r.items) || 0,
     diffs: Number(r.diffs) || 0,
     net_value: Number(r.netValue) || 0,
+    stock_value: Number(r.stockValue) || 0,
   }));
 }
 
@@ -83,6 +85,7 @@ export function mergeStocktake(
       items: c.items,
       diffs: c.diffs,
       netValue: c.net_value,
+      stockValue: c.stock_value,
     })),
     ...cloud.map((c) => ({
       at: Number(c.at) || 0,
@@ -90,6 +93,7 @@ export function mergeStocktake(
       items: Number(c.items) || 0,
       diffs: Number(c.diffs) || 0,
       netValue: Number(c.net_value) || 0,
+      stockValue: Number(c.stock_value) || 0,
     })),
   ]) {
     if (seen.has(r.at)) continue;
@@ -155,7 +159,7 @@ export async function pullCloud(): Promise<{ audit: number; stock: number }> {
       .limit(AUDIT_MAX),
     supabase
       .from("owner_stocktake")
-      .select("at, day, items, diffs, net_value")
+      .select("at, day, items, diffs, net_value, stock_value")
       .order("at", { ascending: false })
       .limit(STOCK_MAX),
   ]);
