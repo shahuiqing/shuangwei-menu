@@ -27,6 +27,8 @@ export const THEMES: {
 ];
 
 const KEY = "shuangwei-owner-theme";
+/** 旧默认「dark」→ 新默认「东家账本」的一次性迁移标记 */
+const MIGRATED_KEY = "shuangwei-owner-theme:v2-zhangben";
 
 interface ThemeCtxValue {
   theme: Theme;
@@ -40,7 +42,16 @@ const ThemeCtx = createContext<ThemeCtxValue>({
 
 export function readInitialTheme(): Theme {
   const v = localRaw(KEY);
-  return THEMES.some((t) => t.id === v) ? (v as Theme) : "zhangben";
+  if (THEMES.some((t) => t.id === v)) {
+    // 旧版本默认是 dark：已存 dark 且未迁移过的，一次性迁到新默认「东家账本」
+    if (v === "dark" && !localRaw(MIGRATED_KEY)) {
+      localSetRaw(MIGRATED_KEY, "1");
+      localSetRaw(KEY, "zhangben");
+      return "zhangben";
+    }
+    return v as Theme;
+  }
+  return "zhangben";
 }
 
 /** 在 React 挂载前就把主题写到 <html data-theme>，避免首屏闪黑 */

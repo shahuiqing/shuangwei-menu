@@ -411,7 +411,7 @@ export function Layout({
           >
             {/* 移动端大标题（App 风格：标题 + 副标题） */}
             <div className="lg:hidden pb-4">
-              <h1 className="text-2xl font-bold tracking-tight text-white leading-tight">
+              <h1 className="font-serif text-2xl font-bold tracking-tight text-white leading-tight">
                 {active?.label}
               </h1>
               <p className="text-[13px] text-zinc-500 mt-1 leading-snug">
