@@ -495,7 +495,7 @@ export default function Dashboard({
             </div>
 
             <div className="mt-4 flex items-end gap-3 flex-wrap">
-              <span className="tnum font-serif text-[42px] sm:text-[56px] font-bold leading-none text-zinc-900">
+              <span className="tnum font-serif text-[42px] sm:text-[56px] font-black leading-none text-zinc-50">
                 {fmtMoney(kpi.revenue)}
               </span>
               {kpi.revenueChange !== undefined && (
