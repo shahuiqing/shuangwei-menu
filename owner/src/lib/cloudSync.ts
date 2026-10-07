@@ -116,7 +116,7 @@ function writeLocal(key: string, value: unknown): boolean {
 }
 
 async function pushKey(key: string): Promise<boolean> {
-  if (!isConfigured || !supabase) return true;
+  if (!isConfigured || !supabase) return false;
   if (writing.has(key)) return true;
   try {
     if (key === AUDIT_KEY) {
@@ -215,6 +215,7 @@ export function initCloudSync(): void {
 
 /** 手动同步：立即上行两键 + 下行合并（设置页按钮） */
 export async function syncNow(): Promise<{ pushed: boolean; pulled: boolean }> {
+  if (!isConfigured || !supabase) return { pushed: false, pulled: false };
   const [p1, p2] = await Promise.all([pushKey(AUDIT_KEY), pushKey(STOCK_KEY)]);
   await pullCloud();
   return { pushed: p1 && p2, pulled: true };

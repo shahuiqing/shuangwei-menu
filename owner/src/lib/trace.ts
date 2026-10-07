@@ -95,7 +95,7 @@ export function latestPurchases(list: PurchaseRow[]): Map<string, PurchaseRow> {
   return m;
 }
 
-/** 原料反向消耗汇总：给定流水 → 最近消耗它的订单列表（按时间倒序去重） */
+/** 原料反向消耗汇总：给定流水 → 最近消耗它的订单列表（按时间倒序去重，同订单多菜品累加用量） */
 export interface OutOrderRow {
   orderId: string;
   dish: string;
@@ -106,22 +106,29 @@ export function outOrderRows(
   txns: InventoryTransaction[],
   limit = 20,
 ): OutOrderRow[] {
-  const seen = new Set<string>();
-  const rows: OutOrderRow[] = [];
+  const map = new Map<string, OutOrderRow>();
   for (const t of txns) {
     if (t?.type !== "order_out") continue;
     const id = String(t.reference || "");
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    rows.push({
-      orderId: id,
-      dish: String(t.notes || "").trim() || "—",
-      qty: Math.abs(num(t.quantity)),
-      at: String(t.created_at || ""),
-    });
-    if (rows.length >= limit) break;
+    if (!id) continue;
+    const qty = Math.abs(num(t.quantity));
+    const dish = String(t.notes || "").trim() || "—";
+    const existing = map.get(id);
+    if (existing) {
+      existing.qty += qty;
+      if (dish !== "—" && !existing.dish.split("、").includes(dish)) {
+        existing.dish += `、${dish}`;
+      }
+    } else {
+      map.set(id, {
+        orderId: id,
+        dish,
+        qty,
+        at: String(t.created_at || ""),
+      });
+    }
   }
-  return rows;
+  return [...map.values()].slice(0, limit);
 }
 
 /** 汇总某原料被哪些订单消耗的次数/总量 */

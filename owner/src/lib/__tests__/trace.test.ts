@@ -119,7 +119,7 @@ describe("latestPurchases", () => {
 });
 
 describe("outOrderRows / outSummary", () => {
-  it("按订单去重、取首条时间、限制条数", () => {
+  it("按订单去重、累加同单用量、限制条数", () => {
     const txns = [
       txn({
         reference: "O1",
@@ -140,11 +140,21 @@ describe("outOrderRows / outSummary", () => {
     ];
     const rows = outOrderRows(txns);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ orderId: "O1", qty: 1 });
+    expect(rows[0]).toMatchObject({ orderId: "O1", qty: 3 });
     expect(rows[1].dish).toBe("—");
     const s = outSummary(rows);
     expect(s.orders).toBe(2);
-    expect(s.qty).toBeCloseTo(1.5);
+    expect(s.qty).toBeCloseTo(3.5);
+  });
+
+  it("同订单不同菜品累加用量，dish 用顿号连接", () => {
+    const rows = outOrderRows([
+      txn({ reference: "O1", quantity: -1, notes: "红烧肉" }),
+      txn({ reference: "O1", quantity: -2, notes: "回锅肉" }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].qty).toBeCloseTo(3);
+    expect(rows[0].dish).toBe("红烧肉、回锅肉");
   });
 
   it("limit 截断", () => {
