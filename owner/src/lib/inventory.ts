@@ -12,6 +12,8 @@ export interface InventoryItem {
   unit: string;
   safety_stock: number;
   price: number;
+  /** 保质期天数（空/0 = 不设保质期，不参与临期预警） */
+  shelf_life_days?: number;
   updated_at?: string;
 }
 
@@ -97,6 +99,7 @@ export async function saveInventoryItem(
     unit: item.unit || "kg",
     safety_stock: num(item.safety_stock),
     price: num(item.price),
+    shelf_life_days: num(item.shelf_life_days) || null,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from("inventory_items").upsert(payload);

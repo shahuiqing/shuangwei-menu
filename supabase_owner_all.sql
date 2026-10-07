@@ -509,6 +509,11 @@ CREATE POLICY anon_all_owner_fixed_cost ON public.owner_fixed_cost
 GRANT ALL ON public.owner_fixed_cost TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.5 原料保质期天数（临期/食安预警）
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS shelf_life_days integer;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';

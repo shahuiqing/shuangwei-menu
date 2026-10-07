@@ -22,6 +22,7 @@ import {
   adjustStock,
   deleteInventoryItem,
   fetchInventory,
+  fetchPurchases,
   fetchTransactions,
   inventoryValue,
   lowStockItems,
@@ -30,6 +31,7 @@ import {
   saveInventoryItem,
   type InventoryItem,
 } from "../lib/inventory";
+import { computeExpiry, type ExpiryInfo } from "../lib/expiry";
 import { REASONS, todayWasteAmount, type Reason } from "../lib/waste";
 import {
   buildStocktake,
@@ -94,15 +96,27 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   const [convUnit, setConvUnit] = useState("");
   const [convFactor, setConvFactor] = useState("");
   const [onlyA, setOnlyA] = useState(false);
+  const [expiryMap, setExpiryMap] = useState<Map<string, ExpiryInfo>>(
+    new Map(),
+  );
 
   const load = async () => {
     setLoading(true);
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const [items, txns] = await Promise.all([
+    const [items, txns, purchases] = await Promise.all([
       fetchInventory(),
       fetchTransactions(500, "waste", start.toISOString()),
+      fetchPurchases(),
     ]);
+    const latest = new Map<string, string>();
+    for (const p of purchases) {
+      const id = p.item_id;
+      const at = p.purchased_at || p.created_at || "";
+      if (id && at && !latest.has(id)) latest.set(id, at);
+    }
+    const exp = computeExpiry(items, latest, new Date());
+    setExpiryMap(new Map(exp.map((e) => [e.itemId, e])));
     setList(items);
     setTodayWaste(todayWasteAmount(txns));
     setLoading(false);
@@ -406,6 +420,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                 const isLow =
                   num(i.safety_stock) > 0 &&
                   num(i.stock) <= num(i.safety_stock);
+                const exp = expiryMap.get(i.id);
                 return (
                   <div
                     key={i.id}
@@ -428,6 +443,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                           {metaMap[i.id]?.countable === false && (
                             <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-400">
                               不可盘
+                            </span>
+                          )}
+                          {exp?.status === "expired" && (
+                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">
+                              已过期 {Math.abs(exp.daysLeft!)} 天
+                            </span>
+                          )}
+                          {exp?.status === "expiring" && (
+                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">
+                              临期 {exp.daysLeft} 天
                             </span>
                           )}
                         </div>
@@ -510,6 +535,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                     const isLow =
                       num(i.safety_stock) > 0 &&
                       num(i.stock) <= num(i.safety_stock);
+                    const exp = expiryMap.get(i.id);
                     return (
                       <tr
                         key={i.id}
@@ -525,6 +551,16 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                           {metaMap[i.id]?.countable === false && (
                             <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-400 align-middle">
                               不可盘
+                            </span>
+                          )}
+                          {exp?.status === "expired" && (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 align-middle">
+                              已过期 {Math.abs(exp.daysLeft!)} 天
+                            </span>
+                          )}
+                          {exp?.status === "expiring" && (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">
+                              临期 {exp.daysLeft} 天
                             </span>
                           )}
                         </td>
@@ -696,6 +732,15 @@ export default function Inventory({ version = 0 }: { version?: number }) {
                 type="number"
                 value={editing.price}
                 onChange={(v) => setEditing({ ...editing, price: num(v) })}
+                className="col-span-2"
+              />
+              <SheetField
+                label="保质期(天，空=不设)"
+                type="number"
+                value={editing.shelf_life_days}
+                onChange={(v) =>
+                  setEditing({ ...editing, shelf_life_days: num(v) })
+                }
                 className="col-span-2"
               />
             </div>
