@@ -200,6 +200,16 @@ export async function addDishAutoCategory(
 ): Promise<{ ok: boolean; createdCategory: boolean }> {
   const name = title.trim();
   if (!name) return { ok: false, createdCategory: false };
+  // 先查一次：菜品已在菜单时直接返回，避免做一次无变化的写库 + 广播
+  const existingCat = (await fetchCategories()).find(
+    (c) => c.name === categoryName,
+  );
+  if (
+    existingCat &&
+    (existingCat.items || []).some((it) => it.title === name)
+  ) {
+    return { ok: true, createdCategory: false };
+  }
   let createdCategory = false;
   const ok = await mutate((cats) => {
     let target = cats.find((c) => c.name === categoryName);

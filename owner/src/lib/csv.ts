@@ -16,6 +16,7 @@ export interface ImportOrder {
   id: string;
   timestamp: string; // ISO
   tableNo: string;
+  customerName: string;
   orderNumber: string;
   status: string;
   paymentMethod: string;
@@ -73,7 +74,8 @@ export function parseCsv(text: string): string[][] {
 
 const COL = {
   time: ["时间", "日期", "下单时间", "datetime", "time", "date"],
-  table: ["桌号", "台号", "桌台", "客户", "table", "customer"],
+  table: ["桌号", "台号", "桌台", "table", "tableno"],
+  customer: ["客户", "客人", "顾客", "customer", "guest"],
   dish: ["菜名", "菜品", "商品", "商品名称", "item", "dish", "name"],
   qty: ["数量", "份数", "qty", "quantity"],
   price: ["单价", "价格", "price", "unitprice"],
@@ -157,6 +159,7 @@ export function parseOrdersCsv(text: string): ParseOrdersResult {
   const iQty = findCol(headers, COL.qty);
   const iPrice = findCol(headers, COL.price);
   const iTable = findCol(headers, COL.table);
+  const iCustomer = findCol(headers, COL.customer);
   const iNo = findCol(headers, COL.orderNo);
   const iTotal = findCol(headers, COL.total);
   const iStatus = findCol(headers, COL.status);
@@ -188,6 +191,7 @@ export function parseOrdersCsv(text: string): ParseOrdersResult {
       continue;
     }
     const table = (iTable >= 0 ? (row[iTable] || "").trim() : "") || "导入";
+    const cust = (iCustomer >= 0 ? (row[iCustomer] || "").trim() : "") || "";
     const no = (iNo >= 0 ? (row[iNo] || "").trim() : "") || "";
     const status =
       (iStatus >= 0
@@ -203,6 +207,7 @@ export function parseOrdersCsv(text: string): ParseOrdersResult {
         id: `imp-${hashKey(key)}`,
         timestamp: time,
         tableNo: table,
+        customerName: cust,
         orderNumber: no,
         status,
         paymentMethod: pay,
