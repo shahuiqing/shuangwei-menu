@@ -17,8 +17,8 @@ describe("RLS and auth gray cases", () => {
     const fs = await import("fs");
     for (const f of [
       "supabase_schema.sql",
-      "supabase_full_setup.sql",
       "supabase_setup.sql",
+      "supabase_owner_all.sql",
     ]) {
       const sql = fs.readFileSync(f, "utf-8");
       expect(sql).toContain('"anon_update_orders"');

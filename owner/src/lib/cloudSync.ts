@@ -4,7 +4,7 @@
  * 上行：dbSubscribe 变更后防抖推送，失败 10s 后重试一次；
  * 下行：initCloudSync 启动时全量拉取合并（两表各 ≤500/60 行，约 50KB/次）。
  * pull 引起的 localSet 走 writing 标记跳过，避免上行回环。
- * 依赖 SQL：supabase_owner_cloudsync.sql（未执行时 push/pull 静默失败，不影响本机功能）。
+ * 依赖 SQL：supabase_owner_all.sql（未执行时 push/pull 静默失败，不影响本机功能）。
  */
 import { supabase, isConfigured } from "./supabase";
 import { localGet, localSet, dbSubscribe } from "./localdb";

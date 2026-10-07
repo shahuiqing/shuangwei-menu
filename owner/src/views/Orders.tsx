@@ -367,7 +367,7 @@ export default function Orders({
     const n = await importOrders(parsed.orders as unknown[]);
     setBusy(false);
     if (n < 0) {
-      return toast.error("导入失败：请先执行 supabase_owner_import.sql");
+      return toast.error("导入失败：请先执行 supabase_owner_all.sql");
     }
     logAction("导入订单 CSV", `${n} 单 · ${fmtMoney(sum)}`);
     toast.success(

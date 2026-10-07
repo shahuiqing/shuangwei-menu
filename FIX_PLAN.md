@@ -121,6 +121,7 @@
 - 影响：初始化顺序易混淆、重复执行可能冲突；README 仅明确 `schema`→`setup` 顺序，其余定位不清。
 - 修复方案：为每个文件标注用途与执行顺序（README/文件头）；归档或删除过时版本。
 - 验证：核对内容不冲突，保留脚本可在空库按序执行通过。
+- 状态：**已处理（2026-10）**——收敛为 3 个权威文件 `supabase_schema.sql` + `supabase_setup.sql` + `supabase_owner_all.sql`（已补全 cloudsync/backfill/import 三段）；其余 11 个归档至 `sql-archive/`，前端错误提示、README 执行顺序、静态取证测试均已同步更新。
 
 ### 14. `zustand` 残留依赖（未使用）
 

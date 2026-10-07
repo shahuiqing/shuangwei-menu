@@ -296,7 +296,7 @@ export async function fetchPurchases(limit = 500): Promise<PurchaseOrder[]> {
 /**
  * 新建采购单（原子 RPC）：一次事务内完成
  *   ① 写 purchase_orders ② 库存增加并更新成本价 ③ 写 purchase_in 流水
- * 对应 SQL 函数 owner_create_purchase（见 supabase_owner_inventory_rls.sql）。
+ * 对应 SQL 函数 owner_create_purchase（见 supabase_owner_all.sql）。
  */
 export async function createPurchase(input: {
   supplier: string;

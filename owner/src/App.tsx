@@ -254,7 +254,7 @@ export default function App() {
               <div className="mt-1">
                 请在目标 Supabase 项目的 SQL Editor 依次执行：
                 <code className="mx-1 px-1.5 py-0.5 rounded bg-black/30">
-                  supabase_owner_quota.sql
+                  supabase_owner_all.sql
                 </code>
                 （及其它需要的脚本）后刷新页面。
               </div>

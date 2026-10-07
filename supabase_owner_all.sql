@@ -401,14 +401,109 @@ END;
 $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.1 操作日志 / 盘点历史上云（cloudSync 表）
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.owner_audit_log (
+  at     bigint not null,
+  action text not null,
+  detail text not null default '',
+  primary key (at, action, detail)
+);
+CREATE TABLE IF NOT EXISTS public.owner_stocktake (
+  at        bigint primary key,
+  day       text not null,
+  items     integer not null default 0,
+  diffs     integer not null default 0,
+  net_value numeric not null default 0
+);
+ALTER TABLE public.owner_audit_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.owner_stocktake ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS anon_all_owner_audit_log ON public.owner_audit_log;
+CREATE POLICY anon_all_owner_audit_log ON public.owner_audit_log
+  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS anon_all_owner_stocktake ON public.owner_stocktake;
+CREATE POLICY anon_all_owner_stocktake ON public.owner_stocktake
+  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON public.owner_audit_log TO anon, authenticated;
+GRANT ALL ON public.owner_stocktake TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 6.2 历史汇总补录表（owner_backfill）
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.owner_backfill (
+  day        text primary key,
+  revenue    numeric not null default 0,
+  orders     integer not null default 0,
+  note       text not null default '',
+  created_at timestamptz not null default now()
+);
+ALTER TABLE public.owner_backfill ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS anon_all_owner_backfill ON public.owner_backfill;
+CREATE POLICY anon_all_owner_backfill ON public.owner_backfill
+  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON public.owner_backfill TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 6.3 POS/平台订单 CSV 导入 RPC（绕 BOM 触发器，幂等）
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.owner_import_orders(p_orders jsonb)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r jsonb;
+  v_id text;
+  v_ts timestamptz;
+  v_n integer := 0;
+BEGIN
+  perform set_config('session_replication_role', 'replica', true);
+  FOR r IN SELECT * FROM jsonb_array_elements(coalesce(p_orders, '[]'::jsonb)) LOOP
+    v_ts := coalesce((r->>'timestamp')::timestamptz, now());
+    v_id := nullif(r->>'id', '');
+    IF v_id IS NULL THEN
+      v_id := 'imp-' || md5(coalesce(r->>'orderNumber', '') || v_ts::text || coalesce(r->>'tableNo', ''));
+    END IF;
+    INSERT INTO public.orders (
+      id, _id, "tableNo", table_no, customer_name, "customerName",
+      type, status, total, total_amount, "finalTotal",
+      items, notes, "orderNumber", "paymentMethod",
+      "timestamp", "created_at", "createdAt",
+      "isExternal", "unprintedNewOrder", "unprintedAdditions"
+    ) VALUES (
+      v_id, v_id,
+      coalesce(nullif(r->>'tableNo', ''), 'A1'), coalesce(nullif(r->>'tableNo', ''), 'A1'),
+      coalesce(r->>'customerName', ''), coalesce(r->>'customerName', ''),
+      coalesce(r->>'type', 'dine_in'), coalesce(r->>'status', 'completed'),
+      coalesce((r->>'total')::numeric, 0), coalesce((r->>'total')::numeric, 0), coalesce((r->>'total')::numeric, 0),
+      coalesce(r->'items', '[]'::jsonb), coalesce(r->>'notes', ''),
+      coalesce(r->>'orderNumber', ''), coalesce(r->>'paymentMethod', ''),
+      v_ts, v_ts, v_ts,
+      coalesce((r->>'isExternal')::boolean, false), false, '[]'::jsonb
+    )
+    ON CONFLICT (id) DO NOTHING;
+    IF FOUND THEN v_n := v_n + 1; END IF;
+  END LOOP;
+  RETURN v_n;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.owner_import_orders(jsonb) TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 8. 校验：应返回 11 行 owner_* 函数
+-- 8. 校验：应返回 12 行 owner_* 函数
 -- ─────────────────────────────────────────────────────────────────────────────
 SELECT proname
 FROM pg_proc
 WHERE pronamespace = 'public'::regnamespace AND proname LIKE 'owner_%'
 ORDER BY proname;
+
+-- 校验：owner 相关的扩展表（应返回 owner_audit_log / owner_stocktake / owner_backfill）
+SELECT table_name FROM information_schema.tables
+ WHERE table_schema = 'public' AND table_name LIKE 'owner_%'
+ ORDER BY table_name;

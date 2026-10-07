@@ -40,7 +40,7 @@ npm run test     # vitest
 - **数据/登录**：全部走 Supabase（RLS 保护），前端匿名 key 直连；管理员密码哈希存 `settings.adminPasswordHash`
 - **实时同步**：购物车/管理员通知走 Supabase Realtime broadcast（已替代原 WebSocket cartHub）
 - **环境变量**（EdgeOne Pages 控制台配置）：`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`（或 `VITE_SUPABASE_*`）、`ADMIN_SECRET`；可选 KV 绑定 `my_kv`
-- **数据库初始化**：先在 Supabase SQL Editor 执行 `supabase_schema.sql`，再执行 `supabase_setup.sql`（补充 anon 策略 / Storage 桶 / 初始密码哈希）。两者顺序不可颠倒。
+- **数据库初始化**：在 Supabase SQL Editor 按顺序执行三个脚本（均幂等）：`supabase_schema.sql`（建表 + 基础 RLS）→ `supabase_setup.sql`（anon 策略 / Storage 桶 / 初始密码哈希）→ `supabase_owner_all.sql`（老板端一键：库存 + BOM 触发器 + 聚合 RPC + 采购 + 上云/补录/导入）。顺序不可颠倒。
 - ⚠️ **安全须知**：为支持纯静态前端直连，`supabase_setup.sql` 会放开 `settings` 表的匿名读写（含 `adminPasswordHash` 等哈希字段）。这是"纯静态前端 + Supabase 直连"架构下的妥协，仅适用于内部/低风险场景；如需更强隔离，应将 settings 写入改由后端（service_role）执行，前端只读 `settings_public` 视图。
 
 ## AI Studio

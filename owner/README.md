@@ -84,27 +84,22 @@ npm run build             # 产出 owner/dist
 ## 登录（bcrypt 后端校验）
 
 - **无内置默认密码**：本机无哈希且未配 `VITE_OWNER_PASSWORD` 时，登录页进入「设置密码」模式（≥6 位，存本机 bcrypt 哈希）；之后每次登录用本机哈希校验，后端 `POST /api/auth/verify-owner` 可达时优先走后端（带限流防爆破）。
-- 密码以 **bcrypt 哈希**存于本机（`ownerPasswordHash`），与顾客端管理员密码**分离**；云端哈希可用 `supabase_owner_auth.sql` 初始化、`POST /api/auth/set-owner-password`（需 `ADMIN_SECRET`）修改，前端拿不到该密钥，因此**首次设密只写本机**。
+- 密码以 **bcrypt 哈希**存于本机（`ownerPasswordHash`），与顾客端管理员密码**分离**；云端哈希可用 `supabase_owner_all.sql` 初始化、`POST /api/auth/set-owner-password`（需 `ADMIN_SECRET`）修改，前端拿不到该密钥，因此**首次设密只写本机**。
 - 本机只保存**会话令牌**（3 天），不保存明文密码；后端不可达时回退本机哈希（离线可用）。
 - 「系统设置」里可随时改密（需先验当前密码）；环境变量 `VITE_OWNER_PASSWORD` 只在本机无哈希时作为离线初始密码惰性写入。
 
 ## 数据库脚本
 
-**推荐：一次性执行 `supabase_owner_all.sql`**（仓库根目录）
+**推荐：按顺序执行 3 个文件**（仓库根目录，均幂等可重复执行）
 
-- 在 Supabase Dashboard → SQL Editor 粘贴整个文件运行即可；
-- 幂等、可重复执行，自动创建：库存相关表、`orders` 结账字段、RLS 策略、采购原子 RPC、BOM 扣减触发器、全部 `owner_*` 聚合函数，并刷新 PostgREST 缓存；
+1. `supabase_schema.sql` — 顾客端基础表 + 基础 RLS（菜单 / 订单 / 库存 / settings）
+2. `supabase_setup.sql` — 顾客端补充（settings/orders 的 anon 策略、Storage 桶、Realtime、管理员密码哈希）
+3. `supabase_owner_all.sql` — 老板端一键：库存四表、`orders` 结账字段、RLS 策略、采购原子 RPC、BOM v2 扣减触发器、全部 `owner_*` 聚合函数、操作日志/盘点历史上云表、历史补录表、订单 CSV 导入 RPC，并刷新 PostgREST 缓存
+
+- 均在 Supabase Dashboard → SQL Editor 粘贴运行；
 - 执行后若页面仍提示缺函数，再跑一次 `NOTIFY pgrst, 'reload schema';`。
 
-如需分步（均幂等）：
-
-1. `supabase_schema.sql` → 2. `supabase_setup.sql` → 3. `supabase_inventory_bom.sql` → 4. `supabase_inventory_bom_v2.sql`（对账式扣减，**必执行**）→ 5. `supabase_owner_inventory_rls.sql` → 6. `supabase_owner_quota.sql` → 7. `supabase_owner_auth.sql` → 8. `supabase_owner_waste.sql`（报损 `reason` 列）→ 9. `supabase_owner_cloudsync.sql`（操作日志/盘点历史上云）→ 10. `supabase_owner_backfill.sql`（历史汇总补录）→ 11. `supabase_owner_import.sql`（订单 CSV 导入 RPC，绕 BOM 触发器）
-
-> 已在用「损耗分析」页的库：只需单独执行 `supabase_owner_waste.sql`（约 5 秒）；未执行前报损记录仍会写入（仅 `reason` 缺失，前端已降级为不分类）。
->
-> 未执行 `supabase_owner_cloudsync.sql` 时，操作日志与盘点历史仍正常存本机，仅不上云（设置页点「立即同步」会提示失败）。
->
-> 未执行 `supabase_owner_backfill.sql` 时，「历史补录」保存会提示失败，报表保持真实值。
+> 历史分步脚本已归档到 `sql-archive/`（含 `inventory_bom` v1/v2、`owner_quota`、`owner_auth`、`owner_inventory_rls`、`owner_waste`、`owner_cloudsync`、`owner_backfill`、`owner_import`、`migration_orders_rls`、`full_setup` 等），仅供排查历史用途参考，不再作为初始化入口。它们的内容均已并入上述 3 个文件。
 
 ## PWA（添加到主屏幕）
 
