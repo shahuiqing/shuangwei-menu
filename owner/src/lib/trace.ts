@@ -85,8 +85,10 @@ export function traceTotals(rows: TraceRow[]): {
 /** 每个原料取最近一次采购（输入按 purchased_at 倒序或任意序） */
 export function latestPurchases(list: PurchaseRow[]): Map<string, PurchaseRow> {
   const m = new Map<string, PurchaseRow>();
-  const sorted = [...list].sort((a, b) =>
-    String(b.purchased_at || "").localeCompare(String(a.purchased_at || "")),
+  const sorted = [...list].sort(
+    (a, b) =>
+      (Date.parse(String(b.purchased_at || "")) || 0) -
+      (Date.parse(String(a.purchased_at || "")) || 0),
   );
   for (const p of sorted) {
     const id = String(p.item_id || "");
