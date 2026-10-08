@@ -8,7 +8,6 @@ import { hashPassword, verifyPassword } from "./password";
 
 const HASH_KEY = "adminHash";
 const AUTH_KEY = "adminAuthedUntil";
-const DEFAULT_PASSWORD = "123456";
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 登录保持 7 天
 
 function readHash(): string {
@@ -23,11 +22,16 @@ function readHash(): string {
   }
 }
 
-/** 校验管理员密码（本地哈希，不查数据库） */
+/** 是否已设置管理员密码（用于首次使用引导设置初始密码） */
+export function hasAdminPassword(): boolean {
+  return readHash() !== "";
+}
+
+/** 校验管理员密码（本地哈希，不查数据库）。未设置密码时拒绝登录。 */
 export async function verifyAdminPassword(input: string): Promise<boolean> {
   const stored = readHash();
-  if (stored) return verifyPassword(input, stored);
-  return input === DEFAULT_PASSWORD;
+  if (!stored) return false;
+  return verifyPassword(input, stored);
 }
 
 /** 设置/修改管理员密码（本地保存哈希） */

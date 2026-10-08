@@ -272,7 +272,7 @@ export default function App() {
       safeGetItem(
         "menuAdminPassword",
       ) /* migration compat: old plaintext -> will be hashed on next save */ ||
-      "admin123",
+      "",
   );
   const [devicePasswords, setDevicePasswords] = useState<
     { name: string; password: string }[]
@@ -506,7 +506,7 @@ export default function App() {
             restaurantName: "炙·双味居",
             welcomeMessage: "Premium Charcoal BBQ",
             logoUrl: "",
-            adminPassword: "admin123",
+            adminPassword: "",
             securityQuestion:
               "你的第一只宠物的名字？ (What is the name of your first pet?)",
             securityAnswer: "小黑",
@@ -574,7 +574,7 @@ export default function App() {
             restaurantName: cachedRestaurantName || "炙·双味居",
             welcomeMessage: cachedWelcomeMessage || "Premium Charcoal BBQ",
             logoUrl: cachedLogoUrl || "",
-            adminPassword: cachedAdminPassword || "admin123",
+            adminPassword: cachedAdminPassword || "",
             devicePasswords: cachedDevicePasswords
               ? JSON.parse(cachedDevicePasswords)
               : {},

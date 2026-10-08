@@ -7,7 +7,7 @@ import * as dotenv from "dotenv";
 import { WebSocketServer } from "ws";
 import { requestLogger, errorHandler } from "./server/middleware/requestLogger";
 import authRouter from "./server/routes/auth";
-import { requireAdmin } from "./server/middleware/auth";
+import { requireAdmin, ADMIN_SECRET } from "./server/middleware/auth";
 import { rateLimit } from "./server/middleware/rateLimit";
 import * as cartHub from "./server/services/cartHub";
 import { queryD1, isD1Configured } from "./server/services/d1";
@@ -610,6 +610,15 @@ async function startServer() {
     const url = new URL(req.url || "", `http://${req.headers.host}`);
     const table = url.searchParams.get("table") || "admin";
     const role = url.searchParams.get("role") || "customer";
+
+    // 管理端连接必须带有效 token（ADMIN_SECRET），否则直接踢掉
+    if (role === "admin") {
+      const token = url.searchParams.get("token") || "";
+      if (!ADMIN_SECRET || token !== ADMIN_SECRET) {
+        ws.close(1008, "unauthorized");
+        return;
+      }
+    }
 
     const client = { ws, table, role };
     clients.add(client);

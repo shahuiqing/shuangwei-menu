@@ -803,7 +803,7 @@ export const api = {
       restaurantName: cachedRestaurantName || "炙·双味居",
       welcomeMessage: cachedWelcomeMessage || "Premium Charcoal BBQ",
       logoUrl: cachedLogoUrl || "",
-      adminPassword: cachedAdminPassword || "admin123",
+      adminPassword: cachedAdminPassword || "",
       devicePasswords: readLocalJSON<any[]>("menuDevicePasswords", []),
       securityQuestion: cachedSecurityQuestion || "",
       securityAnswer: cachedSecurityAnswer || "",
@@ -1843,22 +1843,10 @@ export const api = {
       );
     if (payload.logoUrl !== undefined)
       localStorage.setItem("menuLogoUrl", String(payload.logoUrl));
-    if (payload.adminPassword !== undefined)
-      localStorage.setItem("menuAdminPassword", String(payload.adminPassword));
-    if (payload.devicePasswords !== undefined)
-      localStorage.setItem(
-        "menuDevicePasswords",
-        JSON.stringify(payload.devicePasswords),
-      );
     if (payload.securityQuestion !== undefined)
       localStorage.setItem(
         "menuSecurityQuestion",
         String(payload.securityQuestion),
-      );
-    if (payload.securityAnswer !== undefined)
-      localStorage.setItem(
-        "menuSecurityAnswer",
-        String(payload.securityAnswer),
       );
     if (payload.soundEnabled !== undefined)
       localStorage.setItem("menuSoundEnabled", String(payload.soundEnabled));

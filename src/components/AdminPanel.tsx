@@ -7,6 +7,7 @@ import {
   saveAdminPassword,
   markAdminAuthed,
   clearAdminAuthed,
+  hasAdminPassword,
 } from "../utils/adminAuth";
 import { useState, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
@@ -155,7 +156,7 @@ export default function AdminPanel({
   setLayoutStyle,
   theme = "midnight",
   setTheme,
-  adminPassword = "admin123",
+  adminPassword = "",
   setAdminPassword,
   devicePasswords = [],
   setDevicePasswords,
@@ -176,6 +177,7 @@ export default function AdminPanel({
 }: AdminPanelProps) {
   const [currency, setCurrency] = useState("MAD");
   const [password, setPassword] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
   const [error, setError] = useState("");
   const [isSupabaseSetupOpen, setIsSupabaseSetupOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
@@ -638,19 +640,33 @@ export default function AdminPanel({
 
   const [isForgotMode, setIsForgotMode] = useState(false);
   const [verifyAnswer, setVerifyAnswer] = useState("");
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
 
   const handleVerifySecurity = (e: FormEvent) => {
     e.preventDefault();
     if (verifyAnswer.trim() === securityAnswer) {
-      alert(
-        `验证成功！您的密码是：\n(Verification successful! Your password is:)\n${adminPassword}`,
-      );
       setVerifyAnswer("");
       setIsForgotMode(false);
+      setIsResetMode(true);
       setError("");
     } else {
       setError("安全问题答案错误 / Incorrect Answer");
     }
+  };
+
+  const handleResetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!resetPassword || resetPassword.length < 4) {
+      setError("密码至少 4 位 / Password must be at least 4 characters");
+      return;
+    }
+    await saveAdminPassword(resetPassword);
+    if (setAdminPassword) setAdminPassword(resetPassword);
+    markAdminAuthed();
+    setIsAuthed(true);
+    setResetPassword("");
+    setIsResetMode(false);
   };
 
   const [currentWaiter, setCurrentWaiter] = useState<{
@@ -674,11 +690,23 @@ export default function AdminPanel({
     if (ok) {
       markAdminAuthed();
       setIsAuthed(true);
-      localStorage.setItem("menuAdminPassword", password);
       if (setAdminPassword) setAdminPassword(password);
       return;
     }
     setError("密码错误 / Incorrect Password");
+  };
+
+  const handleInitialSetup = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!setupPassword || setupPassword.length < 4) {
+      setError("密码至少 4 位 / Password must be at least 4 characters");
+      return;
+    }
+    await saveAdminPassword(setupPassword);
+    if (setAdminPassword) setAdminPassword(setupPassword);
+    markAdminAuthed();
+    setIsAuthed(true);
+    setSetupPassword("");
   };
 
   const handleCopyJson = () => {
@@ -1331,7 +1359,71 @@ export default function AdminPanel({
         </button>
 
         {!isAuthed ? (
-          isForgotMode ? (
+          !hasAdminPassword() ? (
+            <form
+              onSubmit={handleInitialSetup}
+              className="p-8 flex flex-col items-center flex-1 justify-center"
+            >
+              <div className="w-16 h-16 bg-orange-600/20 text-orange-500 rounded-full flex items-center justify-center mb-6">
+                <Shield size={32} />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                首次设置密码
+              </h2>
+              <p className="text-sm text-zinc-400 mb-6 text-center">
+                首次使用，请设置管理员密码（至少 4 位）
+              </p>
+              <input
+                type="password"
+                value={setupPassword}
+                onChange={(e) => {
+                  setSetupPassword(e.target.value);
+                  setError("");
+                }}
+                placeholder="设置新密码 / Set Password"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 transition-colors mb-4"
+                autoFocus
+              />
+              {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+              <button
+                type="submit"
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl px-4 py-3 transition-colors mb-4"
+              >
+                保存并进入后台
+              </button>
+            </form>
+          ) : isResetMode ? (
+            <form
+              onSubmit={handleResetPassword}
+              className="p-8 flex flex-col items-center flex-1 justify-center"
+            >
+              <div className="w-16 h-16 bg-orange-600/20 text-orange-500 rounded-full flex items-center justify-center mb-6">
+                <Lock size={32} />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">重置密码</h2>
+              <p className="text-sm text-zinc-400 mb-6 text-center">
+                安全问题验证通过，请设置新密码（至少 4 位）
+              </p>
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => {
+                  setResetPassword(e.target.value);
+                  setError("");
+                }}
+                placeholder="设置新密码 / Set Password"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 transition-colors mb-4"
+                autoFocus
+              />
+              {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+              <button
+                type="submit"
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl px-4 py-3 transition-colors mb-4"
+              >
+                保存新密码并进入后台
+              </button>
+            </form>
+          ) : isForgotMode ? (
             <form
               onSubmit={handleVerifySecurity}
               className="p-8 flex flex-col items-center flex-1 justify-center"

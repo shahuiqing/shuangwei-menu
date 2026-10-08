@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   verifyAdminPassword,
   saveAdminPassword,
+  hasAdminPassword,
   markAdminAuthed,
   isAdminAuthed,
   clearAdminAuthed,
@@ -10,13 +11,16 @@ import {
 describe("adminAuth local session", () => {
   beforeEach(() => localStorage.clear());
 
-  it("accepts the built-in default password when no hash stored", async () => {
-    expect(await verifyAdminPassword("123456")).toBe(true);
-    expect(await verifyAdminPassword("nope")).toBe(false);
+  it("rejects all logins when no password has been set", async () => {
+    expect(hasAdminPassword()).toBe(false);
+    expect(await verifyAdminPassword("123456")).toBe(false);
+    expect(await verifyAdminPassword("admin123")).toBe(false);
+    expect(await verifyAdminPassword("")).toBe(false);
   });
 
-  it("verifies against a saved bcrypt hash and stops accepting default", async () => {
+  it("verifies against a saved bcrypt hash", async () => {
     await saveAdminPassword("mypass");
+    expect(hasAdminPassword()).toBe(true);
     expect(await verifyAdminPassword("mypass")).toBe(true);
     expect(await verifyAdminPassword("123456")).toBe(false);
   });
