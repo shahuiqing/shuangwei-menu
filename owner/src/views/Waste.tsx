@@ -43,7 +43,12 @@ import {
 import { dishMargins, sumCost } from "../lib/cost";
 import type { RangeKey } from "../lib/analytics";
 import { rangeBounds } from "../lib/analytics";
-import { dishStats, rangeToIso, salesSummary } from "../lib/aggregate";
+import {
+  dishStats,
+  rangeToIso,
+  salesSummary,
+  costSummary,
+} from "../lib/aggregate";
 import {
   REASONS,
   normalizeReason,
@@ -88,16 +93,17 @@ export default function Waste({ version = 0 }: { version?: number }) {
 
   const load = async () => {
     setLoading(true);
-    const [t, sum, ds, bm, iv] = await Promise.all([
+    const [t, sum, ds, bm, iv, cs] = await Promise.all([
       fetchTransactions(2000, "waste", new Date(b.start).toISOString()),
       salesSummary(iso.start, iso.end),
       dishStats(iso.start, iso.end),
       fetchBoms(),
       fetchInventory(),
+      costSummary(iso.start, iso.end),
     ]);
     setTxns(t);
     setRevenue(sum.revenue);
-    setCogs(sumCost(dishMargins(ds, bm, iv)));
+    setCogs(cs ? cs.cogs : sumCost(dishMargins(ds, bm, iv)));
     setInv(iv);
     setLoading(false);
   };
@@ -152,7 +158,7 @@ export default function Waste({ version = 0 }: { version?: number }) {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
         <Segmented
           value={range}
           onChange={setRange}
@@ -167,22 +173,22 @@ export default function Waste({ version = 0 }: { version?: number }) {
         />
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white btn-brand rounded-xl"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-white btn-brand rounded-xl active:scale-[0.98] transition-transform"
         >
           <Plus size={16} /> 登记报损
         </button>
         <button
           onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
         </button>
-        <span className="text-[11px] text-zinc-500">
+        <span className="hidden sm:inline text-[11px] text-zinc-500">
           损耗率 = 损耗金额 ÷ 同期营收
         </span>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-4">
         <KpiCard
           icon={Wallet}
           label="损耗总额"

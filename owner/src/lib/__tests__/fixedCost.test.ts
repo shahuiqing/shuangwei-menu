@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   dailyFixedCost,
+  fixedCostForRange,
   breakEvenRevenue,
   netProfit,
   newFixedCost,
@@ -50,6 +51,50 @@ describe("dailyFixedCost", () => {
   it("忽略非正金额", () => {
     const d = new Date(2026, 9, 15);
     expect(dailyFixedCost([fc({ amount: 0 })], d)).toBe(0);
+  });
+});
+
+describe("fixedCostForRange", () => {
+  it("7 天闭区间 = 7 天摊派", () => {
+    const start = new Date(2026, 9, 1).getTime();
+    const end = new Date(2026, 9, 7, 23, 59).getTime();
+    expect(fixedCostForRange([fc({ amount: 3100 })], start, end)).toBeCloseTo(
+      700,
+    );
+  });
+
+  it("当天只到一半也按 1 天计（与「今天」区间一致）", () => {
+    const start = new Date(2026, 9, 15, 0, 0).getTime();
+    const end = new Date(2026, 9, 15, 14, 30).getTime();
+    expect(fixedCostForRange([fc({ amount: 3100 })], start, end)).toBeCloseTo(
+      100,
+    );
+  });
+
+  it("跨月时各月按自己的天数摊派", () => {
+    const start = new Date(2026, 8, 1).getTime();
+    const end = new Date(2026, 9, 2, 23, 59).getTime();
+    const expected = 30 * (3000 / 30) + 2 * (3000 / 31);
+    expect(
+      fixedCostForRange(
+        [fc({ amount: 3000, startDate: "2026-09" })],
+        start,
+        end,
+      ),
+    ).toBeCloseTo(expected, 4);
+  });
+
+  it("生效月之前的区间不计入", () => {
+    const start = new Date(2026, 8, 1).getTime();
+    const end = new Date(2026, 8, 30, 23, 59).getTime();
+    expect(fixedCostForRange([fc({ startDate: "2026-10" })], start, end)).toBe(
+      0,
+    );
+  });
+
+  it("无成本项或非法区间返回 0", () => {
+    expect(fixedCostForRange([], 0, Date.now())).toBe(0);
+    expect(fixedCostForRange([fc({})], 100, 99)).toBe(0);
   });
 });
 

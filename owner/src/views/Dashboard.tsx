@@ -18,6 +18,8 @@ import {
   Copy,
   AlertTriangle,
   Percent,
+  BarChart3,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   AreaChart,
@@ -51,6 +53,7 @@ import {
   dailySeries,
   dishStats,
   hourlySeries,
+  costSummary,
   fetchOrdersPage,
   type DailyPoint,
   type DishStat,
@@ -69,6 +72,7 @@ import {
 } from "../lib/inventory";
 import { buildPriceAlerts, flaggedAlerts } from "../lib/priceAlert";
 import { todayWasteAmount } from "../lib/waste";
+import { businessDayStart } from "../lib/businessDay";
 import { detectDishDrops } from "../lib/anomaly";
 import { dishMargins, sumCost } from "../lib/cost";
 import { loadTasks } from "../lib/tasks";
@@ -170,6 +174,7 @@ export default function Dashboard({
   const [trend, setTrend] = useState<DailyPoint[]>([]);
   const [hourly, setHourly] = useState<HourPoint[]>([]);
   const [dishes, setDishes] = useState<DishStat[]>([]);
+  const [snapshotCogs, setSnapshotCogs] = useState<number | null>(null);
   const [dishDrops, setDishDrops] = useState<
     { name: string; recentQty: number; prevQty: number; dropPct: number }[]
   >([]);
@@ -199,8 +204,7 @@ export default function Dashboard({
   useEffect(() => {
     let alive = true;
     (async () => {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const todayStart = new Date(businessDayStart());
       const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
       const tomorrow = new Date(Date.now() + 86400000).toISOString();
       const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
@@ -241,9 +245,14 @@ export default function Dashboard({
       setLoading(true);
       const b = rangeToIso(range);
       const now = new Date();
-      const r3Start = new Date(now.getTime() - 3 * 86400000).toISOString();
-      const p7Start = new Date(now.getTime() - 10 * 86400000).toISOString();
-      const [cur, prev, daily, dish, hours, r3, p7] = await Promise.all([
+      const dayStartIso = (n: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - n);
+        return new Date(businessDayStart(d.getTime())).toISOString();
+      };
+      const r3Start = dayStartIso(2);
+      const p7Start = dayStartIso(9);
+      const [cur, prev, daily, dish, hours, r3, p7, cs] = await Promise.all([
         salesSummary(b.start, b.end),
         salesSummary(b.prevStart, b.prevEnd),
         dailySeries(rangeToIso("30d").start, rangeToIso("30d").end),
@@ -251,6 +260,7 @@ export default function Dashboard({
         hourlySeries(b.start, b.end),
         dishStats(r3Start, now.toISOString()),
         dishStats(p7Start, r3Start),
+        costSummary(b.start, b.end),
       ]);
       if (!alive) return;
       const aov = cur.orders ? cur.revenue / cur.orders : 0;
@@ -266,6 +276,7 @@ export default function Dashboard({
       });
       setTrend(daily);
       setDishes(dish);
+      setSnapshotCogs(cs ? cs.cogs : null);
       setHourly(hours);
       setDishDrops(detectDishDrops(r3, p7, 3, 7).slice(0, 5));
       setLoading(false);
@@ -350,10 +361,10 @@ export default function Dashboard({
     stocktakeDone: lastStocktakeAt() !== null,
   });
 
-  // 毛利与食材成本率（当前区间）：成本 = 菜品销量 × 配方成本
+  // 毛利与食材成本率（当前区间）：优先用结账成本快照，旧库回退配方现价估算
   const cogs = useMemo(
-    () => sumCost(dishMargins(dishes, ops.boms, ops.inv)),
-    [dishes, ops.boms, ops.inv],
+    () => snapshotCogs ?? sumCost(dishMargins(dishes, ops.boms, ops.inv)),
+    [snapshotCogs, dishes, ops.boms, ops.inv],
   );
   const profit = kpi.revenue - cogs;
   const foodCostRate = kpi.revenue ? (cogs / kpi.revenue) * 100 : 0;
@@ -455,10 +466,31 @@ export default function Dashboard({
         </span>
       </div>
 
+      <div className="lg:hidden grid grid-cols-4 gap-2">
+        {[
+          { id: "procurement", label: "采购", icon: ShoppingCart },
+          { id: "waste", label: "报损", icon: PackageX },
+          { id: "reports", label: "报表", icon: BarChart3 },
+          { id: "tasks", label: "待办", icon: ClipboardCheck },
+        ].map((q) => {
+          const Icon = q.icon;
+          return (
+            <button
+              key={q.id}
+              onClick={() => onTab?.(q.id as OwnerTab)}
+              className="card-surface flex flex-col items-center gap-1.5 py-2.5 text-[11px] font-medium text-zinc-300 active:scale-[0.97] transition-transform"
+            >
+              <Icon size={17} className="text-orange-500" />
+              {q.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="space-y-3">
         {/* Hero：本日营收（账本体：宣纸卡 + 宋体大字 + 竖排「今日结」+ 朱砂印） */}
         <div
-          className="relative card-surface overflow-hidden rounded-2xl p-5 sm:p-7 cursor-pointer transition-transform duration-200 hover:-translate-y-0.5"
+          className="relative card-surface overflow-hidden rounded-2xl p-4 sm:p-7 cursor-pointer transition-transform duration-200 hover:-translate-y-0.5"
           role="button"
           tabIndex={0}
           title="查看订单管理"
@@ -490,22 +522,22 @@ export default function Dashboard({
             </div>
           )}
 
-          <div className="relative pb-10">
+          <div className="relative pb-8 sm:pb-10">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-2 text-[12px] text-zinc-500 tracking-[0.18em]">
+              <div className="flex items-center gap-2 text-[11px] sm:text-[12px] text-zinc-500 tracking-[0.14em]">
                 <Wallet size={14} />
                 本日营收 · {RANGE_LABEL[range]}
               </div>
               <span
-                className="font-serif text-sm text-zinc-400 tracking-[0.4em] shrink-0"
+                className="hidden sm:inline font-serif text-sm text-zinc-400 tracking-[0.4em] shrink-0"
                 style={{ writingMode: "vertical-rl" }}
               >
                 今日结
               </span>
             </div>
 
-            <div className="mt-4 flex items-end gap-3 flex-wrap">
-              <span className="tnum font-serif text-[42px] sm:text-[56px] font-black leading-none text-zinc-50">
+            <div className="mt-3 sm:mt-4 flex items-end gap-2.5 sm:gap-3 flex-wrap">
+              <span className="tnum font-serif text-[34px] sm:text-[56px] font-black leading-none text-zinc-50">
                 {fmtMoney(kpi.revenue)}
               </span>
               {kpi.revenueChange !== undefined && (
@@ -536,7 +568,7 @@ export default function Dashboard({
           </div>
 
           <span
-            className="seal-cinnabar absolute right-4 sm:right-6 bottom-4 w-11 h-11 rounded text-lg"
+            className="seal-cinnabar absolute right-3 sm:right-6 bottom-3 sm:bottom-4 w-9 h-9 sm:w-11 sm:h-11 rounded text-base sm:text-lg"
             style={{ transform: "rotate(-4deg)" }}
           >
             结
@@ -544,7 +576,7 @@ export default function Dashboard({
         </div>
 
         {/* 次级 KPI（账本账目行） */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
           <KpiCard
             icon={ShoppingBag}
             label="订单数"
@@ -566,17 +598,15 @@ export default function Dashboard({
             bg="bg-teal-500/10"
             onClick={() => onTab?.("reports")}
           />
-          <div className="col-span-2 sm:col-span-1">
-            <KpiCard
-              icon={Utensils}
-              label="售出菜品(份)"
-              value={String(kpi.items)}
-              valueNum={kpi.items}
-              accent="text-purple-400"
-              bg="bg-purple-500/10"
-              onClick={() => onTab?.("menu")}
-            />
-          </div>
+          <KpiCard
+            icon={Utensils}
+            label="售出菜品(份)"
+            value={String(kpi.items)}
+            valueNum={kpi.items}
+            accent="text-purple-400"
+            bg="bg-purple-500/10"
+            onClick={() => onTab?.("menu")}
+          />
           <KpiCard
             icon={Wallet}
             label="毛利"
@@ -587,25 +617,27 @@ export default function Dashboard({
             bg={profit >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
             onClick={() => onTab?.("cost")}
           />
-          <KpiCard
-            icon={Percent}
-            label="食材成本率"
-            value={`${foodCostRate.toFixed(1)}%`}
-            valueNum={foodCostRate}
-            format={(n) => `${n.toFixed(1)}%`}
-            sub={`行业参考 ${pctText(benchmarks().foodCost)}`}
-            onClick={() => onTab?.("cost")}
-            accent={
-              rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
-                ? "text-red-400"
-                : "text-teal-400"
-            }
-            bg={
-              rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
-                ? "bg-red-500/10"
-                : "bg-teal-500/10"
-            }
-          />
+          <div className="col-span-2 sm:col-span-1">
+            <KpiCard
+              icon={Percent}
+              label="食材成本率"
+              value={`${foodCostRate.toFixed(1)}%`}
+              valueNum={foodCostRate}
+              format={(n) => `${n.toFixed(1)}%`}
+              sub={`行业参考 ${pctText(benchmarks().foodCost)}`}
+              onClick={() => onTab?.("cost")}
+              accent={
+                rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
+                  ? "text-red-400"
+                  : "text-teal-400"
+              }
+              bg={
+                rangeVerdict(foodCostRate, benchmarks().foodCost) === "high"
+                  ? "bg-red-500/10"
+                  : "bg-teal-500/10"
+              }
+            />
+          </div>
         </div>
       </div>
 
@@ -838,7 +870,7 @@ export default function Dashboard({
         {trendPoints.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (
-          <div className="h-60">
+          <div className="h-52 sm:h-60">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendPoints}>
                 <defs>
@@ -889,7 +921,7 @@ export default function Dashboard({
           {cats.length === 0 ? (
             <EmptyState text="暂无数据" />
           ) : (
-            <div className="h-60 flex items-center">
+            <div className="h-52 sm:h-60 flex items-center">
               <ResponsiveContainer width="55%" height="100%">
                 <PieChart>
                   <Pie
@@ -929,7 +961,7 @@ export default function Dashboard({
         </ChartCard>
 
         <ChartCard title="时段订单分布" subtitle="按小时">
-          <div className="h-60">
+          <div className="h-52 sm:h-60">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourPoints}>
                 <CartesianGrid

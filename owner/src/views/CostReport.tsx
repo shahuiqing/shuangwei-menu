@@ -19,22 +19,23 @@ import {
 } from "recharts";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
-import { fmtMoney } from "../lib/format";
+import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
   fetchBoms,
   fetchInventory,
-  fetchPurchases,
+  fetchPurchasesBetween,
   num,
 } from "../lib/inventory";
 import { dishMargins, sumCost, type DishMargin } from "../lib/cost";
 import { loadStocktakeHistory } from "../lib/stocktakeHistory";
-import { reconcileFromHistory } from "../lib/reconcile";
 import type { RangeKey } from "../lib/analytics";
 import {
   rangeToIso,
   salesSummary,
   dishStats,
   dailyProfit,
+  costSummary,
+  consumptionByItem,
   type DailyProfit,
 } from "../lib/aggregate";
 import { useChartTheme } from "../lib/theme";
@@ -44,10 +45,13 @@ import {
   deleteFixedCost,
   newFixedCost,
   dailyFixedCost,
+  fixedCostForRange,
   breakEvenRevenue,
   FIXED_CATEGORIES,
   type FixedCost,
 } from "../lib/fixedCost";
+import { getCommissionRate } from "../lib/platform";
+import { businessDayStart } from "../lib/businessDay";
 import { Plus, Trash2, Landmark, Scale } from "lucide-react";
 
 export default function CostReport({ version = 0 }: { version?: number }) {
@@ -70,23 +74,39 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   const [fcCategory, setFcCategory] = useState<string>("其他");
   const [fcAmount, setFcAmount] = useState("");
   const [fcNote, setFcNote] = useState("");
+  const [bounds, setBounds] = useState(() => {
+    const now = Date.now();
+    return { start: now, end: now };
+  });
+  const [rangeCogs, setRangeCogs] = useState<number | null>(null);
+  const [waste, setWaste] = useState(0);
+  const [externalRevenue, setExternalRevenue] = useState(0);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       const b = rangeToIso(range);
-      const [bm, iv, sum, ds, dp] = await Promise.all([
+      const [bm, iv, sum, ds, dp, cs, ws] = await Promise.all([
         fetchBoms(),
         fetchInventory(),
         salesSummary(b.start, b.end),
         dishStats(b.start, b.end),
         dailyProfit(b.start, b.end),
+        costSummary(b.start, b.end),
+        consumptionByItem(b.start, b.end, "waste"),
       ]);
       if (!alive) return;
       setRevenue(sum.revenue);
       setMargins(dishMargins(ds, bm, iv));
       setDaily(dp);
+      setBounds({
+        start: new Date(b.start).getTime(),
+        end: new Date(b.end).getTime(),
+      });
+      setRangeCogs(cs ? cs.cogs : null);
+      setExternalRevenue(cs?.externalRevenue || 0);
+      setWaste(cs ? cs.waste : ws.reduce((s, w) => s + num(w.cost), 0));
       setLoading(false);
     })();
     return () => {
@@ -103,52 +123,79 @@ export default function CostReport({ version = 0 }: { version?: number }) {
     closing: number;
     purchases: number;
     realCogs: number;
-    hiddenLoss: number;
+    standardCogs: number | null;
+    hiddenLoss: number | null;
+    from: number;
+    to: number;
   } | null>(null);
 
-  const cogs = useMemo(() => sumCost(margins), [margins]);
+  const cogs = rangeCogs ?? sumCost(margins);
   const profit = revenue - cogs;
   const margin = revenue ? (profit / revenue) * 100 : 0;
   const unknown = useMemo(
     () => margins.filter((m) => !m.hasCost).map((m) => m.name),
     [margins],
   );
-  const todayFixed = useMemo(
-    () => dailyFixedCost(fixedCosts, new Date()),
-    [fixedCosts],
+  // 区间 end 可能落在 02:59（上一营业日），固定成本按「最后一个营业日」摊派
+  const fixedEnd = useMemo(() => businessDayStart(bounds.end), [bounds.end]);
+  const rangeFixed = useMemo(
+    () => fixedCostForRange(fixedCosts, bounds.start, fixedEnd),
+    [fixedCosts, bounds.start, fixedEnd],
   );
-  const net = revenue - cogs - todayFixed;
-  const breakEven = breakEvenRevenue(todayFixed, revenue ? cogs / revenue : 0);
+  const dayCount = useMemo(() => {
+    const s = new Date(bounds.start);
+    const e = new Date(fixedEnd);
+    s.setHours(0, 0, 0, 0);
+    e.setHours(0, 0, 0, 0);
+    return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+  }, [bounds.start, fixedEnd]);
+  const dayFixed = rangeFixed / dayCount;
+  // 「全部」区间用当前日均做盈亏平衡；历史平均会被摊薄，没有参考意义
+  const breakEvenFixed =
+    range === "all" ? dailyFixedCost(fixedCosts, new Date()) : dayFixed;
+  const commission = externalRevenue * getCommissionRate();
+  const net = revenue - cogs - waste - rangeFixed - commission;
+  const breakEven = breakEvenRevenue(
+    breakEvenFixed,
+    revenue ? cogs / revenue : 0,
+  );
 
   useEffect(() => {
     let alive = true;
     (async () => {
       const records = loadStocktakeHistory();
-      if (records.length < 2) return;
-      const purchases = await fetchPurchases(500);
-      const latest = records[0].at;
-      const prev = records[1].at;
-      const between = purchases
-        .filter((p) => {
-          const t = p.purchased_at ? new Date(p.purchased_at).getTime() : 0;
-          return t >= prev && t <= latest;
-        })
-        .reduce((s, p) => s + Number(p.total_cost), 0);
-      const r = reconcileFromHistory(records, between, cogs);
-      if (alive && r) {
-        setRecon({
-          opening: Number(records[1].stockValue) || 0,
-          closing: Number(records[0].stockValue) || 0,
-          purchases: between,
-          realCogs: r.realCogs,
-          hiddenLoss: r.hiddenLoss,
-        });
+      if (records.length < 2) {
+        setRecon(null);
+        return;
       }
+      const prev = Number(records[1].at);
+      const latest = Number(records[0].at);
+      const startIso = new Date(prev).toISOString();
+      const endIso = new Date(latest).toISOString();
+      const [purchases, cs] = await Promise.all([
+        fetchPurchasesBetween(startIso, endIso),
+        costSummary(startIso, endIso),
+      ]);
+      const between = purchases.reduce((s, p) => s + Number(p.total_cost), 0);
+      const opening = Number(records[1].stockValue) || 0;
+      const closing = Number(records[0].stockValue) || 0;
+      const realCogs = opening + between - closing;
+      if (!alive) return;
+      setRecon({
+        opening,
+        closing,
+        purchases: between,
+        realCogs,
+        standardCogs: cs ? cs.cogs : null,
+        hiddenLoss: cs ? realCogs - cs.cogs : null,
+        from: prev,
+        to: latest,
+      });
     })();
     return () => {
       alive = false;
     };
-  }, [version, cogs]);
+  }, [version]);
 
   const addFixedCost = async () => {
     if (!fcName.trim()) return;
@@ -202,7 +249,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-5 gap-2.5 sm:gap-4">
         <KpiCard
           icon={Wallet}
           label="营业收入"
@@ -237,21 +284,32 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           accent="text-teal-400"
           bg="bg-teal-500/10"
         />
-        <KpiCard
-          icon={Landmark}
-          label="净利（扣固定成本）"
-          value={fmtMoney(net)}
-          valueNum={net}
-          format={fmtMoney}
-          sub={`盈亏平衡 ${fmtMoney(breakEven)}/日`}
-          accent={net >= 0 ? "text-green-400" : "text-red-400"}
-          bg={net >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
-        />
+        <div className="col-span-2 sm:col-span-2 xl:col-span-1">
+          <KpiCard
+            icon={Landmark}
+            label="净利（扣食材/损耗/固定/佣金）"
+            value={fmtMoney(net)}
+            valueNum={net}
+            format={fmtMoney}
+            sub={`固定 ${fmtMoney(rangeFixed)} · 平衡 ${fmtMoney(breakEven)}/日`}
+            accent={net >= 0 ? "text-green-400" : "text-red-400"}
+            bg={net >= 0 ? "bg-green-500/10" : "bg-red-500/10"}
+          />
+        </div>
       </div>
+
+      <p className="text-[11px] text-zinc-500 leading-relaxed">
+        净利 = 营收 {fmtMoney(revenue)} − 食材 {fmtMoney(cogs)} − 损耗{" "}
+        {fmtMoney(waste)} − 固定 {fmtMoney(rangeFixed)} − 平台佣金{" "}
+        {fmtMoney(commission)}
+        {externalRevenue > 0
+          ? `（平台营收 ${fmtMoney(externalRevenue)} × ${(getCommissionRate() * 100).toFixed(0)}%）`
+          : "（无平台单）"}
+      </p>
 
       <ChartCard
         title="固定成本（房租 / 人工 / 水电）"
-        subtitle={`月合计 ${fmtMoney(fixedCosts.reduce((s, c) => s + Number(c.amount), 0))} · 今日摊派 ${fmtMoney(todayFixed)} · 盈亏平衡 ${fmtMoney(breakEven)}/日`}
+        subtitle={`月合计 ${fmtMoney(fixedCosts.reduce((s, c) => s + Number(c.amount), 0))} · 区间摊派 ${fmtMoney(rangeFixed)} · 日均 ${fmtMoney(breakEvenFixed)} · 盈亏平衡 ${fmtMoney(breakEven)}/日`}
       >
         {fixedCosts.length > 0 && (
           <div className="space-y-2 mb-3">
@@ -332,7 +390,11 @@ export default function CostReport({ version = 0 }: { version?: number }) {
 
       <ChartCard
         title="成本对账（真实 vs 标准）"
-        subtitle="两次盘点之间 · 库存变动法：真实 COGS = 期初 + 采购 − 期末"
+        subtitle={
+          recon
+            ? `${fmtDateTime(recon.from)} ~ ${fmtDateTime(recon.to)} · 真实 COGS = 期初 + 采购 − 期末`
+            : "两次盘点之间 · 库存变动法：真实 COGS = 期初 + 采购 − 期末"
+        }
         action={<Scale size={18} className="text-orange-500" />}
       >
         {recon ? (
@@ -363,18 +425,23 @@ export default function CostReport({ version = 0 }: { version?: number }) {
               </span>
               <span className="tnum font-semibold">
                 {fmtMoney(recon.realCogs)}
-                <span
-                  className={`ml-2 ${recon.hiddenLoss > 0 ? "text-red-400" : "text-emerald-400"}`}
-                >
-                  {recon.hiddenLoss > 0
-                    ? `多耗 ${fmtMoney(recon.hiddenLoss)}`
-                    : "无隐性损耗"}
-                </span>
+                {recon.hiddenLoss === null ? (
+                  <span className="ml-2 text-zinc-500">标准成本待更新</span>
+                ) : (
+                  <span
+                    className={`ml-2 ${recon.hiddenLoss > 0 ? "text-red-400" : "text-emerald-400"}`}
+                  >
+                    {recon.hiddenLoss > 0
+                      ? `多耗 ${fmtMoney(recon.hiddenLoss)}`
+                      : "无隐性损耗"}
+                  </span>
+                )}
               </span>
             </div>
             <p className="text-[11px] text-zinc-600 leading-relaxed">
-              隐性损耗 = 真实 COGS − 标准 COGS（当前区间标准成本
-              {fmtMoney(cogs)}），即后厨用了但没报损的部分。
+              {recon.standardCogs !== null
+                ? `隐性损耗 = 真实 COGS − 标准 COGS（盘点窗口 ${fmtMoney(recon.standardCogs)}），即后厨用了但没报损的部分。`
+                : "执行最新 supabase_owner_all.sql 后，可按盘点窗口对比标准 COGS 与隐性损耗。"}
             </p>
           </div>
         ) : (
@@ -384,6 +451,16 @@ export default function CostReport({ version = 0 }: { version?: number }) {
           />
         )}
       </ChartCard>
+
+      {rangeCogs === null && !loading && (
+        <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+          <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+          <span>
+            当前按「现价配方」估算成本（数据库未执行最新
+            SQL）。执行后历史订单使用结账时成本快照，原料调价不再改写旧账。
+          </span>
+        </div>
+      )}
 
       {unknown.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">

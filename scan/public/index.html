@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#25D366">
+<title>Bienvenue</title>
+<style>
+  :root {
+    --primary: #25D366;
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --text2: #6b7280;
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .container { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  .store-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 0 20px;
+  }
+  .store-logo {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700; flex-shrink: 0;
+  }
+  .store-info h1 { font-size: 18px; font-weight: 700; }
+  .store-info p { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  .section-title {
+    font-size: 13px; font-weight: 600; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin: 20px 0 10px;
+  }
+  .menu-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .menu-item {
+    background: var(--card); border-radius: var(--radius);
+    padding: 18px 8px; text-align: center;
+    box-shadow: var(--shadow); cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    text-decoration: none; color: var(--text);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .menu-item:active { transform: scale(0.96); }
+  .menu-item .icon {
+    font-size: 26px; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+  }
+  .menu-item .label {
+    font-size: 12px; font-weight: 500; color: var(--text2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .social-scroll {
+    display: flex; gap: 10px;
+    overflow-x: auto; padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .social-scroll::-webkit-scrollbar { display: none; }
+  .social-card {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    background: var(--card); border-radius: var(--radius);
+    padding: 12px 16px; box-shadow: var(--shadow);
+    text-decoration: none; color: var(--text);
+    transition: transform 0.15s;
+  }
+  .social-card:active { transform: scale(0.97); }
+  .social-card .social-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #fff; flex-shrink: 0;
+  }
+  .social-card .social-name { font-size: 14px; font-weight: 600; }
+
+  .group-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .group-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 18px 14px; box-shadow: var(--shadow);
+    text-decoration: none; color: var(--text);
+    display: flex; align-items: center; gap: 12px;
+    transition: transform 0.15s;
+  }
+  .group-card:active { transform: scale(0.97); }
+  .group-card .g-icon {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .group-card .g-info h3 { font-size: 14px; font-weight: 600; }
+  .group-card .g-info p { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 60vh; color: var(--text2); font-size: 15px;
+  }
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid #e5e7eb;
+    border-top-color: var(--primary); border-radius: 50%;
+    animation: spin 0.6s linear infinite; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .limited-notice {
+    background: #fef3c7; border-radius: var(--radius);
+    padding: 12px 16px; font-size: 13px; color: #92400e;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="loading"><div class="spinner"></div>Chargement...</div>
+</div>
+
+<script>
+// ===== 设备指纹采集 =====
+async function deviceFingerprint() {
+  const parts = [
+    navigator.userAgent,
+    navigator.language,
+    screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+    new Date().getTimezoneOffset(),
+    navigator.hardwareConcurrency || 0,
+  ];
+  try {
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+    ctx.fillText('fp', 10, 10);
+    parts.push(c.toDataURL().slice(-40));
+  } catch (e) {}
+  const raw = parts.join('|');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ===== 图标映射 =====
+const SOCIAL_ICONS = {
+  whatsapp:   { bg: '#25D366', icon: '💬', label: 'WhatsApp' },
+  facebook:   { bg: '#1877F2', icon: '📘', label: 'Facebook' },
+  instagram:  { bg: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)', icon: '📷', label: 'Instagram' },
+  tiktok:     { bg: '#000',    icon: '🎵', label: 'TikTok' },
+  youtube:    { bg: '#FF0000', icon: '▶️', label: 'YouTube' },
+  twitter:    { bg: '#1DA1F2', icon: '🐦', label: 'Twitter / X' },
+};
+
+const MENU_ICONS = {
+  menu:     { emoji: '📋', bg: '#e8f5e9' },
+  promo:    { emoji: '🔥', bg: '#fff3e0' },
+  points:   { emoji: '⭐', bg: '#fff8e1' },
+  benefits: { emoji: '🎁', bg: '#fce4ec' },
+  order:    { emoji: '🛒', bg: '#e3f2fd' },
+  support:  { emoji: '💬', bg: '#e0f7fa' },
+  history:  { emoji: '📊', bg: '#f3e5f5' },
+  settings: { emoji: '⚙️', bg: '#eceff1' },
+};
+
+// ===== 渲染 =====
+function renderHub(data) {
+  const app = document.getElementById('app');
+  const store = data.store || {};
+  const initials = (store.name || 'S').charAt(0).toUpperCase();
+
+  let html = '';
+
+  html += `
+    <div class="store-header">
+      <div class="store-logo">${initials}</div>
+      <div class="store-info">
+        <h1>${store.name || 'Bienvenue'}</h1>
+        <p>${data.mode === 'member' ? 'Membre' : data.mode === 'limited' ? 'Membre (limité)' : 'Visiteur'}</p>
+      </div>
+    </div>
+  `;
+
+  if (data.mode === 'limited') {
+    html += `<div class="limited-notice">Certaines fonctionnalités sont temporairement limitées.</div>`;
+  }
+
+  if (data.menus && data.menus.length > 0) {
+    html += `<div class="section-title">Menu</div><div class="menu-grid">`;
+    data.menus.forEach((m) => {
+      const ic = MENU_ICONS[m.type] || MENU_ICONS.menu;
+      const external = m.url && m.url.startsWith('http');
+      html += `
+        <a class="menu-item" href="${m.url || '#'}"${external ? ' target="_blank" rel="noopener"' : ''}>
+          <div class="icon" style="background:${ic.bg}">${ic.emoji}</div>
+          <div class="label">${m.label}</div>
+        </a>
+      `;
+    });
+    html += `</div>`;
+  }
+
+  if (data.socials && data.socials.length > 0) {
+    html += `<div class="section-title">Suivez-nous</div><div class="social-scroll">`;
+    data.socials.forEach((s) => {
+      const si = SOCIAL_ICONS[s.platform] || { bg: '#666', icon: '🔗', label: s.platform };
+      html += `
+        <a class="social-card" href="${s.url}" target="_blank" rel="noopener">
+          <div class="social-icon" style="background:${si.bg}">${si.icon}</div>
+          <div class="social-name">${si.label}</div>
+        </a>
+      `;
+    });
+    html += `</div>`;
+  }
+
+  if (data.groups && data.groups.length > 0) {
+    html += `<div class="section-title">Rejoignez nos groupes</div><div class="group-grid">`;
+    data.groups.forEach((g) => {
+      const gi = SOCIAL_ICONS[g.platform] || { bg: '#666', icon: '👥' };
+      html += `
+        <a class="group-card" href="${g.url}" target="_blank" rel="noopener">
+          <div class="g-icon" style="background:${gi.bg}">${gi.icon}</div>
+          <div class="g-info">
+            <h3>${g.name}</h3>
+            <p>${g.members ? g.members + ' membres' : 'Rejoindre'}</p>
+          </div>
+        </a>
+      `;
+    });
+    html += `</div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+// ===== 主流程 =====
+(async function init() {
+  try {
+    const fp = await deviceFingerprint();
+    const res = await fetch('/api/hub', {
+      headers: { 'X-Device-FP': fp },
+    });
+    const data = await res.json();
+    renderHub(data);
+  } catch (err) {
+    document.getElementById('app').innerHTML =
+      '<div class="loading">Erreur de chargement. Veuillez réessayer.</div>';
+  }
+})();
+</script>
+</body>
+</html>

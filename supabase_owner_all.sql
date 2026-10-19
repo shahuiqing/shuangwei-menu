@@ -85,6 +85,10 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "discountAmount" NUMERIC(10,2
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "receivedAmount" NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "finalTotal"     NUMERIC(10,2);
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "completedAt"    TIMESTAMPTZ;
+-- 结账时的食材成本快照（由 trg_order_cogs_snapshot 写入；旧订单为空则按当前配方估算）
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "cogsSnapshot"   NUMERIC(10,2);
+-- 订单标记：normal / refund / gift / staff / trial（老板端落库，跨设备一致）
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "orderTag"       TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_orders_created_at   ON public.orders (created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_completed    ON public.orders (status, created_at DESC);
@@ -246,9 +250,11 @@ AS $$
 DECLARE v_run boolean := false;
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    v_run := (NEW.status = 'completed');
+    v_run := (NEW.status = 'completed'
+              AND COALESCE(NEW."orderTag", 'normal') <> 'refund');
   ELSE
     IF NEW.status = 'completed'
+       AND COALESCE(NEW."orderTag", 'normal') <> 'refund'
        AND (OLD.status IS DISTINCT FROM 'completed' OR NEW.items IS DISTINCT FROM OLD.items) THEN
       v_run := true;
     ELSIF OLD.status = 'completed' AND NEW.status IS DISTINCT FROM 'completed' THEN
@@ -268,6 +274,94 @@ CREATE TRIGGER trg_order_bom
   AFTER INSERT OR UPDATE ON public.orders
   FOR EACH ROW EXECUTE FUNCTION public.apply_order_bom();
 
+-- 删除订单时回冲库存与流水（否则订单删了、库存仍被扣、消耗仍被统计）
+CREATE OR REPLACE FUNCTION public.reverse_order_bom()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  PERFORM public.deduct_order_bom(OLD.id, '[]'::jsonb);
+  RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_order_bom_delete ON public.orders;
+CREATE TRIGGER trg_order_bom_delete
+  AFTER DELETE ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.reverse_order_bom();
+
+-- 结账时写入成本快照：之后原料调价不再改写历史毛利
+CREATE OR REPLACE FUNCTION public.snapshot_order_cogs()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE v_cost numeric;
+BEGIN
+  IF NEW.status = 'completed' THEN
+    SELECT COALESCE(SUM(rb.dosage * COALESCE(ii.price, 0)
+                        * COALESCE((it->>'quantity')::numeric, 0)), 0)
+      INTO v_cost
+      FROM jsonb_array_elements(COALESCE(NEW.items, '[]'::jsonb)) it
+      JOIN public.recipe_boms rb ON rb.menu_item_name = (it->>'name')
+      JOIN public.inventory_items ii ON ii.id = rb.inventory_item_id;
+    NEW."cogsSnapshot" := v_cost;
+  ELSE
+    NEW."cogsSnapshot" := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_order_cogs_snapshot ON public.orders;
+CREATE TRIGGER trg_order_cogs_snapshot
+  BEFORE INSERT OR UPDATE OF status, items ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.snapshot_order_cogs();
+
+-- 标记「退菜」时回冲库存；取消退菜标记时按当前配方重新扣减。
+-- 赠送/员工餐/试菜仍然消耗原料，不动库存。
+CREATE OR REPLACE FUNCTION public.apply_order_tag_bom()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM 'completed' THEN RETURN NEW; END IF;
+  IF COALESCE(OLD."orderTag", 'normal') <> 'refund'
+     AND COALESCE(NEW."orderTag", 'normal') = 'refund' THEN
+    PERFORM public.deduct_order_bom(NEW.id, '[]'::jsonb);
+  ELSIF OLD.status = 'completed'
+     AND NEW.status = 'completed'
+     AND COALESCE(OLD."orderTag", 'normal') = 'refund'
+     AND COALESCE(NEW."orderTag", 'normal') <> 'refund'
+     AND NEW.items IS NOT DISTINCT FROM OLD.items THEN
+    PERFORM public.deduct_order_bom(NEW.id, COALESCE(NEW.items, '[]'::jsonb));
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_order_tag_bom ON public.orders;
+CREATE TRIGGER trg_order_tag_bom
+  AFTER UPDATE OF "orderTag" ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.apply_order_tag_bom();
+
+-- 升级前已经标记退菜、但库存尚未回冲的历史订单：首次补回，重复执行无副作用
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT o.id
+    FROM public.orders o
+    WHERE o.status = 'completed'
+      AND COALESCE(o."orderTag", 'normal') = 'refund'
+      AND EXISTS (
+        SELECT 1 FROM public.inventory_transactions t
+        WHERE t.reference = o.id AND t.type = 'order_out'
+      )
+  LOOP
+    PERFORM public.deduct_order_bom(r.id, '[]'::jsonb);
+  END LOOP;
+END $$;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6. 老板端聚合 RPC（避免前端拉全量，省 egress）
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -275,22 +369,32 @@ CREATE OR REPLACE FUNCTION public.owner_sales_summary(p_start timestamptz, p_end
 RETURNS TABLE(revenue numeric, orders bigint, items numeric, completed bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT
-    COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0)) FILTER (WHERE status = 'completed'), 0)::numeric,
-    COUNT(*) FILTER (WHERE status <> 'cancelled'),
+    COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0))
+             FILTER (WHERE status = 'completed'
+                       AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
+    COUNT(*) FILTER (WHERE status = 'completed'
+                       AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial')),
     COALESCE(SUM((SELECT COALESCE(SUM(COALESCE((i->>'quantity')::numeric, 0)), 0)
                     FROM jsonb_array_elements(COALESCE(items, '[]'::jsonb)) i))
-             FILTER (WHERE status <> 'cancelled'), 0)::numeric,
-    COUNT(*) FILTER (WHERE status = 'completed')
+             FILTER (WHERE status = 'completed'
+                       AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
+    COUNT(*) FILTER (WHERE status = 'completed'
+                       AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial'))
   FROM public.orders
   WHERE created_at >= p_start AND created_at < p_end;
 $$;
 
+-- 营业日从凌晨 3 点切分，与前端 businessDay.ts 一致
+DROP FUNCTION IF EXISTS public.owner_daily(timestamptz, timestamptz, text, int);
 CREATE OR REPLACE FUNCTION public.owner_daily(p_start timestamptz, p_end timestamptz, p_tz text DEFAULT 'UTC')
 RETURNS TABLE(day date, revenue numeric, orders bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
-  SELECT (created_at AT TIME ZONE p_tz)::date,
-         COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0)) FILTER (WHERE status = 'completed'), 0)::numeric,
-         COUNT(*) FILTER (WHERE status <> 'cancelled')
+  SELECT ((created_at AT TIME ZONE p_tz) - interval '3 hours')::date,
+         COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0))
+                  FILTER (WHERE status = 'completed'
+                            AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
+         COUNT(*) FILTER (WHERE status = 'completed'
+                            AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial'))
   FROM public.orders
   WHERE created_at >= p_start AND created_at < p_end
   GROUP BY 1 ORDER BY 1;
@@ -299,12 +403,23 @@ $$;
 CREATE OR REPLACE FUNCTION public.owner_dish_stats(p_start timestamptz, p_end timestamptz)
 RETURNS TABLE(name text, qty numeric, revenue numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
-  SELECT COALESCE(i->>'name', '未知'),
-         COALESCE(SUM(COALESCE((i->>'quantity')::numeric, 0)), 0)::numeric,
-         COALESCE(SUM(COALESCE((i->>'quantity')::numeric, 0) * COALESCE((i->>'price')::numeric, 0)), 0)::numeric
-  FROM public.orders o
-  CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) i
-  WHERE o.created_at >= p_start AND o.created_at < p_end AND o.status <> 'cancelled'
+  WITH lines AS (
+    SELECT COALESCE(i->>'name', '未知') AS name,
+           COALESCE((i->>'quantity')::numeric, 0) AS qty,
+           COALESCE((i->>'quantity')::numeric, 0) * COALESCE((i->>'price')::numeric, 0) AS gross,
+           SUM(COALESCE((i->>'quantity')::numeric, 0) * COALESCE((i->>'price')::numeric, 0))
+             OVER (PARTITION BY o.id) AS order_gross,
+           COALESCE(o."finalTotal", o.total, o.total_amount, 0) AS order_revenue
+    FROM public.orders o
+    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) i
+    WHERE o.created_at >= p_start AND o.created_at < p_end
+      AND o.status = 'completed'
+      AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')
+  )
+  SELECT name,
+         COALESCE(SUM(qty), 0)::numeric,
+         COALESCE(SUM(gross * CASE WHEN order_gross <> 0 THEN order_revenue / order_gross ELSE 0 END), 0)::numeric
+  FROM lines
   GROUP BY 1 ORDER BY 3 DESC;
 $$;
 
@@ -313,39 +428,63 @@ RETURNS TABLE(hour int, orders bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT EXTRACT(HOUR FROM (created_at AT TIME ZONE p_tz))::int, COUNT(*)::bigint
   FROM public.orders
-  WHERE created_at >= p_start AND created_at < p_end AND status <> 'cancelled'
+  WHERE created_at >= p_start AND created_at < p_end
+    AND status = 'completed'
+    AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial')
   GROUP BY 1 ORDER BY 1;
 $$;
 
 CREATE OR REPLACE FUNCTION public.owner_consumption(p_start timestamptz, p_end timestamptz, p_type text DEFAULT 'order_out')
 RETURNS TABLE(key text, qty numeric, cost numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
-  SELECT item_name, SUM(ABS(quantity))::numeric, SUM(ABS(quantity) * COALESCE(unit_cost, 0))::numeric
-  FROM public.inventory_transactions
-  WHERE type = p_type AND created_at >= p_start AND created_at < p_end
+  SELECT t.item_name, SUM(ABS(t.quantity))::numeric,
+         SUM(ABS(t.quantity) * COALESCE(t.unit_cost, 0))::numeric
+  FROM public.inventory_transactions t
+  WHERE t.type = p_type AND t.created_at >= p_start AND t.created_at < p_end
+    AND NOT (t.type = 'order_out' AND EXISTS (
+      SELECT 1 FROM public.orders o
+       WHERE o.id = t.reference
+         AND COALESCE(o."orderTag", 'normal') = 'refund'))
   GROUP BY 1 ORDER BY 3 DESC;
 $$;
 
 CREATE OR REPLACE FUNCTION public.owner_consumption_dish(p_start timestamptz, p_end timestamptz, p_type text DEFAULT 'order_out')
 RETURNS TABLE(key text, qty numeric, cost numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
-  SELECT COALESCE(NULLIF(notes, ''), '未知'),
-         SUM(ABS(quantity))::numeric, SUM(ABS(quantity) * COALESCE(unit_cost, 0))::numeric
-  FROM public.inventory_transactions
-  WHERE type = p_type AND created_at >= p_start AND created_at < p_end
+  SELECT COALESCE(NULLIF(t.notes, ''), '未知'),
+         SUM(ABS(t.quantity))::numeric,
+         SUM(ABS(t.quantity) * COALESCE(t.unit_cost, 0))::numeric
+  FROM public.inventory_transactions t
+  WHERE t.type = p_type AND t.created_at >= p_start AND t.created_at < p_end
+    AND NOT (t.type = 'order_out' AND EXISTS (
+      SELECT 1 FROM public.orders o
+       WHERE o.id = t.reference
+         AND COALESCE(o."orderTag", 'normal') = 'refund'))
   GROUP BY 1 ORDER BY 3 DESC;
 $$;
 
-CREATE OR REPLACE FUNCTION public.owner_consumption_daily(p_start timestamptz, p_end timestamptz, p_tz text DEFAULT 'UTC', p_type text DEFAULT 'order_out')
+DROP FUNCTION IF EXISTS public.owner_consumption_daily(timestamptz, timestamptz, text, text, int);
+CREATE OR REPLACE FUNCTION public.owner_consumption_daily(
+  p_start timestamptz,
+  p_end timestamptz,
+  p_tz text DEFAULT 'UTC',
+  p_type text DEFAULT 'order_out'
+)
 RETURNS TABLE(day date, qty numeric, cost numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
-  SELECT (created_at AT TIME ZONE p_tz)::date,
-         SUM(ABS(quantity))::numeric, SUM(ABS(quantity) * COALESCE(unit_cost, 0))::numeric
-  FROM public.inventory_transactions
-  WHERE type = p_type AND created_at >= p_start AND created_at < p_end
+  SELECT ((t.created_at AT TIME ZONE p_tz) - interval '3 hours')::date,
+         SUM(ABS(t.quantity))::numeric,
+         SUM(ABS(t.quantity) * COALESCE(t.unit_cost, 0))::numeric
+  FROM public.inventory_transactions t
+  WHERE t.type = p_type AND t.created_at >= p_start AND t.created_at < p_end
+    AND NOT (t.type = 'order_out' AND EXISTS (
+      SELECT 1 FROM public.orders o
+       WHERE o.id = t.reference
+         AND COALESCE(o."orderTag", 'normal') = 'refund'))
   GROUP BY 1 ORDER BY 1;
 $$;
 
+DROP FUNCTION IF EXISTS public.owner_daily_profit(timestamptz, timestamptz, text, int);
 CREATE OR REPLACE FUNCTION public.owner_daily_profit(p_start timestamptz, p_end timestamptz, p_tz text DEFAULT 'UTC')
 RETURNS TABLE(day date, revenue numeric, cogs numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
@@ -355,16 +494,71 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
     JOIN public.inventory_items ii ON ii.id = rb.inventory_item_id
     GROUP BY 1
   )
-  SELECT (o.created_at AT TIME ZONE p_tz)::date,
-         COALESCE(SUM(COALESCE(o."finalTotal", o.total, o.total_amount, 0)) FILTER (WHERE o.status = 'completed'), 0)::numeric,
-         COALESCE(SUM((SELECT COALESCE(SUM(COALESCE((i->>'quantity')::numeric, 0) * COALESCE(ic.unit_cost, 0)), 0)
-                         FROM jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) i
-                         LEFT JOIN item_cost ic ON ic.menu_item_name = (i->>'name')))
-                  FILTER (WHERE o.status = 'completed'), 0)::numeric
+  SELECT ((o.created_at AT TIME ZONE p_tz) - interval '3 hours')::date,
+         COALESCE(SUM(COALESCE(o."finalTotal", o.total, o.total_amount, 0))
+                  FILTER (WHERE o.status = 'completed'
+                            AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
+         COALESCE(SUM(COALESCE(o."cogsSnapshot", oc.cost, 0))
+                  FILTER (WHERE o.status = 'completed'
+                            AND COALESCE(o."orderTag", 'normal') <> 'refund'), 0)::numeric
   FROM public.orders o
+  LEFT JOIN LATERAL (
+    SELECT SUM(COALESCE((i->>'quantity')::numeric, 0) * COALESCE(ic.unit_cost, 0)) AS cost
+    FROM jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) i
+    LEFT JOIN item_cost ic ON ic.menu_item_name = (i->>'name')
+  ) oc ON true
   WHERE o.created_at >= p_start AND o.created_at < p_end
   GROUP BY 1 ORDER BY 1;
 $$;
+
+-- 成本汇总（区间）：收入 / 快照 COGS / 损耗 / 平台订单收入
+-- 前端优先用它，避免用「当前原料价」重算历史；函数缺失时前端自动回退旧口径。
+CREATE OR REPLACE FUNCTION public.owner_cost_summary(p_start timestamptz, p_end timestamptz)
+RETURNS TABLE(revenue numeric, cogs numeric, waste numeric, external_revenue numeric)
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
+  WITH item_cost AS (
+    SELECT rb.menu_item_name, SUM(rb.dosage * COALESCE(ii.price, 0)) AS unit_cost
+    FROM public.recipe_boms rb
+    JOIN public.inventory_items ii ON ii.id = rb.inventory_item_id
+    GROUP BY 1
+  )
+  SELECT
+    COALESCE(SUM(COALESCE(o."finalTotal", o.total, o.total_amount, 0))
+             FILTER (WHERE o.status = 'completed'
+                       AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
+    COALESCE(SUM(COALESCE(o."cogsSnapshot", oc.cost, 0))
+             FILTER (WHERE o.status = 'completed'
+                       AND COALESCE(o."orderTag", 'normal') <> 'refund'), 0)::numeric,
+    (SELECT COALESCE(SUM(ABS(t.quantity) * COALESCE(t.unit_cost, 0)), 0)::numeric
+       FROM public.inventory_transactions t
+      WHERE t.type = 'waste' AND t.created_at >= p_start AND t.created_at < p_end),
+    COALESCE(SUM(COALESCE(o."finalTotal", o.total, o.total_amount, 0))
+             FILTER (WHERE o.status = 'completed'
+                       AND COALESCE(o."isExternal", false)
+                       AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric
+  FROM public.orders o
+  LEFT JOIN LATERAL (
+    SELECT SUM(COALESCE((i->>'quantity')::numeric, 0) * COALESCE(ic.unit_cost, 0)) AS cost
+    FROM jsonb_array_elements(COALESCE(o.items, '[]'::jsonb)) i
+    LEFT JOIN item_cost ic ON ic.menu_item_name = (i->>'name')
+  ) oc ON true
+  WHERE o.created_at >= p_start AND o.created_at < p_end;
+$$;
+GRANT EXECUTE ON FUNCTION public.owner_cost_summary(timestamptz, timestamptz) TO anon, authenticated;
+
+-- 支付方式分布（按营收，排除退款/赠送/员工餐/试菜）
+CREATE OR REPLACE FUNCTION public.owner_payment_stats(p_start timestamptz, p_end timestamptz)
+RETURNS TABLE(method text, revenue numeric)
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
+  SELECT COALESCE(NULLIF("paymentMethod", ''), '未标注'),
+         COALESCE(SUM(COALESCE("finalTotal", total, total_amount, 0)), 0)::numeric
+  FROM public.orders
+  WHERE created_at >= p_start AND created_at < p_end
+    AND status = 'completed'
+    AND COALESCE("orderTag", 'normal') NOT IN ('refund','gift','staff','trial')
+  GROUP BY 1 ORDER BY 2 DESC;
+$$;
+GRANT EXECUTE ON FUNCTION public.owner_payment_stats(timestamptz, timestamptz) TO anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.owner_table_stats()
 RETURNS TABLE(orders bigint, inventory bigint, boms bigint, purchases bigint, txns bigint, total_bytes bigint)
@@ -385,6 +579,8 @@ RETURNS TABLE(removed_orders bigint, removed_txns bigint)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE o bigint; t bigint;
 BEGIN
+  -- 归档/清理历史数据时不要触发库存回冲（否则会把多年前的扣减反向加回现库存）
+  PERFORM set_config('session_replication_role', 'replica', true);
   IF p_orders_days > 0 THEN
     DELETE FROM public.orders
      WHERE status IN ('completed', 'cancelled')
@@ -439,6 +635,8 @@ CREATE TABLE IF NOT EXISTS public.owner_backfill (
   note       text not null default '',
   created_at timestamptz not null default now()
 );
+-- 历史补录也带成本，成本类报表才能与营收对齐
+ALTER TABLE public.owner_backfill ADD COLUMN IF NOT EXISTS cogs numeric not null default 0;
 ALTER TABLE public.owner_backfill ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS anon_all_owner_backfill ON public.owner_backfill;
 CREATE POLICY anon_all_owner_backfill ON public.owner_backfill
@@ -472,7 +670,8 @@ BEGIN
       type, status, total, total_amount, "finalTotal",
       items, notes, "orderNumber", "paymentMethod",
       "timestamp", "created_at", "createdAt",
-      "isExternal", "unprintedNewOrder", "unprintedAdditions"
+      "isExternal", "unprintedNewOrder", "unprintedAdditions",
+      "orderTag", "cogsSnapshot"
     ) VALUES (
       v_id, v_id,
       coalesce(nullif(r->>'tableNo', ''), 'A1'), coalesce(nullif(r->>'tableNo', ''), 'A1'),
@@ -482,7 +681,15 @@ BEGIN
       coalesce(r->'items', '[]'::jsonb), coalesce(r->>'notes', ''),
       coalesce(r->>'orderNumber', ''), coalesce(r->>'paymentMethod', ''),
       v_ts, v_ts, v_ts,
-      coalesce((r->>'isExternal')::boolean, false), false, '[]'::jsonb
+      coalesce((r->>'isExternal')::boolean, false), false, '[]'::jsonb,
+      coalesce(nullif(r->>'orderTag', ''), 'normal'),
+      CASE WHEN coalesce(r->>'status', 'completed') = 'completed' THEN (
+        SELECT coalesce(sum(rb.dosage * coalesce(ii.price, 0)
+                            * coalesce((it->>'quantity')::numeric, 0)), 0)
+        FROM jsonb_array_elements(coalesce(r->'items', '[]'::jsonb)) it
+        JOIN public.recipe_boms rb ON rb.menu_item_name = (it->>'name')
+        JOIN public.inventory_items ii ON ii.id = rb.inventory_item_id
+      ) ELSE NULL END
     )
     ON CONFLICT (id) DO NOTHING;
     IF FOUND THEN v_n := v_n + 1; END IF;
@@ -521,7 +728,7 @@ ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS shelf_life_days inte
 NOTIFY pgrst, 'reload schema';
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 8. 校验：应返回 12 行 owner_* 函数
+-- 8. 校验：应返回 14 行 owner_* 函数
 -- ─────────────────────────────────────────────────────────────────────────────
 SELECT proname
 FROM pg_proc

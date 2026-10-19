@@ -53,6 +53,41 @@ export function dailyFixedCost(costs: FixedCost[], date: Date): number {
   }, 0);
 }
 
+/**
+ * 区间固定成本：按自然日摊派，闭区间（含首尾两天）。
+ * 跨月时各月按自己的天数摊；startMs 传 0（全部）也能安全计算。
+ */
+export function fixedCostForRange(
+  costs: FixedCost[],
+  startMs: number,
+  endMs: number,
+): number {
+  if (!costs.length || !(endMs >= startMs)) return 0;
+  const start = new Date(Math.max(startMs, 0));
+  const end = new Date(endMs);
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  const dayMs = 86400000;
+  let total = 0;
+
+  while (cursor.getTime() <= last.getTime()) {
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    const monthStart = new Date(year, month, 1).getTime();
+    const monthEnd = new Date(year, month + 1, 1).getTime();
+    const from = new Date(Math.max(start.getTime(), monthStart));
+    const to = new Date(Math.min(end.getTime(), monthEnd - 1));
+    from.setHours(0, 0, 0, 0);
+    to.setHours(0, 0, 0, 0);
+    const days = Math.round((to.getTime() - from.getTime()) / dayMs) + 1;
+    if (days > 0) {
+      total += dailyFixedCost(costs, new Date(year, month, 15)) * days;
+    }
+    cursor.setMonth(month + 1);
+  }
+  return total;
+}
+
 /** 盈亏平衡营收：固定成本 ÷ (1 − 食材成本率)；成本率钳制避免除零 */
 export function breakEvenRevenue(
   fixedCost: number,
@@ -84,14 +119,18 @@ export async function fetchFixedCosts(): Promise<FixedCost[]> {
     console.warn("[owner] fetchFixedCosts:", error?.message || "no table");
     return [];
   }
-  return (data as Record<string, unknown>[]).map((r) => ({
-    id: String(r.id),
-    name: String(r.name ?? ""),
-    category: String(r.category ?? "其他"),
-    amount: Number(r.amount) || 0,
-    startDate: String(r.start_date ?? "").slice(0, 7),
-    note: String(r.note ?? ""),
-  }));
+  return (data as Record<string, unknown>[]).map((r) => {
+    const start = String(r.start_date ?? "").slice(0, 7);
+    const created = String(r.created_at ?? "").slice(0, 7);
+    return {
+      id: String(r.id),
+      name: String(r.name ?? ""),
+      category: String(r.category ?? "其他"),
+      amount: Number(r.amount) || 0,
+      startDate: start || created || currentMonth(),
+      note: String(r.note ?? ""),
+    };
+  });
 }
 
 export async function saveFixedCost(c: FixedCost): Promise<boolean> {

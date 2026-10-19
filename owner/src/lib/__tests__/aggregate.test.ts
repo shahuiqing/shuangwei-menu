@@ -19,15 +19,24 @@ describe("rangeToIso", () => {
     expect(ms(r.start)).toBeLessThan(ms("2000-01-01T00:00:00Z"));
   });
 
-  it("custom 区间按本地日界", () => {
+  it("custom 区间按本地营业日界（03:00）", () => {
     const r = rangeToIso("custom", "2026-01-01", "2026-01-31");
     const start = new Date(r.start);
     const end = new Date(r.end);
     expect(start.getFullYear()).toBe(2026);
     expect(start.getMonth()).toBe(0);
     expect(start.getDate()).toBe(1);
-    expect(end.getDate()).toBe(31);
+    expect(start.getHours()).toBe(3);
+    // 截止到 2/1 02:59:59.999，覆盖 1/31 整个营业日
+    expect(end.getMonth()).toBe(1);
+    expect(end.getDate()).toBe(1);
+    expect(end.getHours()).toBeLessThan(3);
     expect(end.getTime()).toBeGreaterThan(start.getTime());
+  });
+
+  it("今天从本地 03:00 开始", () => {
+    const r = rangeToIso("today");
+    expect(new Date(r.start).getHours()).toBe(3);
   });
 });
 

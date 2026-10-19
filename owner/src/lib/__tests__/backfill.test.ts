@@ -6,7 +6,8 @@ const e = (
   revenue: number,
   orders = 0,
   note = "",
-): BackfillEntry => ({ day, revenue, orders, note });
+  cogs = 0,
+): BackfillEntry => ({ day, revenue, orders, cogs, note });
 
 describe("backfillTotals", () => {
   const list = [
@@ -21,14 +22,14 @@ describe("backfillTotals", () => {
       "2026-10-01T00:00:00",
       "2026-10-03T12:00:00",
     );
-    expect(t).toEqual({ revenue: 500, orders: 8 });
+    expect(t).toEqual({ revenue: 500, orders: 8, cogs: 0 });
   });
 
   it("含起止边界整天", () => {
     const t = backfillTotals(
       list,
       "2026-09-28T08:00:00",
-      "2026-10-05T01:00:00",
+      "2026-10-05T12:00:00",
     );
     expect(t.revenue).toBe(900);
     expect(t.orders).toBe(14);
@@ -38,7 +39,38 @@ describe("backfillTotals", () => {
     expect(backfillTotals([], "2026-10-01", "2026-10-02")).toEqual({
       revenue: 0,
       orders: 0,
+      cogs: 0,
     });
+  });
+
+  it("补录成本按区间求和", () => {
+    const t = backfillTotals(
+      [e("2026-10-01", 500, 8, "", 180), e("2026-10-02", 300, 4, "", 120)],
+      "2026-10-01T00:00:00",
+      "2026-10-02T23:59:59",
+    );
+    expect(t.cogs).toBe(300);
+  });
+
+  it("时区偏移不会把本地日切成前一天", () => {
+    const iso = new Date(2026, 9, 19, 4, 0, 0).toISOString();
+    const t = backfillTotals(
+      [e("2026-10-18", 100, 1), e("2026-10-19", 200, 2)],
+      iso,
+      iso,
+    );
+    expect(t).toEqual({ revenue: 200, orders: 2, cogs: 0 });
+  });
+
+  it("02:59 截止仍属于前一营业日，不把次日补录算进来", () => {
+    const start = new Date(2026, 9, 1, 3, 0, 0).toISOString();
+    const end = new Date(2026, 9, 2, 2, 59, 0).toISOString();
+    const t = backfillTotals(
+      [e("2026-10-01", 100, 1), e("2026-10-02", 200, 2)],
+      start,
+      end,
+    );
+    expect(t.revenue).toBe(100);
   });
 });
 
@@ -74,5 +106,17 @@ describe("applyBackfill", () => {
     const rows = [{ day: "2026-10-02", revenue: 1, orders: 1 }];
     applyBackfill(rows, [e("2026-10-02", 9, 9)], "2026-10-01", "2026-10-03");
     expect(rows[0].revenue).toBe(1);
+  });
+
+  it("补录成本叠加到已有日成本", () => {
+    const rows = [{ day: "2026-10-02", revenue: 10, cogs: 5 }];
+    const out = applyBackfill(
+      rows,
+      [e("2026-10-02", 10, 1, "", 3)],
+      "2026-10-01",
+      "2026-10-03",
+    );
+    expect(out[0].revenue).toBe(20);
+    expect(out[0].cogs).toBe(8);
   });
 });

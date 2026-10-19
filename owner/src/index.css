@@ -28,6 +28,13 @@ body,
 html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body {
@@ -61,12 +68,12 @@ body {
 }
 
 .mobile-safe-bottom {
-  /* 底部导航已移除，仅保留安全区 */
-  padding-bottom: calc(1.5rem + var(--sab));
+  /* 为固定底部主导航（60px）和 iPhone 底部横条留白 */
+  padding-bottom: calc(5.25rem + var(--sab));
 }
 @media (min-width: 1024px) {
   .mobile-safe-bottom {
-    padding-bottom: 1.5rem;
+    padding-bottom: 2rem;
   }
 }
 

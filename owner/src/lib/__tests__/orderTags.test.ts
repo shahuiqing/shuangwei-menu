@@ -3,6 +3,7 @@ import {
   getOrderTag,
   setOrderTag,
   loadOrderTags,
+  hydrateOrderTags,
   isExcludedTag,
   ORDER_TAG_LABEL,
 } from "../orderTags";
@@ -47,5 +48,21 @@ describe("订单标记", () => {
     expect(isExcludedTag("trial")).toBe(true);
     expect(isExcludedTag("normal")).toBe(false);
     expect(ORDER_TAG_LABEL.staff).toBe("员工餐");
+  });
+
+  it("用数据库标记校准本地；无该列时不动本地", () => {
+    setOrderTag("o3", "refund");
+    hydrateOrderTags([{ id: "o3", orderTag: null }]);
+    expect(getOrderTag("o3")).toBe("refund");
+
+    hydrateOrderTags([{ id: "o3", orderTag: "normal" }]);
+    expect(getOrderTag("o3")).toBe("normal");
+
+    setOrderTag("o4", "gift");
+    hydrateOrderTags([{ id: "o4" }]);
+    expect(getOrderTag("o4")).toBe("gift");
+
+    hydrateOrderTags([{ id: "o4", orderTag: "staff" }]);
+    expect(getOrderTag("o4")).toBe("staff");
   });
 });

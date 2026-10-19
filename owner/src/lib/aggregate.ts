@@ -7,6 +7,12 @@
 import { supabase } from "./supabase";
 import { saveSnap, snapFallback } from "./snapshot";
 import { fetchBackfill, backfillTotals, applyBackfill } from "./backfill";
+import {
+  BUSINESS_DAY_HOUR,
+  businessDayEnd,
+  businessDayKey,
+  businessDayStart,
+} from "./businessDay";
 import type { RangeKey } from "./analytics";
 
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -25,17 +31,21 @@ export function rangeToIso(
   to?: string,
 ): IsoRange {
   const now = new Date();
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const t0 = startOfToday.getTime();
+  const t0 = businessDayStart(now.getTime());
+  const daysAgo = (n: number) => {
+    const d = new Date(t0);
+    d.setDate(d.getDate() - n);
+    d.setHours(BUSINESS_DAY_HOUR, 0, 0, 0);
+    return d.getTime();
+  };
   let start = t0;
   let end = now.getTime();
-  if (range === "7d") start = t0 - 6 * 86400000;
-  else if (range === "30d") start = t0 - 29 * 86400000;
+  if (range === "7d") start = daysAgo(6);
+  else if (range === "30d") start = daysAgo(29);
   else if (range === "all") start = 0;
   else if (range === "custom" && from && to) {
-    start = new Date(from + "T00:00:00").getTime();
-    end = new Date(to + "T23:59:59").getTime();
+    start = businessDayStart(new Date(from + "T12:00:00").getTime());
+    end = businessDayEnd(new Date(to + "T12:00:00").getTime()) - 1;
   }
   const span = end - start;
   return {
@@ -129,8 +139,46 @@ export async function salesSummary(
   };
 }
 
-/* ============ 趋势 / 分布 ============ */
+/* ============ 成本汇总（快照 COGS / 损耗 / 平台收入） ============ */
 
+export interface CostSummary {
+  revenue: number;
+  cogs: number;
+  waste: number;
+  externalRevenue: number;
+}
+
+/**
+ * 区间成本汇总：优先读结账时写入的 cogsSnapshot，历史原料调价不再影响旧账。
+ * 数据库未执行最新 SQL 时返回 null，调用方回退旧口径。
+ */
+export async function costSummary(
+  start: string,
+  end: string,
+): Promise<CostSummary | null> {
+  const [rows, bf] = await Promise.all([
+    call<
+      {
+        revenue: number;
+        cogs: number;
+        waste: number;
+        external_revenue: number;
+      }[]
+    >("owner_cost_summary", { p_start: start, p_end: end }, []),
+    fetchBackfill(),
+  ]);
+  const r = rows[0];
+  if (!r) return null;
+  const t = backfillTotals(bf, start, end);
+  return {
+    revenue: Number(r.revenue || 0) + t.revenue,
+    cogs: Number(r.cogs || 0) + t.cogs,
+    waste: Number(r.waste || 0),
+    externalRevenue: Number(r.external_revenue || 0),
+  };
+}
+
+/* ============ 趋势 / 分布 ============ */
 export interface DailyPoint {
   day: string;
   revenue: number;
@@ -154,7 +202,38 @@ export async function dailySeries(
     revenue: Number(r.revenue || 0),
     orders: Number(r.orders || 0),
   }));
-  return applyBackfill(mapped, bf, start, end);
+  return applyBackfill(
+    fillDailyGaps(mapped, start, end, (day) => ({
+      day,
+      revenue: 0,
+      orders: 0,
+    })),
+    bf,
+    start,
+    end,
+  );
+}
+
+/** 补零：SQL 只返回有订单的营业日，图表需要连续日期 */
+function fillDailyGaps<T extends { day: string }>(
+  rows: T[],
+  start: string,
+  end: string,
+  make: (day: string) => T,
+): T[] {
+  const startMs = businessDayStart(new Date(start).getTime());
+  const endMs = businessDayStart(new Date(end).getTime());
+  if (!(endMs >= startMs) || endMs - startMs > 366 * 86400000) return rows;
+  const byDay = new Map(rows.map((r) => [r.day, r]));
+  const out: T[] = [];
+  const d = new Date(startMs);
+  const last = new Date(endMs);
+  while (d.getTime() <= last.getTime()) {
+    const k = businessDayKey(d.getTime());
+    out.push(byDay.get(k) || make(k));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
 }
 
 export interface DishStat {
@@ -189,15 +268,49 @@ export async function dailyProfit(
   start: string,
   end: string,
 ): Promise<DailyProfit[]> {
-  const rows = await call<DailyProfit[]>(
-    "owner_daily_profit",
-    { p_start: start, p_end: end, p_tz: TZ },
-    [],
-  );
-  return rows.map((r) => ({
+  const [rows, bf] = await Promise.all([
+    call<DailyProfit[]>(
+      "owner_daily_profit",
+      { p_start: start, p_end: end, p_tz: TZ },
+      [],
+    ),
+    fetchBackfill(),
+  ]);
+  const mapped = rows.map((r) => ({
     day: String(r.day),
     revenue: Number(r.revenue || 0),
     cogs: Number(r.cogs || 0),
+  }));
+  return applyBackfill(
+    fillDailyGaps(mapped, start, end, (day) => ({
+      day,
+      revenue: 0,
+      cogs: 0,
+    })),
+    bf,
+    start,
+    end,
+  );
+}
+
+export interface PaymentStat {
+  method: string;
+  revenue: number;
+}
+
+/** 按支付方式统计营收（服务端聚合，排除退款/赠送/员工餐/试菜） */
+export async function paymentStatsRange(
+  start: string,
+  end: string,
+): Promise<PaymentStat[]> {
+  const rows = await call<PaymentStat[]>(
+    "owner_payment_stats",
+    { p_start: start, p_end: end },
+    [],
+  );
+  return rows.map((r) => ({
+    method: r.method || "未标注",
+    revenue: Number(r.revenue || 0),
   }));
 }
 
@@ -321,8 +434,9 @@ export async function updateOrderStatus(
   status: string,
 ): Promise<boolean> {
   if (!supabase) return false;
+  // 不改写 timestamp：它是订单业务时间，改状态不能把历史订单挪到今天
   const now = new Date().toISOString();
-  const patch: Record<string, unknown> = { status, timestamp: now };
+  const patch: Record<string, unknown> = { status };
   if (status === "completed") patch.completedAt = now;
   const { error } = await supabase.from("orders").update(patch).eq("id", id);
   if (error) {
@@ -342,14 +456,13 @@ export async function updateOrderFields(
     notes?: string;
     total?: number;
     total_amount?: number;
+    finalTotal?: number;
     paymentMethod?: string;
   },
 ): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase
-    .from("orders")
-    .update({ ...patch, timestamp: new Date().toISOString() })
-    .eq("id", id);
+  // 不改写 timestamp（否则历史订单会被挪到当天，报表失真）
+  const { error } = await supabase.from("orders").update(patch).eq("id", id);
   if (error) {
     console.warn("[owner] updateOrderFields:", error.message);
     return false;

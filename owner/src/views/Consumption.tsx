@@ -139,7 +139,7 @@ export default function Consumption({ version = 0 }: { version?: number }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
         <KpiCard
           icon={Package}
           label="出库消耗金额"

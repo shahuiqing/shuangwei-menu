@@ -33,6 +33,7 @@ import {
 } from "../lib/inventory";
 import { computeExpiry, type ExpiryInfo } from "../lib/expiry";
 import { REASONS, todayWasteAmount, type Reason } from "../lib/waste";
+import { businessDayStart } from "../lib/businessDay";
 import {
   buildStocktake,
   pendingAdjustments,
@@ -103,8 +104,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
 
   const load = async () => {
     setLoading(true);
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+    const start = new Date(businessDayStart());
     const [items, txns, purchases] = await Promise.all([
       fetchInventory(),
       fetchTransactions(500, "waste", start.toISOString()),
@@ -313,7 +313,7 @@ export default function Inventory({ version = 0 }: { version?: number }) {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
         <KpiCard
           icon={Wallet}
           label="库存总值"
@@ -359,44 +359,31 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
-        </button>
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 sm:gap-3">
         <button
           onClick={() => setEditing({ ...EMPTY })}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white btn-brand rounded-xl"
+          className="col-span-2 sm:order-last flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-white btn-brand rounded-xl active:scale-[0.98] transition-transform"
         >
           <Plus size={16} /> 新增原料
+        </button>
+        <button
+          onClick={load}
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+        >
+          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
         </button>
         <button
           onClick={() => {
             setCounts({});
             setStocktaking(true);
           }}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-200 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <ClipboardList size={16} /> 盘点
         </button>
-        <div className="relative flex-1 min-w-[160px]">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="搜索名称 / 分类"
-            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-3 pr-9 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-          />
-          <Dictation
-            value={q}
-            onChange={setQ}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5"
-          />
-        </div>
         <button
           onClick={() => setOnlyA((v) => !v)}
-          className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl border transition-colors ${
+          className={`flex items-center justify-center gap-2 px-3 py-2.5 text-sm rounded-xl border transition-colors ${
             onlyA
               ? "bg-orange-500/15 border-orange-500/60 text-orange-400 font-semibold"
               : "bg-zinc-900 border-white/5 text-zinc-400 hover:text-white"
@@ -404,6 +391,19 @@ export default function Inventory({ version = 0 }: { version?: number }) {
         >
           A类食材
         </button>
+        <div className="relative col-span-2 sm:flex-1 min-w-0 sm:min-w-[160px]">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜索原料 / 分类"
+            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-3 pr-9 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <Dictation
+            value={q}
+            onChange={setQ}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5"
+          />
+        </div>
       </div>
 
       <ChartCard

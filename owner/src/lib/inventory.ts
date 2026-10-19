@@ -296,6 +296,27 @@ export async function fetchPurchases(limit = 500): Promise<PurchaseOrder[]> {
   return rows;
 }
 
+/** 按时间窗取采购单（对账用，避免固定 500 条截断） */
+export async function fetchPurchasesBetween(
+  startIso: string,
+  endIso: string,
+  limit = 5000,
+): Promise<PurchaseOrder[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("purchase_orders")
+    .select("*")
+    .gte("purchased_at", startIso)
+    .lte("purchased_at", endIso)
+    .order("purchased_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("[owner] fetchPurchasesBetween:", error.message);
+    return [];
+  }
+  return (data || []) as PurchaseOrder[];
+}
+
 /**
  * 新建采购单（原子 RPC）：一次事务内完成
  *   ① 写 purchase_orders ② 库存增加并更新成本价 ③ 写 purchase_in 流水

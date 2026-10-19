@@ -43,6 +43,7 @@ import {
 } from "../lib/notify";
 import { useLateConfig } from "../lib/lateOrders";
 import { getDailyQuota, setDailyQuota, todayQuotaKey } from "../lib/dailyQuota";
+import { businessDayKey } from "../lib/businessDay";
 import {
   exportLocalData,
   importLocalData,
@@ -64,6 +65,21 @@ import {
 import { loadAuditLog, clearAuditLog, logAction } from "../lib/auditLog";
 import { fmtDateTime, fmtMoney } from "../lib/format";
 import { getCommissionRate, setCommissionRate } from "../lib/platform";
+
+const SETTINGS_SECTIONS: { id: string; label: string }[] = [
+  { id: "set-store", label: "店铺" },
+  { id: "set-account", label: "密码" },
+  { id: "set-ai", label: "AI" },
+  { id: "set-notify", label: "通知" },
+  { id: "set-quota", label: "定额" },
+  { id: "set-biz", label: "行业" },
+  { id: "set-platform", label: "平台" },
+  { id: "set-backfill", label: "补录" },
+  { id: "set-export", label: "备份" },
+  { id: "set-logs", label: "日志" },
+  { id: "set-usage", label: "用量" },
+  { id: "set-formula", label: "口径" },
+];
 
 export default function Settings({
   settings,
@@ -90,6 +106,7 @@ export default function Settings({
   const [bfDay, setBfDay] = useState("");
   const [bfRevenue, setBfRevenue] = useState("");
   const [bfOrders, setBfOrders] = useState("");
+  const [bfCogs, setBfCogs] = useState("");
   const [bfNote, setBfNote] = useState("");
   useEffect(() => {
     fetchBackfill().then(setBackfills);
@@ -154,13 +171,11 @@ export default function Settings({
     else toast.error("同步失败：请确认已执行 cloudsync SQL");
   };
 
-  const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  };
+  const todayStr = () => businessDayKey(Date.now());
 
   const saveBf = async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(bfDay)) return toast.error("请选择日期");
+    if (bfDay > todayStr()) return toast.error("不能补录未来营业日");
     const revenue = Number(bfRevenue);
     if (!(revenue >= 0) || bfRevenue.trim() === "")
       return toast.error("请填写营业额");
@@ -168,6 +183,7 @@ export default function Settings({
       day: bfDay,
       revenue,
       orders: Math.max(0, Math.floor(Number(bfOrders) || 0)),
+      cogs: Math.max(0, Number(bfCogs) || 0),
       note: bfNote.trim(),
     });
     if (!ok) return toast.error("保存失败：请确认已执行 backfill SQL");
@@ -178,6 +194,7 @@ export default function Settings({
     setBfDay("");
     setBfRevenue("");
     setBfOrders("");
+    setBfCogs("");
     setBfNote("");
     onSaved();
   };
@@ -340,7 +357,24 @@ export default function Settings({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="lg:col-span-2 flex items-center gap-2 overflow-x-auto pb-0.5 -mt-1">
+        {SETTINGS_SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() =>
+              document
+                .getElementById(s.id)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white hover:border-orange-500/40 transition-colors"
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       <ChartCard
+        id="set-store"
         title="店铺信息"
         subtitle="同步到顾客端与云端"
         action={<Store size={18} className="text-orange-500" />}
@@ -361,6 +395,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-account"
         title="老板端登录密码"
         subtitle="仅存本机，不依赖数据库"
         action={<KeyRound size={18} className="text-orange-500" />}
@@ -397,6 +432,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-ai"
         title="AI 服务（可选）"
         subtitle="OpenAI 兼容接口 · 未配置时 AI 助手用规则版"
         action={<Sparkles size={18} className="text-orange-500" />}
@@ -454,6 +490,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-notify"
         title="消息通知"
         subtitle="系统通知 · 仅在页面或安装的应用打开时生效"
         action={<Bell size={18} className="text-orange-500" />}
@@ -529,6 +566,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-quota"
         title="每日定额"
         subtitle="今日食材成本上限 · 超出部分计为损耗"
         action={<Gauge size={18} className="text-orange-500" />}
@@ -558,6 +596,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-biz"
         title="行业基准"
         subtitle="按业态给出的参考区间 · 看板与损耗页据此对比"
         action={<Gauge size={18} className="text-orange-500" />}
@@ -605,6 +644,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-platform"
         title="平台订单口径"
         subtitle="美团/饿了么等外部订单有抽成，营收不能直接当利润"
         action={<Percent size={18} className="text-orange-500" />}
@@ -638,11 +678,12 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-backfill"
         title="历史补录"
         subtitle="没记账的营业日补进报表 · 看板与趋势自动计入"
         action={<CalendarPlus size={18} className="text-orange-500" />}
       >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           <input
             type="date"
             value={bfDay}
@@ -664,6 +705,14 @@ export default function Settings({
             placeholder="订单数"
             value={bfOrders}
             onChange={(e) => setBfOrders(e.target.value)}
+            className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <input
+            type="number"
+            min={0}
+            placeholder="食材成本（选填）"
+            value={bfCogs}
+            onChange={(e) => setBfCogs(e.target.value)}
             className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
           />
           <input
@@ -695,6 +744,11 @@ export default function Settings({
                       {fmtMoney(b.revenue)}
                     </span>
                     <span className="text-zinc-500 ml-2">{b.orders} 单</span>
+                    {(b.cogs || 0) > 0 && (
+                      <span className="text-red-400/80 ml-2">
+                        成本 {fmtMoney(b.cogs || 0)}
+                      </span>
+                    )}
                     {b.note && (
                       <span className="text-zinc-500 ml-2 text-xs">
                         {b.note}
@@ -712,11 +766,12 @@ export default function Settings({
           </div>
         )}
         <p className="text-[11px] text-zinc-600 mt-2 leading-relaxed">
-          只补「当天没记账」的日子，已有订单的天不要补（会重复计入）；成本类报表不含补录。
+          只补「当天没记账」的日子，已有订单的天不要补（会重复计入）；填写成本后，成本类报表会与营收对齐。
         </p>
       </ChartCard>
 
       <ChartCard
+        id="set-export"
         title="数据导出"
         subtitle="备份本机暂存数据（订单标记/任务/定额/换算等）"
         action={<Download size={18} className="text-orange-500" />}
@@ -758,6 +813,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-logs"
         title="操作日志"
         subtitle="关键操作（上限 500 条）· 自动同步云端"
         action={<History size={18} className="text-orange-500" />}
@@ -817,6 +873,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-usage"
         title="数据库用量"
         subtitle="Supabase 免费层 500MB · Egress 5GB/月"
         className="lg:col-span-2"
@@ -902,6 +959,7 @@ export default function Settings({
       </ChartCard>
 
       <ChartCard
+        id="set-formula"
         title="运行原理 / 计算口径"
         subtitle="每个数字是怎么算出来的 · 便于理解与对账"
         action={<Scale size={18} className="text-orange-500" />}

@@ -4,7 +4,12 @@ import { ChartCard, SkeletonRows } from "../components/ui";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { STORE_NAME } from "../lib/supabase";
-import { rangeToIso, salesSummary, dishStats } from "../lib/aggregate";
+import {
+  rangeToIso,
+  salesSummary,
+  dishStats,
+  costSummary,
+} from "../lib/aggregate";
 import { fetchBoms, fetchInventory } from "../lib/inventory";
 import { dishMargins, sumCost } from "../lib/cost";
 import { buildProblems, topProblem } from "../lib/problems";
@@ -40,17 +45,18 @@ export default function Assistant({
     let alive = true;
     (async () => {
       const b = rangeToIso("today");
-      const [sum, ds, boms, inv] = await Promise.all([
+      const [sum, ds, boms, inv, cs] = await Promise.all([
         salesSummary(b.start, b.end),
         dishStats(b.start, b.end),
         fetchBoms(),
         fetchInventory(),
+        costSummary(b.start, b.end),
       ]);
       if (!alive) return;
       setSummary({
         revenue: sum.revenue,
         orders: sum.orders,
-        cogs: sumCost(dishMargins(ds, boms, inv)),
+        cogs: cs ? cs.cogs : sumCost(dishMargins(ds, boms, inv)),
       });
       const top = [...ds].sort((a, c) => c.qty - a.qty)[0];
       setTopDish(top ? { name: top.name, qty: top.qty } : null);

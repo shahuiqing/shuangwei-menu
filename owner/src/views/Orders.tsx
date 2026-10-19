@@ -43,6 +43,7 @@ const EXTERNAL_TAG = "外卖";
 import {
   getOrderTag,
   setOrderTag,
+  hydrateOrderTags,
   ORDER_TAG_LABEL,
   type OrderTag,
 } from "../lib/orderTags";
@@ -94,7 +95,16 @@ const itemCount = (o: any) =>
 const PAGE_SIZE = 50;
 
 function exportCsv(rows: any[]) {
-  const header = ["桌号", "时间", "状态", "菜品数", "金额", "支付方式", "单号"];
+  const header = [
+    "桌号",
+    "时间",
+    "状态",
+    "菜品数",
+    "金额",
+    "支付方式",
+    "单号",
+    "标记",
+  ];
   const body = rows.map((o) => [
     tableName(o),
     fmtDateTime(o.timestamp || o.created_at),
@@ -103,6 +113,7 @@ function exportCsv(rows: any[]) {
     orderTotal(o),
     o.paymentMethod || "",
     o.orderNumber || o._id || o.id || "",
+    ORDER_TAG_LABEL[getOrderTag(String(o.id || o._id || ""))],
   ]);
   const csv =
     "\uFEFF" +
@@ -206,6 +217,7 @@ export default function Orders({
         limit: PAGE_SIZE,
       });
       if (!alive) return;
+      hydrateOrderTags(res.rows);
       setRows(res.rows);
       setCount(res.count);
       setLoading(false);
@@ -242,10 +254,15 @@ export default function Orders({
       notes: editDraft.notes,
       total,
       total_amount: total,
+      finalTotal: total,
       paymentMethod: editDraft.paymentMethod,
     });
     setBusy(false);
     if (!ok) return toast.error("保存失败");
+    logAction(
+      "修改订单",
+      `${detail.orderNumber || id} · 金额 ${fmtMoney(orderTotal(detail))} → ${fmtMoney(total)}`,
+    );
     toast.success("订单已更新");
     setDetail({
       ...detail,
@@ -255,6 +272,7 @@ export default function Orders({
       notes: editDraft.notes,
       total,
       total_amount: total,
+      finalTotal: total,
       paymentMethod: editDraft.paymentMethod,
     });
     setRows((prev) =>
@@ -267,6 +285,7 @@ export default function Orders({
               customerName: editDraft.customer_name,
               total,
               total_amount: total,
+              finalTotal: total,
             }
           : o,
       ),
@@ -283,6 +302,10 @@ export default function Orders({
     const ok = await deleteOrder(id);
     setBusy(false);
     if (!ok) return toast.error("删除失败");
+    logAction(
+      "删除订单",
+      `${detail.orderNumber || id} · 金额 ${fmtMoney(orderTotal(detail))}`,
+    );
     toast.success("订单已删除");
     setRows((prev) => prev.filter((o) => String(o.id || o._id) !== id));
     setDetail(null);
@@ -299,6 +322,10 @@ export default function Orders({
     const ok = await updateOrderStatus(String(detail.id || detail._id), s);
     setBusy(false);
     if (!ok) return toast.error("状态更新失败");
+    logAction(
+      "订单状态",
+      `${detail.orderNumber || detail.id || detail._id} → ${STATUS_TEXT[s]}`,
+    );
     toast.success(`已更新为「${STATUS_TEXT[s]}」`);
     setDetail({ ...detail, status: s });
     setRows((prev) =>
@@ -402,7 +429,7 @@ export default function Orders({
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 sm:gap-3">
         <Segmented
           value={range}
           onChange={(v) => {
@@ -410,6 +437,7 @@ export default function Orders({
             resetPage();
           }}
           size="sm"
+          className="col-span-2 sm:col-span-1"
           options={
             [
               ["today", "今天"],
@@ -426,7 +454,7 @@ export default function Orders({
             setStatus(e.target.value);
             resetPage();
           }}
-          className="bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
+          className="w-full min-w-0 bg-zinc-900 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-zinc-300 focus:outline-none"
         >
           <option value="all">全部状态</option>
           <option value="pending">待接单</option>
@@ -442,14 +470,14 @@ export default function Orders({
             setSort(e.target.value as typeof sort);
             resetPage();
           }}
-          className="bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
+          className="w-full min-w-0 bg-zinc-900 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-zinc-300 focus:outline-none"
         >
           <option value="time_desc">时间 ↓（新→旧）</option>
           <option value="time_asc">时间 ↑（旧→新）</option>
           <option value="amount_desc">金额 ↓</option>
         </select>
 
-        <div className="relative flex-1 min-w-[160px]">
+        <div className="relative col-span-2 sm:flex-1 min-w-0 sm:min-w-[160px]">
           <Search
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
@@ -461,7 +489,7 @@ export default function Orders({
               resetPage();
             }}
             placeholder="搜索桌号 / 姓名 / 单号"
-            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-9 pr-9 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+            className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-9 pr-9 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
           />
           <Dictation
             value={q}
@@ -475,14 +503,14 @@ export default function Orders({
 
         <button
           onClick={onExport}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
         >
           <Download size={16} /> 导出 CSV
         </button>
 
         <label
           title="POS / 平台订单导入（明细行或汇总行均可）"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800 cursor-pointer"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800 cursor-pointer"
         >
           <Upload size={16} /> 导入 CSV
           <input
@@ -495,7 +523,7 @@ export default function Orders({
 
         <button
           onClick={() => setOnlyAbnormal((v) => !v)}
-          className={`flex items-center gap-2 px-3 py-2 text-sm rounded-xl border transition-colors ${
+          className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm rounded-xl border transition-colors ${
             onlyAbnormal
               ? "bg-purple-500/15 border-purple-500/60 text-purple-400 font-semibold"
               : "bg-zinc-900 border-white/5 text-zinc-300 hover:text-white"
@@ -768,10 +796,10 @@ export default function Orders({
                 )}
               </div>
 
-              {/* 订单标记：退菜/赠送/员工餐/试菜 不参与理论消耗 */}
+              {/* 订单标记：退菜不计营收/成本；赠送/员工餐/试菜不计营收、成本照计 */}
               <div className="mb-4 rounded-xl bg-zinc-950 border border-white/5 px-3 py-2.5">
                 <div className="text-[11px] text-zinc-500 mb-2">
-                  订单标记（退菜/赠送/员工餐/试菜不计入理论消耗）
+                  订单标记（退菜不计营收/成本；赠送/员工餐/试菜不计营收、成本照计）
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {TAG_ORDER.map((t) => {

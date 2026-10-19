@@ -183,8 +183,8 @@ export function dishMargins(
   const cost = buildDishCostMap(boms, inventory);
   return dishes
     .map((d) => {
-      const hasCost = cost.has(d.name);
       const c = (cost.get(d.name) || 0) * d.qty;
+      const hasCost = cost.has(d.name) && c > 0;
       const profit = d.revenue - c;
       return {
         name: d.name,

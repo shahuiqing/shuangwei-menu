@@ -450,6 +450,33 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         />
       </div>
 
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 sm:gap-3">
+        <button
+          onClick={() => setOpen(true)}
+          className="col-span-2 sm:order-last flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-white btn-brand rounded-xl active:scale-[0.98] transition-transform"
+        >
+          <Plus size={16} /> 新建采购
+        </button>
+        <button
+          onClick={load}
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+        >
+          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
+        </button>
+        <button
+          onClick={exportCsv}
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+        >
+          <Download size={16} /> 导出
+        </button>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="搜索原料 / 供应商"
+          className="col-span-2 sm:flex-1 min-w-0 sm:min-w-[160px] bg-zinc-900 border border-white/5 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+        />
+      </div>
+
       {flagged.length > 0 && (
         <ChartCard
           title="价格异常"
@@ -678,33 +705,6 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           </div>
         </ChartCard>
       )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
-        </button>
-        <button
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-white btn-brand rounded-xl"
-        >
-          <Plus size={16} /> 新建采购
-        </button>
-        <button
-          onClick={exportCsv}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
-        >
-          <Download size={16} /> 导出
-        </button>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="搜索原料 / 供应商"
-          className="flex-1 min-w-[160px] bg-zinc-900 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-        />
-      </div>
 
       <ChartCard title="采购记录" subtitle={`共 ${filtered.length} 笔`}>
         {loading ? (

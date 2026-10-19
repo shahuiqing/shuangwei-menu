@@ -122,4 +122,22 @@ describe("dishMargins", () => {
     );
     expect(sumCost(margins)).toBeCloseTo(30.08, 4);
   });
+
+  it("配方原料全部缺价时标记为成本未知", () => {
+    const margins = dishMargins(
+      [{ name: "幽灵菜", qty: 1, revenue: 30 }],
+      [
+        {
+          id: "x",
+          menu_item_name: "幽灵菜",
+          inventory_item_id: "ghost",
+          dosage: 2,
+          unit: "kg",
+        },
+      ],
+      inv,
+    );
+    expect(margins[0]!.cost).toBe(0);
+    expect(margins[0]!.hasCost).toBe(false);
+  });
 });

@@ -1,7 +1,12 @@
-import { dayKey, parseTs } from "./format";
+import { parseTs } from "./format";
 import { num, type InventoryTransaction } from "./inventory";
 import { wasteStats as wasteByItemRaw, type ConsumptionStat } from "./cost";
 import type { Bounds } from "./analytics";
+import {
+  businessDayEnd,
+  businessDayKey,
+  businessDayStart,
+} from "./businessDay";
 
 /* ============ 损耗（报损）统计 ============
  * 金额口径：Σ |quantity| × unit_cost（unit_cost 为报损时点的原料单价）
@@ -100,7 +105,8 @@ export function wasteSummary(
     re.count += 1;
     reasonMap.set(r, re);
 
-    const k = dayKey(t.created_at);
+    const ts = parseTs(t.created_at);
+    const k = ts ? businessDayKey(ts) : "";
     if (k) {
       const de = dayMap.get(k) || { amount: 0, count: 0 };
       de.amount += a;
@@ -133,16 +139,10 @@ export function wasteSummary(
 
 /** 今日损耗金额（库存页 KPI 用） */
 export function todayWasteAmount(txns: InventoryTransaction[]): number {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+  const now = Date.now();
+  const start = businessDayStart(now);
+  const end = businessDayEnd(now) - 1;
   return txns
-    .filter(
-      (t) =>
-        t.type === "waste" &&
-        withinTxn(t, { start: start.getTime(), end: end.getTime() }),
-    )
+    .filter((t) => t.type === "waste" && withinTxn(t, { start, end }))
     .reduce((s, t) => s + txnAmount(t), 0);
 }

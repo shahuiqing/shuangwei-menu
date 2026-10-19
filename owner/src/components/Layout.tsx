@@ -22,6 +22,7 @@ import {
   ClipboardCheck,
   Sparkles,
   Route,
+  LayoutGrid,
 } from "lucide-react";
 import { useTheme, THEMES, type Theme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
@@ -65,7 +66,7 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "assistant", label: "AI 助手", icon: Sparkles },
 ];
 
-// 侧栏分组：按业务域分组，作为设置抽屉「全部功能」的统一入口数据源
+// 侧栏分组：按业务域分组，作为桌面侧栏与「全部功能」的统一入口数据源
 export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
   { title: "经营", items: ["dashboard", "reports", "assistant"] },
   { title: "订单与任务", items: ["orders", "tasks"] },
@@ -76,6 +77,18 @@ export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
   },
   { title: "成本", items: ["cost", "consumption"] },
   { title: "系统", items: ["staff", "settings"] },
+];
+
+// 移动端底部主导航：只放每天最常用的 4 个页面，其余统一进「全部」
+export const PRIMARY_NAV: {
+  id: OwnerTab;
+  label: string;
+  icon: LucideIcon;
+}[] = [
+  { id: "dashboard", label: "看板", icon: LayoutDashboard },
+  { id: "orders", label: "订单", icon: ReceiptText },
+  { id: "inventory", label: "库存", icon: Boxes },
+  { id: "cost", label: "成本", icon: BadgeDollarSign },
 ];
 
 // 页面副标题（移动端大标题下方的一行说明）
@@ -126,7 +139,6 @@ function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
         setPullBoth(0);
         return;
       }
-      // 阻尼：越拉越轻
       setPullBoth(Math.min(96, dy * 0.45));
     };
     const onEnd = () => {
@@ -170,7 +182,7 @@ const INSTALLABLE = "owner:installable";
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault(); // 不让浏览器自动弹安装条，由我们自己控制入口
+    e.preventDefault();
     deferredPrompt = e as InstallPromptEvent;
     window.dispatchEvent(new Event(INSTALLABLE));
   });
@@ -180,7 +192,6 @@ if (typeof window !== "undefined") {
   });
 }
 
-/** 是否可安装到主屏幕（浏览器判断：HTTPS + manifest + SW 就绪） */
 function useInstallHint() {
   const [can, setCan] = useState<boolean>(() => !!deferredPrompt);
   useEffect(() => {
@@ -203,7 +214,6 @@ function useInstallHint() {
   return { can, install };
 }
 
-/** 「安装到主屏幕」按钮（浏览器不可安装时返回 null）；给设置抽屉用 */
 export function InstallButton() {
   const { can, install } = useInstallHint();
   if (!can) return null;
@@ -244,6 +254,7 @@ export function Layout({
   const { theme, setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const active = NAV.find((n) => n.id === tab);
+  const primaryActive = PRIMARY_NAV.some((n) => n.id === tab);
   const go = (t: OwnerTab) => {
     setTab(t);
     setMenuOpen(false);
@@ -253,7 +264,6 @@ export function Layout({
   const ready = pull > 56;
   const [scrolled, setScrolled] = useState(false);
   const online = useOnline();
-  // 断网回落到本地快照时，告知数据时间
   const [cacheAt, setCacheAt] = useState(cacheUsedAt);
   useEffect(() => onCacheUse(setCacheAt), []);
 
@@ -267,10 +277,103 @@ export function Layout({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const statusText = !online
+    ? "离线 · 显示缓存"
+    : live
+      ? "实时同步中"
+      : lastUpdated
+        ? `更新于 ${lastUpdated}`
+        : "同步中…";
+
+  const statusColor = !online
+    ? "bg-amber-400"
+    : live
+      ? "bg-emerald-400 animate-pulse"
+      : configured
+        ? "bg-zinc-500"
+        : "bg-rose-500";
+
   return (
-    <div className="min-h-full flex flex-col bg-zinc-950">
+    <div className="min-h-full bg-zinc-950 lg:flex">
+      {/* 桌面侧栏：所有页面常驻可见，移动端由底部导航承载 */}
+      <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col sticky top-0 h-screen border-r border-white/[0.07] bg-zinc-950/80 backdrop-blur">
+        <button
+          onClick={() => go("dashboard")}
+          className="h-16 px-4 flex items-center gap-3 border-b border-white/[0.06] text-left"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/30 ring-1 ring-white/10">
+            双
+          </div>
+          <div className="min-w-0">
+            <div className="font-serif text-[15px] font-semibold text-white truncate leading-tight">
+              {storeName}
+            </div>
+            <div className="text-[10px] text-zinc-500 mt-0.5">老板管理端</div>
+          </div>
+        </button>
+
+        <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-4">
+          {NAV_GROUPS.map((g) => (
+            <div key={g.title}>
+              <div className="px-2 mb-1 text-[10px] font-semibold tracking-[0.12em] text-zinc-600">
+                {g.title}
+              </div>
+              <div className="space-y-0.5">
+                {g.items.map((id) => {
+                  const item = NAV.find((n) => n.id === id)!;
+                  const Icon = item.icon;
+                  const on = id === tab;
+                  return (
+                    <button
+                      key={id}
+                      data-tab={id}
+                      onClick={() => go(id)}
+                      aria-current={on ? "page" : undefined}
+                      className={`relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-colors ${
+                        on
+                          ? "bg-orange-500/12 text-orange-300 font-semibold"
+                          : "text-zinc-400 hover:text-white hover:bg-white/[0.05]"
+                      }`}
+                    >
+                      {on && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-orange-500" />
+                      )}
+                      <Icon size={16} className="shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="p-3 border-t border-white/[0.06] space-y-2">
+          <div className="flex items-center gap-2 px-1 text-[11px] text-zinc-500">
+            <span
+              className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}
+            />
+            {configured ? "已连接数据库" : "未配置数据库"}
+          </div>
+          <InstallButton />
+          <button
+            onClick={() => setMenuOpen(true)}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-300 hover:text-white hover:bg-white/[0.05] transition-colors"
+          >
+            <LayoutGrid size={16} />
+            主题与全部功能
+          </button>
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-500 hover:text-red-400 hover:bg-red-500/[0.08] transition-colors"
+          >
+            <LogOut size={16} />
+            退出登录
+          </button>
+        </div>
+      </aside>
+
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* 顶部栏：左=Logo(回看板)+页标题；右=设置/刷新（功能入口统一在设置抽屉） */}
         <header
           className={`sticky top-0 z-30 glass-bar border-b border-white/[0.06] transition-shadow duration-300 ${
             scrolled
@@ -278,31 +381,21 @@ export function Layout({
               : "shadow-none"
           }`}
         >
-          <div className="safe-top px-4 lg:px-6 flex items-center justify-between gap-3">
+          <div className="safe-top px-3.5 sm:px-5 lg:px-7 flex items-center justify-between gap-3">
+            {/* 移动端：店名 + 同步状态，页面标题在内容区 */}
             <button
               onClick={() => go("dashboard")}
-              title="回到看板"
-              className="flex items-center gap-3 min-w-0 text-left group"
+              className="lg:hidden flex items-center gap-2.5 min-w-0 text-left"
             >
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-orange-900/40 ring-1 ring-white/10 group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-700 flex items-center justify-center text-white font-black shrink-0 shadow-md shadow-orange-900/30 ring-1 ring-white/10">
                 双
               </div>
               <div className="min-w-0">
-                {/* 桌面：当前页标题 */}
-                <div className="hidden lg:block font-serif text-xl font-semibold tracking-tight text-white leading-tight truncate">
-                  {active?.label}
-                </div>
-                <div className="hidden lg:block text-[13px] text-zinc-500 mt-0.5 leading-snug truncate">
-                  {SUBTITLE[tab]}
-                </div>
-                {/* 移动：店名 + 同步状态 */}
-                <div className="lg:hidden text-white font-semibold leading-tight truncate text-[15px]">
+                <div className="text-white font-semibold leading-tight truncate text-[15px]">
                   {storeName}
                 </div>
-                <div className="lg:hidden flex items-center gap-1.5 text-[11px] leading-tight mt-0.5">
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${!online ? "bg-amber-400" : live ? "bg-emerald-400 animate-pulse" : configured ? "bg-zinc-500" : "bg-rose-500"}`}
-                  />
+                <div className="flex items-center gap-1.5 text-[11px] leading-tight mt-0.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
                   <span
                     className={
                       !online
@@ -312,17 +405,22 @@ export function Layout({
                           : "text-zinc-500"
                     }
                   >
-                    {!online
-                      ? "离线 · 显示缓存"
-                      : live
-                        ? "实时同步中"
-                        : lastUpdated
-                          ? `更新于 ${lastUpdated}`
-                          : "同步中…"}
+                    {statusText}
                   </span>
                 </div>
               </div>
             </button>
+
+            {/* 桌面端：当前页面标题 */}
+            <div className="hidden lg:block min-w-0">
+              <h1 className="font-serif text-xl font-semibold tracking-tight text-white leading-tight truncate">
+                {active?.label}
+              </h1>
+              <p className="text-[13px] text-zinc-500 mt-0.5 leading-snug truncate">
+                {SUBTITLE[tab]}
+              </p>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-500">
                 {online ? (
@@ -333,25 +431,20 @@ export function Layout({
                 ) : (
                   <WifiOff size={13} className="text-amber-400" />
                 )}
-                {!online
-                  ? "离线 · 显示缓存"
-                  : live
-                    ? "实时同步中"
-                    : lastUpdated
-                      ? `更新于 ${lastUpdated}`
-                      : "同步中…"}
+                {statusText}
               </span>
               <button
                 onClick={() => setMenuOpen(true)}
-                aria-label="设置与功能"
-                title="设置与功能"
-                className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
+                aria-label="主题与全部功能"
+                title="主题与全部功能"
+                className="hidden lg:flex active:scale-90 transition-transform w-9 h-9 items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
               >
                 <SettingsIcon size={16} />
               </button>
               <button
                 onClick={onRefresh}
                 title="刷新"
+                aria-label="刷新"
                 className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
               >
                 <RefreshCw
@@ -361,9 +454,9 @@ export function Layout({
               </button>
             </div>
           </div>
-          {/* 离线提示条：PWA 断网时页面走缓存，必须显式告知数据非最新 */}
+
           {!online && (
-            <div className="flex items-center gap-2 px-4 lg:px-6 py-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 border-t border-amber-500/25">
+            <div className="flex items-center gap-2 px-4 lg:px-7 py-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 border-t border-amber-500/25">
               <WifiOff size={12} className="shrink-0" />
               网络已断开，当前显示缓存数据
               {cacheAt &&
@@ -373,9 +466,7 @@ export function Layout({
           )}
         </header>
 
-        {/* 内容区：移动端独立滚动 + 底部导航留白；桌面居中 */}
-        <main className="relative flex-1 px-4 lg:px-6 py-3 lg:py-6 max-w-[1400px] w-full mx-auto mobile-safe-bottom lg:pb-6">
-          {/* 下拉刷新指示（移动端） */}
+        <main className="relative flex-1 px-3.5 sm:px-5 lg:px-7 py-4 lg:py-6 max-w-[1440px] w-full mx-auto mobile-safe-bottom lg:pb-8">
           <div
             aria-hidden
             className="lg:hidden fixed inset-x-0 z-30 flex flex-col items-center pointer-events-none transition-opacity"
@@ -409,20 +500,11 @@ export function Layout({
                 : undefined,
             }}
           >
-            {/* 移动端大标题（账本风：宋体标题 + 右侧竖排点缀） */}
-            <div className="lg:hidden pb-4">
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="font-serif text-2xl font-bold tracking-tight text-white leading-tight">
-                  {active?.label}
-                </h1>
-                <span
-                  className="font-serif text-[13px] text-zinc-400 tracking-[0.35em] shrink-0 mt-1"
-                  style={{ writingMode: "vertical-rl" }}
-                >
-                  {active?.label}
-                </span>
-              </div>
-              <p className="text-[13px] text-zinc-500 mt-1 leading-snug">
+            <div className="lg:hidden pb-3.5">
+              <h1 className="font-serif text-[22px] font-bold tracking-tight text-white leading-tight">
+                {active?.label}
+              </h1>
+              <p className="text-[12px] text-zinc-500 mt-1 leading-snug">
                 {SUBTITLE[tab] ?? " "}
               </p>
             </div>
@@ -431,33 +513,79 @@ export function Layout({
         </main>
       </div>
 
-      {/* 设置抽屉：主题切换 + 全部功能 + 安装/退出（功能入口统一收在这里） */}
+      {/* 移动端底部主导航：4 个高频页面 + 全部功能 */}
+      <nav
+        aria-label="主导航"
+        className="lg:hidden fixed inset-x-0 bottom-0 z-40 glass-bar border-t border-white/[0.08] pb-[var(--sab)]"
+      >
+        <div className="grid grid-cols-5 h-[60px]">
+          {PRIMARY_NAV.map((item) => {
+            const Icon = item.icon;
+            const on = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                data-tab={item.id}
+                onClick={() => go(item.id)}
+                aria-current={on ? "page" : undefined}
+                className={`relative flex flex-col items-center justify-center gap-1 transition-colors ${
+                  on ? "text-orange-400" : "text-zinc-500 active:text-zinc-300"
+                }`}
+              >
+                {on && (
+                  <span className="absolute top-0 h-0.5 w-8 rounded-full bg-orange-500" />
+                )}
+                <Icon size={20} strokeWidth={on ? 2.4 : 1.8} />
+                <span className="text-[10.5px] leading-none font-medium">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            data-tab="more"
+            onClick={() => setMenuOpen(true)}
+            aria-label="全部功能"
+            className={`relative flex flex-col items-center justify-center gap-1 transition-colors ${
+              !primaryActive || menuOpen
+                ? "text-orange-400"
+                : "text-zinc-500 active:text-zinc-300"
+            }`}
+          >
+            {(!primaryActive || menuOpen) && (
+              <span className="absolute top-0 h-0.5 w-8 rounded-full bg-orange-500" />
+            )}
+            <LayoutGrid size={20} strokeWidth={!primaryActive ? 2.4 : 1.8} />
+            <span className="text-[10.5px] leading-none font-medium">全部</span>
+          </button>
+        </div>
+      </nav>
+
       <Sheet
         open={menuOpen}
-        title="设置与功能"
-        subtitle={`${storeName} · 主题、全部页面与账号`}
+        title="全部功能"
+        subtitle={`${storeName} · 选择页面、主题与账号`}
         onClose={() => setMenuOpen(false)}
         maxW="max-w-lg"
       >
         <div className="space-y-5">
-          {/* 主题切换 */}
           <div>
             <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500 mb-2">
               主题
             </div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {THEMES.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setTheme(t.id as Theme)}
-                  className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border transition-colors ${
+                  className={`flex items-center sm:flex-col gap-2 sm:gap-1.5 px-3 py-2.5 rounded-xl border transition-colors ${
                     theme === t.id
                       ? "border-orange-500/50 bg-orange-500/10"
                       : "border-white/5 bg-zinc-950 hover:border-white/15"
                   }`}
                 >
                   <span
-                    className={`w-6 h-6 rounded-full ring-1 ${t.id === "light" ? "ring-zinc-300" : "ring-white/25"}`}
+                    className={`w-5 h-5 rounded-full ring-1 shrink-0 ${t.id === "light" ? "ring-zinc-300" : "ring-white/25"}`}
                     style={{ background: t.dot }}
                   />
                   <span
@@ -470,10 +598,17 @@ export function Layout({
             </div>
           </div>
 
-          {/* 全部功能（数据页由首页数据框直达，这里是统一兜底入口） */}
           <div>
-            <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500 mb-2">
-              全部功能
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500">
+                全部功能
+              </div>
+              <button
+                onClick={() => go("dashboard")}
+                className="text-[11px] text-zinc-500 hover:text-orange-400"
+              >
+                回到看板
+              </button>
             </div>
             <div className="space-y-3">
               {NAV_GROUPS.map((g) => (
@@ -489,6 +624,7 @@ export function Layout({
                       return (
                         <button
                           key={id}
+                          data-tab={id}
                           onClick={() => go(id)}
                           className={`flex items-center gap-2 px-2.5 py-2.5 rounded-xl border text-[13px] font-medium transition-colors ${
                             on
@@ -507,7 +643,6 @@ export function Layout({
             </div>
           </div>
 
-          {/* 状态与账号 */}
           <div className="flex items-center gap-2 text-[11px] text-zinc-500">
             <span
               className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}

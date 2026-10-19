@@ -9,6 +9,7 @@ import {
 import { buildPriceAlerts, flaggedAlerts } from "./priceAlert";
 import { todayWasteAmount } from "./waste";
 import { fetchOrdersPage } from "./aggregate";
+import { businessDayStart } from "./businessDay";
 
 /* ============ 问题信号（共享取数） ============
  * 任务中心 / AI 助手 / 看板共用：库存预警、采购价异常、今日损耗、待接单数。
@@ -37,8 +38,7 @@ export function useOpsSignals(version = 0): OpsSignals {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const todayStart = new Date(businessDayStart());
       const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
       const tomorrow = new Date(Date.now() + 86400000).toISOString();
       const [inv, pur, wt, pg] = await Promise.all([

@@ -1,7 +1,14 @@
-import { dayKey, parseTs } from "./format";
+import { parseTs } from "./format";
+import {
+  BUSINESS_DAY_HOUR,
+  businessDayEnd,
+  businessDayKey,
+  businessDayStart,
+} from "./businessDay";
 
 /* ---------- 基础取值 ---------- */
-export const orderTotal = (o: any) => Number(o?.total ?? o?.total_amount ?? 0);
+export const orderTotal = (o: any) =>
+  Number(o?.finalTotal ?? o?.total ?? o?.total_amount ?? 0);
 export const orderItems = (o: any): any[] =>
   Array.isArray(o?.items) ? o.items : [];
 export const itemQty = (it: any) => Number(it?.quantity ?? it?.count ?? 1);
@@ -9,6 +16,12 @@ export const itemName = (it: any) => it?.name || it?.title || "未知";
 export const itemRevenue = (it: any) => Number(it?.price || 0) * itemQty(it);
 export const isCompleted = (o: any) => o?.status === "completed";
 export const isCancelled = (o: any) => o?.status === "cancelled";
+
+/** 退款/赠送/员工餐/试菜不计营收（但成本仍可能计入） */
+const NON_REVENUE_TAGS = ["refund", "gift", "staff", "trial"];
+export const isRevenueOrder = (o: any) =>
+  isCompleted(o) && !NON_REVENUE_TAGS.includes(String(o?.orderTag || "normal"));
+
 export const orderTime = (o: any) => parseTs(o?.timestamp || o?.created_at);
 
 export const tableName = (o: any) => {
@@ -33,16 +46,20 @@ export function rangeBounds(
   to?: string,
 ): Bounds {
   const now = Date.now();
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const t0 = startOfToday.getTime();
+  const t0 = businessDayStart(now);
+  const daysAgo = (n: number) => {
+    const d = new Date(t0);
+    d.setDate(d.getDate() - n);
+    d.setHours(BUSINESS_DAY_HOUR, 0, 0, 0);
+    return d.getTime();
+  };
   if (range === "today") return { start: t0, end: now };
-  if (range === "7d") return { start: t0 - 6 * 86400000, end: now };
-  if (range === "30d") return { start: t0 - 29 * 86400000, end: now };
+  if (range === "7d") return { start: daysAgo(6), end: now };
+  if (range === "30d") return { start: daysAgo(29), end: now };
   if (range === "custom" && from && to) {
     return {
-      start: new Date(from + "T00:00:00").getTime(),
-      end: new Date(to + "T23:59:59").getTime(),
+      start: businessDayStart(new Date(from + "T12:00:00").getTime()),
+      end: businessDayEnd(new Date(to + "T12:00:00").getTime()) - 1,
     };
   }
   return { start: 0, end: now };
@@ -75,12 +92,11 @@ function pct(cur: number, prev: number): number {
 }
 
 export function computeKpi(orders: any[], b: Bounds): Kpi {
-  const cur = orders.filter((o) => within(o, b) && !isCancelled(o));
+  const cur = orders.filter((o) => within(o, b) && isRevenueOrder(o));
   const pb = previousBounds(b);
-  const prev = orders.filter((o) => within(o, pb) && !isCancelled(o));
+  const prev = orders.filter((o) => within(o, pb) && isRevenueOrder(o));
 
-  const rev = (list: any[]) =>
-    list.filter(isCompleted).reduce((s, o) => s + orderTotal(o), 0);
+  const rev = (list: any[]) => list.reduce((s, o) => s + orderTotal(o), 0);
   const its = (list: any[]) =>
     list.reduce(
       (s, o) => s + orderItems(o).reduce((a, it) => a + itemQty(it), 0),
@@ -116,20 +132,20 @@ export interface DayPoint {
 }
 
 export function dailySeries(orders: any[], days: number): DayPoint[] {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
+  const start = new Date(businessDayStart());
   const out: DayPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(start);
     d.setDate(d.getDate() - i);
-    const k = dayKey(d.getTime());
-    const list = orders.filter(
-      (o) => dayKey(o.timestamp || o.created_at) === k && !isCancelled(o),
-    );
+    const k = businessDayKey(d.getTime());
+    const list = orders.filter((o) => {
+      const t = orderTime(o);
+      return !!t && businessDayKey(t) === k && isRevenueOrder(o);
+    });
     out.push({
       key: k,
       label: `${d.getMonth() + 1}/${d.getDate()}`,
-      revenue: list.filter(isCompleted).reduce((s, o) => s + orderTotal(o), 0),
+      revenue: list.reduce((s, o) => s + orderTotal(o), 0),
       orders: list.length,
     });
   }
@@ -145,7 +161,7 @@ export function hourlySeries(
     orders: 0,
   }));
   orders.forEach((o) => {
-    if (isCancelled(o)) return;
+    if (!isRevenueOrder(o)) return;
     const t = orderTime(o);
     if (!t) return;
     const h = new Date(t).getHours();
@@ -163,7 +179,7 @@ export interface DishStat {
 
 export function dishStats(orders: any[]): DishStat[] {
   const map = new Map<string, DishStat>();
-  orders.forEach((o) =>
+  orders.filter(isRevenueOrder).forEach((o) =>
     orderItems(o).forEach((it) => {
       const name = itemName(it);
       const e = map.get(name) || { name, qty: 0, revenue: 0 };
@@ -201,7 +217,7 @@ export function categoryStats(
   dishCatMap: Map<string, string>,
 ): CategoryStat[] {
   const map = new Map<string, CategoryStat>();
-  orders.forEach((o) =>
+  orders.filter(isRevenueOrder).forEach((o) =>
     orderItems(o).forEach((it) => {
       const name = itemName(it);
       const cat = dishCatMap.get(name) || "其他";
@@ -217,7 +233,7 @@ export function categoryStats(
 /* ---------- 支付方式 ---------- */
 export function paymentStats(orders: any[]): { name: string; value: number }[] {
   const map = new Map<string, number>();
-  orders.filter(isCompleted).forEach((o) => {
+  orders.filter(isRevenueOrder).forEach((o) => {
     const m = o?.paymentMethod || "未标注";
     map.set(m, (map.get(m) || 0) + orderTotal(o));
   });

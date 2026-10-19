@@ -1,0 +1,15 @@
+[
+  {
+    "file": "page.png",
+    "state": null,
+    "size": "1280x900",
+    "zoom": 1,
+    "issues": [
+      "加载错误：Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5199/api/auth/verify-owner",
+      "加载错误：Failed to load resource: the server responded with a status of 404 () https://okxqtwiqdvngmkqtclms.supabase.co/rest/v1/owner_stocktake?select=at%2Cday%2Citems%2Cdiffs%2Cnet_value%2Cstock_value&order=at.desc&limit=60",
+      "加载错误：Failed to load resource: the server responded with a status of 404 () https://okxqtwiqdvngmkqtclms.supabase.co/rest/v1/owner_audit_log?select=at%2Caction%2Cdetail&order=at.desc&limit=500",
+      "加载错误：Failed to load resource: the server responded with a status of 404 () https://okxqtwiqdvngmkqtclms.supabase.co/rest/v1/rpc/owner_cost_summary",
+      "加载错误：Failed to load resource: the server responded with a status of 404 () https://okxqtwiqdvngmkqtclms.supabase.co/rest/v1/rpc/owner_cost_summary"
+    ]
+  }
+]

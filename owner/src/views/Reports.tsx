@@ -9,9 +9,12 @@ import {
   rangeToIso,
   dishStats,
   hourlySeries,
+  paymentStatsRange,
   type DishStat,
   type HourPoint,
+  type PaymentStat,
 } from "../lib/aggregate";
+import { fetchBackfill, backfillTotals } from "../lib/backfill";
 
 type Dimension = "dish" | "category" | "hour";
 
@@ -42,6 +45,7 @@ export default function Reports({
   const [dim, setDim] = useState<Dimension>("dish");
   const [dishes, setDishes] = useState<DishStat[]>([]);
   const [hours, setHours] = useState<HourPoint[]>([]);
+  const [pays, setPays] = useState<PaymentStat[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,13 +53,24 @@ export default function Reports({
     (async () => {
       setLoading(true);
       const b = rangeToIso(range);
-      const [d, h] = await Promise.all([
+      const [d, h, p, bf] = await Promise.all([
         dishStats(b.start, b.end),
         hourlySeries(b.start, b.end),
+        paymentStatsRange(b.start, b.end),
+        fetchBackfill(),
       ]);
       if (!alive) return;
+      const backfillRevenue = backfillTotals(bf, b.start, b.end).revenue;
       setDishes(d);
       setHours(h);
+      setPays(
+        [
+          ...p,
+          ...(backfillRevenue > 0
+            ? [{ method: "历史补录", revenue: backfillRevenue }]
+            : []),
+        ].sort((a, c) => c.revenue - a.revenue),
+      );
       setLoading(false);
     })();
     return () => {
@@ -131,6 +146,11 @@ export default function Reports({
             value: h.orders,
           }));
   const maxVal = Math.max(1, ...rows.map((r) => r.value));
+  const payTotal = useMemo(
+    () => pays.reduce((s, p) => s + p.revenue, 0),
+    [pays],
+  );
+  const payMax = Math.max(1, ...pays.map((p) => p.revenue));
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -207,6 +227,37 @@ export default function Reports({
                 仅显示前 60 项
               </p>
             )}
+          </div>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title="支付方式"
+        subtitle={`共 ${pays.length} 种 · 合计 ${fmtMoney(payTotal)}`}
+      >
+        {pays.length === 0 ? (
+          <EmptyState text="暂无支付数据" />
+        ) : (
+          <div className="space-y-2.5">
+            {pays.map((p) => (
+              <div key={p.method} className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-sm text-zinc-300 truncate">
+                  {p.method}
+                </span>
+                <div className="flex-1 h-2 bg-zinc-900 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-orange-500 rounded-full"
+                    style={{ width: `${(p.revenue / payMax) * 100}%` }}
+                  />
+                </div>
+                <span className="w-24 shrink-0 text-right text-sm text-orange-400 tnum">
+                  {fmtMoney(p.revenue)}
+                </span>
+                <span className="w-10 shrink-0 text-right text-xs text-zinc-500">
+                  {payTotal ? Math.round((p.revenue / payTotal) * 100) : 0}%
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </ChartCard>

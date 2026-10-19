@@ -80,7 +80,7 @@ export function KpiCard({
             }
           : undefined
       }
-      className={`card-surface p-4 sm:p-5 transition-all duration-200 overflow-hidden ${
+      className={`card-surface p-3.5 sm:p-5 transition-all duration-200 overflow-hidden ${
         onClick
           ? "cursor-pointer hover:border-orange-500/30 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-20px_rgba(0,0,0,0.9)]"
           : "hover:border-white/15"
@@ -88,9 +88,10 @@ export function KpiCard({
     >
       <div className="flex items-start justify-between">
         <div
-          className={`w-10 h-10 sm:w-10 sm:h-10 rounded-xl ${bg} ${accent} flex items-center justify-center ring-1 ring-white/5`}
+          className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl ${bg} ${accent} flex items-center justify-center ring-1 ring-white/5`}
         >
-          <Icon size={19} />
+          <Icon size={17} className="sm:hidden" />
+          <Icon size={19} className="hidden sm:block" />
         </div>
         {change !== undefined && (
           <span
@@ -113,26 +114,32 @@ export function KpiCard({
           </span>
         )}
       </div>
-      <div className="text-zinc-400 text-xs sm:text-[13px] mt-3 sm:mt-4">
+      <div className="text-zinc-400 text-[11px] sm:text-[13px] mt-2.5 sm:mt-4 leading-tight">
         {label}
       </div>
       <div
-        className={`tnum font-serif text-2xl sm:text-3xl font-bold mt-0.5 ${accent}`}
+        className={`tnum font-serif text-[21px] sm:text-3xl font-bold mt-0.5 leading-tight ${accent}`}
       >
         {display}
       </div>
-      {sub && <div className="text-[11px] text-zinc-500 mt-1">{sub}</div>}
+      {sub && (
+        <div className="text-[10px] sm:text-[11px] text-zinc-500 mt-1 leading-snug">
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
 
 export function ChartCard({
+  id,
   title,
   subtitle,
   action,
   children,
   className = "",
 }: {
+  id?: string;
   title: string;
   subtitle?: string;
   action?: ReactNode;
@@ -140,7 +147,10 @@ export function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`card-surface p-4 sm:p-5 ${className}`}>
+    <div
+      id={id}
+      className={`card-surface p-4 sm:p-5 scroll-mt-24 ${className}`}
+    >
       <div className="flex items-start justify-between mb-3.5 sm:mb-4 gap-3">
         <div className="min-w-0">
           <h3 className="font-serif text-white font-semibold text-[15px] sm:text-base tracking-tight">

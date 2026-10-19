@@ -20,7 +20,10 @@ export function businessDayStart(t: number | Date = Date.now()): number {
 
 /** 该营业日的结束时刻（次日 03:00） */
 export function businessDayEnd(t: number | Date = Date.now()): number {
-  return businessDayStart(t) + 24 * 3600 * 1000;
+  const d = new Date(businessDayStart(t));
+  d.setDate(d.getDate() + 1);
+  d.setHours(BUSINESS_DAY_HOUR, 0, 0, 0);
+  return d.getTime();
 }
 
 /** 营业日键（YYYY-MM-DD，取该时刻所属营业日开始日） */
@@ -38,5 +41,5 @@ export function withinBusinessDay(
 ): boolean {
   const ms = asMs(t);
   const start = businessDayStart(now);
-  return ms >= start && ms < start + 24 * 3600 * 1000;
+  return ms >= start && ms < businessDayEnd(now);
 }
