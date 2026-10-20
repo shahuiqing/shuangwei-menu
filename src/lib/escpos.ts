@@ -161,24 +161,66 @@ export function buildOrderTicket(
   const renderItems = (items: any[]) => {
     const grouped = new Map<
       string,
-      { title: string; qty: number; addonNames: string[] }
+      {
+        title: string;
+        qty: number;
+        price: number;
+        addons: { name: string; price: number }[];
+      }
     >();
     for (const it of items || []) {
-      const addonNames = (it.addons || [])
-        .map((a: any) => String(a?.name || "").trim())
-        .filter(Boolean);
-      const key = `${it.id || it.name || ""}|${addonNames.join(",")}`;
+      const addons = (it.addons || [])
+        .map((a: any) => ({
+          name: String(a?.name || "").trim(),
+          price: Number(a?.price) || 0,
+        }))
+        .filter((a: { name: string }) => a.name);
+      const key = `${it.id || it.name || ""}|${addons
+        .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
+        .join(",")}`;
       const title = pickTitles(it, langs)[0] || it.name || "";
       const qty = Number(it.quantity || 1);
       const prev = grouped.get(key);
       if (prev) prev.qty += qty;
-      else grouped.set(key, { title, qty, addonNames });
+      else
+        grouped.set(key, {
+          title,
+          qty,
+          price: Number(it.price) || 0,
+          addons,
+        });
     }
+    const printRow = (left: string, right: string) => {
+      if (!right) {
+        for (const seg of wrapLine(left, width)) b.line(seg);
+        return;
+      }
+      const segs = wrapLine(left, Math.max(1, width - measure(right) - 1));
+      segs.forEach((seg, idx) => {
+        if (idx === segs.length - 1) {
+          const pad = Math.max(1, width - measure(seg) - measure(right));
+          b.line(seg + " ".repeat(pad) + right);
+        } else {
+          b.line(seg);
+        }
+      });
+    };
     for (const g of grouped.values()) {
-      const line = `  ${g.qty}x ${g.title}`;
-      for (const seg of wrapLine(line, width)) b.line(seg);
-      for (const an of g.addonNames) {
-        for (const seg of wrapLine(`      + ${an}`, width)) b.line(seg);
+      const unitTotal =
+        g.price +
+        g.addons.reduce(
+          (s: number, a: { name: string; price: number }) => s + a.price,
+          0,
+        );
+      printRow(
+        `  ${g.qty}x ${g.title}`,
+        isKitchen ? "" : `${currency}${unitTotal * g.qty}`,
+      );
+      for (const a of g.addons) {
+        printRow(
+          `      + ${a.name}`,
+          !isKitchen && a.price > 0 ? `+${currency}${a.price}` : "",
+        );
       }
     }
   };

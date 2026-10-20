@@ -35,7 +35,10 @@ export const printReceipt = (
       const groupedItems: Record<string, any> = {};
 
       items.forEach((item: any) => {
-        const identifier = item.id || item.name;
+        const addonKey = (item.addons || [])
+          .map((a: any) => `${a?.id || a?.name || ""}:${Number(a?.price) || 0}`)
+          .join(",");
+        const identifier = `${item.id || item.name}|${addonKey}`;
         if (groupedItems[identifier]) {
           groupedItems[identifier].quantity += item.quantity || 1;
         } else {
@@ -44,9 +47,13 @@ export const printReceipt = (
       });
 
       Object.values(groupedItems).forEach((item: any) => {
-        const price = item.price || 0;
+        const price = Number(item.price) || 0;
         const qty = item.quantity || 1;
-        const total = price * qty;
+        const addonUnitTotal = (item.addons || []).reduce(
+          (s: number, a: any) => s + (Number(a?.price) || 0),
+          0,
+        );
+        const total = (price + addonUnitTotal) * qty;
 
         const titles = [];
         const langs = receiptSettings?.printLanguages || [
@@ -67,10 +74,14 @@ export const printReceipt = (
           uniqueTitles.push(item.name);
         }
         const addonsHtml = (item.addons || [])
-          .map(
-            (a: any) =>
-              `<div dir="auto" style="font-size:0.85em;opacity:0.85;">+ ${escHtml(a?.name || "")}</div>`,
-          )
+          .map((a: any) => {
+            const addonPrice = Number(a?.price) || 0;
+            const priceTag =
+              !actualIsKitchen && addonPrice > 0
+                ? ` +${escHtml(currency)}${escHtml(addonPrice)}`
+                : "";
+            return `<div dir="auto" style="font-size:0.85em;opacity:0.85;">+ ${escHtml(a?.name || "")}${priceTag}</div>`;
+          })
           .join("");
 
         html += `
