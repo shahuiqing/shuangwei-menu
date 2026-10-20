@@ -37,6 +37,7 @@ import {
 } from "recharts";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
+import { SettlementCalendar } from "../components/SettlementCalendar";
 import { toast } from "../components/Toast";
 import { fmtMoney, fmtDateTime, STATUS_TEXT } from "../lib/format";
 import {
@@ -865,6 +866,8 @@ export default function Dashboard({
           </div>
         </ChartCard>
       )}
+
+      <SettlementCalendar version={version} />
 
       <ChartCard title="营收趋势" subtitle="近 30 天营业收入">
         {trendPoints.length === 0 ? (

@@ -152,9 +152,11 @@ body {
   }
 }
 
-/* 页面切换过渡（切 tab 时内容轻微上浮淡入） */
+/* 页面切换过渡（切 tab 时内容轻微上浮淡入）
+   用 backwards 填充：动画结束后不保留 transform，
+   避免页面容器成为 fixed 子元素的包含块/层叠上下文。 */
 .page-enter {
-  animation: riseIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: riseIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 /* 数字等宽 */
@@ -264,7 +266,7 @@ body {
 }
 
 .animate-rise {
-  animation: riseIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: riseIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 /* ============================================================

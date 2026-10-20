@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 /**
@@ -37,7 +38,9 @@ export function Sheet({
 
   if (!open) return null;
 
-  return (
+  // 渲染到 body：避免被带 transform 的页面容器（.page-enter）限制住，
+  // 否则弹层会被移动端底部导航盖住，表单底部无法显示。
+  return createPortal(
     <div
       className="scrim fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-[fadeIn_.15s_ease]"
       onClick={onClose}
@@ -63,7 +66,8 @@ export function Sheet({
         </div>
         <div className="p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

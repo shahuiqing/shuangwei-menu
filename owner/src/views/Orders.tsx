@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Search,
   X,
@@ -739,260 +740,267 @@ export default function Orders({
       )}
 
       {/* 详情抽屉 */}
-      {detail && (
-        <div
-          className="scrim fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end items-end sm:items-stretch"
-          onClick={() => setDetail(null)}
-        >
+      {detail &&
+        createPortal(
           <div
-            className="bg-zinc-900 border-l border-white/10 rounded-t-[28px] sm:rounded-none w-full max-w-md max-h-[92vh] sm:max-h-none sm:h-full overflow-y-auto safe-bottom animate-[slideUp_.22s_cubic-bezier(.2,.8,.2,1)]"
-            onClick={(e) => e.stopPropagation()}
+            className="scrim fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex justify-end items-end sm:items-stretch"
+            onClick={() => setDetail(null)}
           >
-            <div className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-zinc-700" />
             <div
-              className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-white/5 px-5 py-4 flex items-start justify-between"
-              style={{
-                borderTop: `4px solid ${statusColor(statusOf(detail))}`,
-              }}
+              className="bg-zinc-900 border-l border-white/10 rounded-t-[28px] sm:rounded-none w-full max-w-md max-h-[92vh] sm:max-h-none sm:h-full overflow-y-auto safe-bottom animate-[slideUp_.22s_cubic-bezier(.2,.8,.2,1)]"
+              onClick={(e) => e.stopPropagation()}
             >
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <span className="text-3xl font-bold text-white leading-none">
-                    {tableName(detail)}
-                  </span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full font-bold ${STATUS_CLS[statusOf(detail)] || STATUS_CLS.pending}`}
-                  >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ background: statusColor(statusOf(detail)) }}
-                    />
-                    {STATUS_TEXT[statusOf(detail)] || "待接单"}
-                  </span>
-                </div>
-                <div className="text-xs text-zinc-500 flex items-center gap-1.5 mt-1.5">
-                  <Clock size={12} />
-                  {fmtDateTime(detail.timestamp || detail.created_at)} · 单号{" "}
-                  {detail.orderNumber || detail.id || "N/A"}
-                </div>
-              </div>
-              <button
-                onClick={() => setDetail(null)}
-                className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-800"
+              <div className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-zinc-700" />
+              <div
+                className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-white/5 px-5 py-4 flex items-start justify-between"
+                style={{
+                  borderTop: `4px solid ${statusColor(statusOf(detail))}`,
+                }}
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-5">
-              <div className="flex items-center gap-2 mb-4 text-xs">
-                <span className="text-zinc-500">
-                  共 {itemCount(detail)} 项商品
-                </span>
-                {detail.paymentMethod && (
-                  <span className="flex items-center gap-1 text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full">
-                    <CreditCard size={12} /> {detail.paymentMethod}
-                  </span>
-                )}
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-3xl font-bold text-white leading-none">
+                      {tableName(detail)}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full font-bold ${STATUS_CLS[statusOf(detail)] || STATUS_CLS.pending}`}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ background: statusColor(statusOf(detail)) }}
+                      />
+                      {STATUS_TEXT[statusOf(detail)] || "待接单"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-zinc-500 flex items-center gap-1.5 mt-1.5">
+                    <Clock size={12} />
+                    {fmtDateTime(detail.timestamp || detail.created_at)} · 单号{" "}
+                    {detail.orderNumber || detail.id || "N/A"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDetail(null)}
+                  className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-800"
+                >
+                  <X size={20} />
+                </button>
               </div>
 
-              {/* 订单标记：退菜不计营收/成本；赠送/员工餐/试菜不计营收、成本照计 */}
-              <div className="mb-4 rounded-xl bg-zinc-950 border border-white/5 px-3 py-2.5">
-                <div className="text-[11px] text-zinc-500 mb-2">
-                  订单标记（退菜不计营收/成本；赠送/员工餐/试菜不计营收、成本照计）
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {TAG_ORDER.map((t) => {
-                    const on = tagOf(detail) === t;
-                    return (
-                      <button
-                        key={t}
-                        onClick={() => {
-                          setOrderTag(String(detail.id || detail._id), t);
-                          setTagTick((v) => v + 1);
-                        }}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                          on
-                            ? "bg-orange-500/15 border-orange-500/60 text-orange-400"
-                            : "bg-zinc-900 border-white/5 text-zinc-400 hover:border-white/20"
-                        }`}
-                      >
-                        {ORDER_TAG_LABEL[t]}
-                      </button>
-                    );
-                  })}
-                  {tagOf(detail) !== "normal" && (
-                    <button
-                      onClick={() => {
-                        setOrderTag(String(detail.id || detail._id), "normal");
-                        setTagTick((v) => v + 1);
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white"
-                    >
-                      恢复正常
-                    </button>
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4 text-xs">
+                  <span className="text-zinc-500">
+                    共 {itemCount(detail)} 项商品
+                  </span>
+                  {detail.paymentMethod && (
+                    <span className="flex items-center gap-1 text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full">
+                      <CreditCard size={12} /> {detail.paymentMethod}
+                    </span>
                   )}
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                {orderItems(detail).map((it, i) => {
-                  const title = String(it?.name || it?.title || "").trim();
-                  const needMenu =
-                    !!title &&
-                    !menuTitles.has(title) &&
-                    detail?.status !== "cancelled";
-                  return (
-                    <div
-                      key={i}
-                      className="flex justify-between items-center bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
-                    >
-                      <span className="text-zinc-200 truncate mr-2">
-                        {title}
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {needMenu && (
-                          <button
-                            disabled={busy}
-                            onClick={() => addToMenu(it)}
-                            title="把这道菜加入菜单（自动建「平台外卖」分类）"
-                            className="text-[11px] font-semibold px-2 py-1 rounded-md bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50"
-                          >
-                            + 菜单
-                          </button>
-                        )}
-                        <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
-                          ×{itemQty(it)}
-                        </span>
-                        <span className="tnum text-zinc-300 w-16 text-right">
-                          {fmtMoney(itemRevenue(it))}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 rounded-2xl bg-zinc-950 border border-white/5 px-4 py-3.5 flex items-center justify-between">
-                <span className="text-sm text-zinc-400">合计</span>
-                <span
-                  className="tnum text-2xl font-bold"
-                  style={{ color: "var(--color-orange-500)" }}
-                >
-                  {fmtMoney(detail.finalTotal ?? orderTotal(detail))}
-                </span>
-              </div>
-
-              {(NEXT_STATUS[detail.status || "pending"] || []).length > 0 && (
-                <div className="mt-4">
-                  <div className="text-xs text-zinc-500 mb-2">推进订单状态</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(NEXT_STATUS[detail.status || "pending"] || []).map(
-                      (s) => (
+                {/* 订单标记：退菜不计营收/成本；赠送/员工餐/试菜不计营收、成本照计 */}
+                <div className="mb-4 rounded-xl bg-zinc-950 border border-white/5 px-3 py-2.5">
+                  <div className="text-[11px] text-zinc-500 mb-2">
+                    订单标记（退菜不计营收/成本；赠送/员工餐/试菜不计营收、成本照计）
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TAG_ORDER.map((t) => {
+                      const on = tagOf(detail) === t;
+                      return (
                         <button
-                          key={s}
-                          disabled={busy}
-                          onClick={() => changeStatus(s)}
-                          className={`py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 ${
-                            s === "cancelled"
-                              ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
-                              : "btn-brand text-white"
+                          key={t}
+                          onClick={() => {
+                            setOrderTag(String(detail.id || detail._id), t);
+                            setTagTick((v) => v + 1);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                            on
+                              ? "bg-orange-500/15 border-orange-500/60 text-orange-400"
+                              : "bg-zinc-900 border-white/5 text-zinc-400 hover:border-white/20"
                           }`}
                         >
-                          {STATUS_TEXT[s] || s}
+                          {ORDER_TAG_LABEL[t]}
                         </button>
-                      ),
+                      );
+                    })}
+                    {tagOf(detail) !== "normal" && (
+                      <button
+                        onClick={() => {
+                          setOrderTag(
+                            String(detail.id || detail._id),
+                            "normal",
+                          );
+                          setTagTick((v) => v + 1);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white"
+                      >
+                        恢复正常
+                      </button>
                     )}
                   </div>
                 </div>
-              )}
 
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() =>
-                    import("../lib/print-lite").then((m) =>
-                      m.printOrder(detail),
-                    )
-                  }
-                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
-                >
-                  <Printer size={16} /> 打印小票
-                </button>
+                <div className="space-y-2">
+                  {orderItems(detail).map((it, i) => {
+                    const title = String(it?.name || it?.title || "").trim();
+                    const needMenu =
+                      !!title &&
+                      !menuTitles.has(title) &&
+                      detail?.status !== "cancelled";
+                    return (
+                      <div
+                        key={i}
+                        className="flex justify-between items-center bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
+                      >
+                        <span className="text-zinc-200 truncate mr-2">
+                          {title}
+                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {needMenu && (
+                            <button
+                              disabled={busy}
+                              onClick={() => addToMenu(it)}
+                              title="把这道菜加入菜单（自动建「平台外卖」分类）"
+                              className="text-[11px] font-semibold px-2 py-1 rounded-md bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50"
+                            >
+                              + 菜单
+                            </button>
+                          )}
+                          <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
+                            ×{itemQty(it)}
+                          </span>
+                          <span className="tnum text-zinc-300 w-16 text-right">
+                            {fmtMoney(itemRevenue(it))}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-zinc-950 border border-white/5 px-4 py-3.5 flex items-center justify-between">
+                  <span className="text-sm text-zinc-400">合计</span>
+                  <span
+                    className="tnum text-2xl font-bold"
+                    style={{ color: "var(--color-orange-500)" }}
+                  >
+                    {fmtMoney(detail.finalTotal ?? orderTotal(detail))}
+                  </span>
+                </div>
+
+                {(NEXT_STATUS[detail.status || "pending"] || []).length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-xs text-zinc-500 mb-2">
+                      推进订单状态
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(NEXT_STATUS[detail.status || "pending"] || []).map(
+                        (s) => (
+                          <button
+                            key={s}
+                            disabled={busy}
+                            onClick={() => changeStatus(s)}
+                            className={`py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 ${
+                              s === "cancelled"
+                                ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                                : "btn-brand text-white"
+                            }`}
+                          >
+                            {STATUS_TEXT[s] || s}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() =>
+                      import("../lib/print-lite").then((m) =>
+                        m.printOrder(detail),
+                      )
+                    }
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
+                  >
+                    <Printer size={16} /> 打印小票
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => setEditing((v) => !v)}
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm disabled:opacity-50"
+                  >
+                    <Pencil size={16} /> 编辑
+                  </button>
+                </div>
+
                 <button
                   disabled={busy}
-                  onClick={() => setEditing((v) => !v)}
-                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm disabled:opacity-50"
+                  onClick={removeOrder}
+                  className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm disabled:opacity-50"
                 >
-                  <Pencil size={16} /> 编辑
+                  <Trash2 size={16} /> 删除订单
                 </button>
+
+                {editing && (
+                  <div className="mt-4 bg-zinc-950 border border-white/5 rounded-2xl p-4 space-y-3">
+                    <div className="text-sm font-semibold text-white">
+                      编辑订单
+                    </div>
+                    <OrderField
+                      label="桌号"
+                      value={editDraft.table_no}
+                      onChange={(v) =>
+                        setEditDraft({ ...editDraft, table_no: v })
+                      }
+                    />
+                    <OrderField
+                      label="顾客/姓名"
+                      value={editDraft.customer_name}
+                      onChange={(v) =>
+                        setEditDraft({ ...editDraft, customer_name: v })
+                      }
+                    />
+                    <OrderField
+                      label="金额"
+                      type="number"
+                      value={editDraft.total}
+                      onChange={(v) => setEditDraft({ ...editDraft, total: v })}
+                    />
+                    <OrderField
+                      label="支付方式"
+                      value={editDraft.paymentMethod}
+                      onChange={(v) =>
+                        setEditDraft({ ...editDraft, paymentMethod: v })
+                      }
+                    />
+                    <OrderField
+                      label="备注"
+                      value={editDraft.notes}
+                      onChange={(v) => setEditDraft({ ...editDraft, notes: v })}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        disabled={busy}
+                        onClick={saveEdit}
+                        className="flex-1 py-2.5 rounded-xl btn-brand text-white text-sm font-semibold disabled:opacity-50"
+                      >
+                        保存修改
+                      </button>
+                      <button
+                        onClick={() => setEditing(false)}
+                        className="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-sm"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              <button
-                disabled={busy}
-                onClick={removeOrder}
-                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm disabled:opacity-50"
-              >
-                <Trash2 size={16} /> 删除订单
-              </button>
-
-              {editing && (
-                <div className="mt-4 bg-zinc-950 border border-white/5 rounded-2xl p-4 space-y-3">
-                  <div className="text-sm font-semibold text-white">
-                    编辑订单
-                  </div>
-                  <OrderField
-                    label="桌号"
-                    value={editDraft.table_no}
-                    onChange={(v) =>
-                      setEditDraft({ ...editDraft, table_no: v })
-                    }
-                  />
-                  <OrderField
-                    label="顾客/姓名"
-                    value={editDraft.customer_name}
-                    onChange={(v) =>
-                      setEditDraft({ ...editDraft, customer_name: v })
-                    }
-                  />
-                  <OrderField
-                    label="金额"
-                    type="number"
-                    value={editDraft.total}
-                    onChange={(v) => setEditDraft({ ...editDraft, total: v })}
-                  />
-                  <OrderField
-                    label="支付方式"
-                    value={editDraft.paymentMethod}
-                    onChange={(v) =>
-                      setEditDraft({ ...editDraft, paymentMethod: v })
-                    }
-                  />
-                  <OrderField
-                    label="备注"
-                    value={editDraft.notes}
-                    onChange={(v) => setEditDraft({ ...editDraft, notes: v })}
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      disabled={busy}
-                      onClick={saveEdit}
-                      className="flex-1 py-2.5 rounded-xl btn-brand text-white text-sm font-semibold disabled:opacity-50"
-                    >
-                      保存修改
-                    </button>
-                    <button
-                      onClick={() => setEditing(false)}
-                      className="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-sm"
-                    >
-                      取消
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
