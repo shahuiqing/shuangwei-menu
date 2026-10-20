@@ -39,6 +39,7 @@ import {
 import { parseOrdersCsv } from "../lib/csv";
 import { logAction } from "../lib/auditLog";
 import { addDishAutoCategory } from "../lib/menu";
+import { useScrollLock } from "../lib/useScrollLock";
 
 const EXTERNAL_TAG = "外卖";
 import {
@@ -155,6 +156,19 @@ export default function Orders({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [reload, setReload] = useState(0);
+
+  const detailOpen = !!detail;
+  useScrollLock(detailOpen);
+  useEffect(() => {
+    if (!detailOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDetail(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [detailOpen]);
 
   // 菜单已有菜名（判断订单菜品是否需要「加入菜单」）
   const menuTitles = useMemo(() => {

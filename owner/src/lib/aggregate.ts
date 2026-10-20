@@ -419,6 +419,23 @@ export async function fetchOrdersPage(opts: {
   return { rows: data || [], count: count || 0 };
 }
 
+/** 最近一笔已结账订单的时间，用于日历默认定位到有数据的月份 */
+export async function latestCompletedOrderAt(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("orders")
+    .select("created_at")
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn("[owner] latestCompletedOrderAt:", error.message);
+    return null;
+  }
+  return data?.created_at ?? null;
+}
+
 /** 允许的订单状态流转 */
 export const NEXT_STATUS: Record<string, string[]> = {
   pending: ["cooking", "cancelled"],

@@ -182,6 +182,15 @@ export default function Trace({ version = 0 }: { version?: number }) {
             />
           </div>
 
+          {!qDebounced && !picked && (
+            <div className="rounded-2xl bg-zinc-900/60 border border-white/5">
+              <EmptyState
+                text="搜索订单开始溯源"
+                hint="输入桌号、客人或单号，查看订单消耗的原料、采购批次与供应商"
+              />
+            </div>
+          )}
+
           {qDebounced && (
             <div className="rounded-2xl bg-zinc-900/60 border border-white/5 divide-y divide-white/5">
               {candidates.length === 0 && (
@@ -339,6 +348,15 @@ export default function Trace({ version = 0 }: { version?: number }) {
               ))}
             </select>
           </div>
+
+          {!itemId && (
+            <div className="rounded-2xl bg-zinc-900/60 border border-white/5">
+              <EmptyState
+                text="选择一种原料"
+                hint="查看近期哪些订单消耗了它，以及历次采购的供应商与单价"
+              />
+            </div>
+          )}
 
           {itemId && (
             <>

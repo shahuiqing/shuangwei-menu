@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useScrollLock } from "../lib/useScrollLock";
 
 /**
  * 统一弹窗：移动端底部抽屉 + 桌面居中卡片。
@@ -22,16 +23,15 @@ export function Sheet({
   children: ReactNode;
   maxW?: string;
 }) {
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);

@@ -158,8 +158,9 @@ export default function Waste({ version = 0 }: { version?: number }) {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <Segmented
+          className="col-span-2"
           value={range}
           onChange={setRange}
           options={
@@ -173,13 +174,13 @@ export default function Waste({ version = 0 }: { version?: number }) {
         />
         <button
           onClick={() => setOpen(true)}
-          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-white btn-brand rounded-xl active:scale-[0.98] transition-transform"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-white btn-brand rounded-xl whitespace-nowrap active:scale-[0.98] transition-transform sm:flex-none"
         >
           <Plus size={16} /> 登记报损
         </button>
         <button
           onClick={load}
-          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl hover:bg-zinc-800"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-zinc-300 bg-zinc-900 border border-white/5 rounded-xl whitespace-nowrap hover:bg-zinc-800"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
         </button>

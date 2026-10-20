@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { ChartCard, Skeleton } from "./ui";
 import { fmtMoney } from "../lib/format";
-import { dailySeries, rangeToIso, type DailyPoint } from "../lib/aggregate";
+import {
+  dailySeries,
+  latestCompletedOrderAt,
+  rangeToIso,
+  type DailyPoint,
+} from "../lib/aggregate";
 import { businessDayKey } from "../lib/businessDay";
 import { useChartTheme } from "../lib/theme";
 import {
@@ -29,14 +34,38 @@ export function SettlementCalendar({ version = 0 }: { version?: number }) {
   });
   const [rows, setRows] = useState<DailyPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const userPicked = useRef(false);
 
   const bounds = useMemo(
     () => monthBounds(cursor.y, cursor.m),
     [cursor.y, cursor.m],
   );
 
+  // 首次打开定位到最近有已结账订单的月份，避免默认当月为空。
   useEffect(() => {
+    let alive = true;
+    (async () => {
+      const at = await latestCompletedOrderAt();
+      if (!alive) return;
+      if (at && !userPicked.current) {
+        const [y, m] = businessDayKey(new Date(at).getTime())
+          .split("-")
+          .map(Number);
+        if (Number.isFinite(y) && Number.isFinite(m)) {
+          setCursor({ y, m: m - 1 });
+        }
+      }
+      setReady(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
     let alive = true;
     (async () => {
       setLoading(true);
@@ -49,7 +78,7 @@ export function SettlementCalendar({ version = 0 }: { version?: number }) {
     return () => {
       alive = false;
     };
-  }, [bounds.from, bounds.to, version]);
+  }, [ready, bounds.from, bounds.to, version]);
 
   const cells = useMemo(
     () => buildMonthCells(cursor.y, cursor.m, rows, todayKey),
@@ -76,6 +105,7 @@ export function SettlementCalendar({ version = 0 }: { version?: number }) {
   const isThisMonth =
     cursor.y === now.getFullYear() && cursor.m === now.getMonth();
   const shift = (delta: number) => {
+    userPicked.current = true;
     setSelected(null);
     setCursor((c) => {
       const d = new Date(c.y, c.m + delta, 1);
@@ -98,6 +128,7 @@ export function SettlementCalendar({ version = 0 }: { version?: number }) {
           {!isThisMonth && (
             <button
               onClick={() => {
+                userPicked.current = true;
                 setSelected(null);
                 setCursor({ y: now.getFullYear(), m: now.getMonth() });
               }}
