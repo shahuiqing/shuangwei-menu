@@ -206,4 +206,9 @@ describe("RECEIPT_SYSTEM_PROMPT", () => {
     expect(RECEIPT_SYSTEM_PROMPT).toContain("只输出 JSON");
     expect(RECEIPT_SYSTEM_PROMPT).toContain("禁止编造");
   });
+
+  it("notes 只保留影响核对的重要备注", () => {
+    expect(RECEIPT_SYSTEM_PROMPT).toContain("影响核对的重要备注");
+    expect(RECEIPT_SYSTEM_PROMPT).toContain("票面提示语");
+  });
 });
