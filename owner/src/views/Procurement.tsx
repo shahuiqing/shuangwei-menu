@@ -1432,7 +1432,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
 
           <div>
             <div className="text-xs text-zinc-400 mb-1.5">
-              票据照片（存本机，可拍多张）
+              票据照片（存本机，可拍照或从相册选择）
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <label className="inline-flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-950 border border-white/5 rounded-xl cursor-pointer active:scale-[0.99] transition-transform">
@@ -1440,7 +1440,6 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   multiple
                   className="hidden"
                   onChange={onPickImages}
