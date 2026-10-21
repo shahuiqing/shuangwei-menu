@@ -5,6 +5,7 @@ import {
   clearLlmConfig,
   hasLlm,
   chatLLM,
+  chatLLMVision,
   testLlm,
   LLM_CFG_KEY,
 } from "../llm";
@@ -158,6 +159,74 @@ describe("chatLLM", () => {
     );
     const r1 = await testLlm();
     expect(r1.ok).toBe(true);
+  });
+});
+
+describe("chatLLMVision", () => {
+  it("未配置或无图片时返回 null 且不发请求", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expect(
+      await chatLLMVision("s", "u", ["data:image/jpeg;base64,AAA"]),
+    ).toBeNull();
+    setLlmConfig({ baseUrl: "https://x/v1", apiKey: "k", model: "m" });
+    expect(await chatLLMVision("s", "u", [])).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("发送 text + image_url 多模态内容，并解析数组形式的返回", async () => {
+    setLlmConfig({ baseUrl: "https://x/v1", apiKey: "k", model: "vision" });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: [{ type: "text", text: '{"ok":true}' }],
+            },
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const out = await chatLLMVision("sys", "看图", [
+      "data:image/jpeg;base64,AAA",
+      "data:image/png;base64,BBB",
+    ]);
+    expect(out).toBe('{"ok":true}');
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(String(init.body)) as {
+      model: string;
+      max_tokens: number;
+      messages: { content: unknown }[];
+    };
+    expect(body.model).toBe("vision");
+    expect(body.max_tokens).toBe(3000);
+    expect(body.messages[1].content).toEqual([
+      { type: "text", text: "看图" },
+      {
+        type: "image_url",
+        image_url: { url: "data:image/jpeg;base64,AAA" },
+      },
+      {
+        type: "image_url",
+        image_url: { url: "data:image/png;base64,BBB" },
+      },
+    ]);
+  });
+
+  it("非 2xx 返回 null", async () => {
+    setLlmConfig({ baseUrl: "https://x/v1", apiKey: "k", model: "vision" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, json: async () => ({}) })),
+    );
+    expect(
+      await chatLLMVision("s", "u", ["data:image/jpeg;base64,AAA"]),
+    ).toBeNull();
   });
 });
 

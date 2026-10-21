@@ -11,6 +11,13 @@ import {
   Scale,
   Camera,
   X,
+  ScanLine,
+  Sparkles,
+  FileText,
+  History,
+  Ruler,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
@@ -22,8 +29,11 @@ import {
   buildPriceAlerts,
   checkUnitPrice,
   flaggedAlerts,
+  priceHistoryRef,
   MAX_SAMPLES,
+  SAMPLE_MIN,
   type PriceAlert,
+  type PriceReference,
 } from "../lib/priceAlert";
 import {
   costImpactForPriceChange,
@@ -41,8 +51,17 @@ import { getItemMeta, unitFactor } from "../lib/masterData";
 import {
   saveReceiptImage,
   deleteReceiptImage,
+  getReceiptImage,
   linkReceipts,
 } from "../lib/receipts";
+import { receiptImageDataUrl } from "../lib/image";
+import {
+  matchInventoryItem,
+  receiptWarnings,
+  recognizeReceipt,
+  RECEIPT_DOC_LABEL,
+  type ReceiptDraft,
+} from "../lib/receiptAi";
 import { consumptionByItem } from "../lib/aggregate";
 import {
   buildPurchasePlan,
@@ -134,6 +153,326 @@ function PriceAlertRow({ alert: a }: { alert: PriceAlert }) {
   );
 }
 
+const sameUnit = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+function conversionFactor(itemId: string, unit: string): number {
+  const conversions = getItemMeta(itemId).conversions;
+  const key = Object.keys(conversions).find((k) => sameUnit(k, unit));
+  return key ? conversions[key] || 0 : 0;
+}
+
+interface ReviewRow {
+  key: string;
+  included: boolean;
+  name: string;
+  itemId: string;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+  confidence: number;
+  matchScore: number;
+}
+
+interface ReviewCheck {
+  unit: string;
+  mismatch: boolean;
+  factor: number;
+  /** 折算成库存单位后的单价；无法可靠折算时为 0 */
+  basePrice: number;
+  history: PriceReference | null;
+}
+
+const signedPct = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
+
+function reviewCheckFor(
+  row: ReviewRow,
+  inv: InventoryItem[],
+  list: PurchaseOrder[],
+): ReviewCheck {
+  const item = row.itemId ? inv.find((i) => i.id === row.itemId) : undefined;
+  const unit = row.unit.trim() || item?.unit || "";
+  const mismatch = Boolean(item && unit && !sameUnit(unit, item.unit));
+  const factor = mismatch && item ? conversionFactor(item.id, unit) : 1;
+  const price = num(row.unitPrice);
+  const basePrice =
+    item && price > 0 && (!mismatch || factor > 0)
+      ? mismatch
+        ? price / factor
+        : price
+      : 0;
+  return {
+    unit,
+    mismatch,
+    factor,
+    basePrice,
+    history:
+      item && basePrice > 0
+        ? priceHistoryRef(list, item.id, basePrice, item.unit)
+        : null,
+  };
+}
+
+function AiReviewRowCard({
+  row,
+  inv,
+  check,
+  onPatch,
+  onRemove,
+}: {
+  row: ReviewRow;
+  inv: InventoryItem[];
+  check: ReviewCheck;
+  onPatch: (patch: Partial<ReviewRow>) => void;
+  onRemove: () => void;
+}) {
+  const item = row.itemId ? inv.find((i) => i.id === row.itemId) : undefined;
+  const { unit, mismatch, factor, history } = check;
+  const amount = num(row.quantity) * num(row.unitPrice);
+  const priceFlagged = history?.level === "high" || history?.level === "warn";
+  const priceRising = (history?.changePct || 0) >= 0;
+  const priceLabel =
+    history?.level === "high"
+      ? `价格异常 ${signedPct(history.changePct)}`
+      : history?.level === "warn"
+        ? `价格${priceRising ? "偏高" : "偏低"} ${signedPct(history.changePct)}`
+        : "";
+  const inputCls =
+    "w-full mt-1 bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-orange-500";
+
+  return (
+    <div
+      className={`rounded-xl border p-3 transition-opacity ${
+        row.included
+          ? "border-white/10 bg-zinc-950/60"
+          : "border-white/5 bg-zinc-950/30 opacity-55"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <label className="flex items-center gap-2 min-w-0">
+          <input
+            type="checkbox"
+            checked={row.included}
+            onChange={(e) => onPatch({ included: e.target.checked })}
+          />
+          <span className="text-sm text-zinc-200 truncate">
+            {item?.name || row.name || "未命名原料"}
+          </span>
+          {item ? (
+            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400">
+              已匹配 {Math.round(row.matchScore * 100)}%
+            </span>
+          ) : (
+            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+              新原料
+            </span>
+          )}
+          {mismatch && (
+            <span
+              className={`shrink-0 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full ${
+                factor > 0
+                  ? "bg-sky-500/10 text-sky-400"
+                  : "bg-red-500/10 text-red-400"
+              }`}
+            >
+              <Ruler size={10} />
+              {factor > 0 ? "单位可换算" : "单位不匹配"}
+            </span>
+          )}
+          {priceFlagged && (
+            <span
+              className={`shrink-0 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full ${
+                history!.level === "high"
+                  ? "bg-red-500/10 text-red-400"
+                  : "bg-amber-500/10 text-amber-400"
+              }`}
+            >
+              {priceRising ? (
+                <TrendingUp size={10} />
+              ) : (
+                <TrendingDown size={10} />
+              )}
+              {priceLabel}
+            </span>
+          )}
+        </label>
+        <button
+          onClick={onRemove}
+          aria-label="移除该项"
+          className="shrink-0 text-zinc-500 hover:text-red-400"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2.5">
+        <label className="col-span-2 text-[11px] text-zinc-500">
+          入库原料
+          <select
+            value={row.itemId || "__new__"}
+            onChange={(e) => {
+              const itemId = e.target.value === "__new__" ? "" : e.target.value;
+              const target = inv.find((i) => i.id === itemId);
+              const current = row.unit.trim();
+              onPatch({
+                itemId,
+                unit: target
+                  ? current && !sameUnit(current, target.unit)
+                    ? current
+                    : target.unit
+                  : current,
+              });
+            }}
+            className={inputCls}
+          >
+            <option value="__new__">新原料（保存时自动创建）</option>
+            {inv.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}（库存 {num(i.stock)}
+                {i.unit}）
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {!row.itemId && (
+          <label className="col-span-2 text-[11px] text-zinc-500">
+            原料名称
+            <input
+              value={row.name}
+              onChange={(e) => onPatch({ name: e.target.value })}
+              className={inputCls}
+            />
+          </label>
+        )}
+
+        <label className="text-[11px] text-zinc-500">
+          数量
+          <input
+            type="number"
+            inputMode="decimal"
+            value={row.quantity}
+            onChange={(e) => onPatch({ quantity: e.target.value })}
+            className={inputCls}
+          />
+        </label>
+        <label className="text-[11px] text-zinc-500">
+          单位
+          <input
+            value={row.unit}
+            onChange={(e) => onPatch({ unit: e.target.value })}
+            className={inputCls}
+          />
+        </label>
+        <label className="text-[11px] text-zinc-500">
+          单价
+          <input
+            type="number"
+            inputMode="decimal"
+            value={row.unitPrice}
+            onChange={(e) => onPatch({ unitPrice: e.target.value })}
+            className={inputCls}
+          />
+        </label>
+        <div className="text-[11px] text-zinc-500">
+          金额
+          <div className="mt-1 h-[38px] flex items-center justify-end tnum text-sm text-orange-400 font-semibold">
+            {fmtMoney(amount)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed">
+        <History size={12} className="mt-0.5 shrink-0 text-zinc-500" />
+        {!item ? (
+          <span className="text-zinc-500">
+            新原料 · 暂无历史采购价，入库后将作为首笔历史
+          </span>
+        ) : mismatch && factor <= 0 ? (
+          <span className="text-red-400">
+            单位不匹配，暂无法折算并与历史采购价比较
+          </span>
+        ) : !history ? (
+          <span className="text-zinc-500">暂无历史采购价</span>
+        ) : (
+          <span className="min-w-0 text-zinc-500">
+            历史中位{" "}
+            <span className="text-zinc-300 tnum">
+              {fmtMoney(history.median)}/{item.unit}
+            </span>
+            <span className="text-zinc-600">（{history.sampleCount} 笔）</span>
+            {history.lastAt && (
+              <>
+                {" "}
+                · 最近{" "}
+                <span className="text-zinc-400 tnum">
+                  {fmtMoney(history.last)}
+                </span>{" "}
+                <span className="text-zinc-600">
+                  {fmtDateTime(history.lastAt)}
+                </span>
+              </>
+            )}
+            {history.sampleCount < SAMPLE_MIN ? (
+              <span className="block text-zinc-500 mt-0.5">
+                样本不足 {SAMPLE_MIN} 笔，暂不判定价格异常
+              </span>
+            ) : (
+              <span className="block mt-0.5">
+                本次折合{" "}
+                <span className="text-zinc-300 tnum">
+                  {fmtMoney(check.basePrice)}/{item.unit}
+                </span>
+                ，较中位{" "}
+                <span
+                  className={
+                    history.level === "high"
+                      ? "text-red-400"
+                      : history.level === "warn"
+                        ? "text-amber-400"
+                        : "text-green-400"
+                  }
+                >
+                  {signedPct(history.changePct)}
+                </span>
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+
+      {mismatch && (
+        <div className="mt-2 text-[11px] leading-relaxed">
+          {factor > 0 ? (
+            <button
+              onClick={() =>
+                onPatch({
+                  quantity: String(
+                    Number((num(row.quantity) * factor).toFixed(3)),
+                  ),
+                  unit: item!.unit,
+                  unitPrice: String(
+                    Number((num(row.unitPrice) / factor).toFixed(2)),
+                  ),
+                })
+              }
+              className="text-sky-400 hover:text-sky-300 underline underline-offset-2"
+            >
+              票据单位 {unit} ≠ 库存单位 {item!.unit}，按 1{unit}={factor}
+              {item!.unit} 换算
+            </button>
+          ) : (
+            <span className="text-red-400">
+              单位不一致：票据 {unit} / 库存 {item!.unit}
+              ，请手工换算数量，或改为新原料
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Procurement({ version = 0 }: { version?: number }) {
   const [list, setList] = useState<PurchaseOrder[]>([]);
   const [q, setQ] = useState("");
@@ -160,6 +499,11 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   const [images, setImages] = useState<
     { id: string; name: string; url: string }[]
   >([]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [draft, setDraft] = useState<ReceiptDraft | null>(null);
+  const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -262,6 +606,51 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     [isNew, form.itemId, pricePerMin, boms, inv],
   );
 
+  const reviewChecks = useMemo(() => {
+    const map = new Map<string, ReviewCheck>();
+    for (const row of reviewRows) {
+      map.set(row.key, reviewCheckFor(row, inv, list));
+    }
+    return map;
+  }, [reviewRows, inv, list]);
+  const reviewFlags = useMemo(() => {
+    let price = 0;
+    let unit = 0;
+    for (const row of reviewRows) {
+      if (!row.included) continue;
+      const check = reviewChecks.get(row.key);
+      if (!check) continue;
+      if (check.mismatch && check.factor <= 0) unit += 1;
+      if (
+        check.history &&
+        (check.history.level === "high" || check.history.level === "warn")
+      ) {
+        price += 1;
+      }
+    }
+    return { price, unit };
+  }, [reviewRows, reviewChecks]);
+
+  const reviewSelected = reviewRows.filter((r) => r.included);
+  const reviewSum = reviewSelected.reduce(
+    (sum, r) => sum + num(r.quantity) * num(r.unitPrice),
+    0,
+  );
+  const liveWarnings = useMemo(() => {
+    if (!draft) return [];
+    return receiptWarnings({
+      ...draft,
+      items: reviewSelected.map((r) => ({
+        name: r.name,
+        quantity: num(r.quantity),
+        unit: r.unit,
+        unitPrice: num(r.unitPrice),
+        amount: num(r.quantity) * num(r.unitPrice),
+        confidence: r.confidence,
+      })),
+    });
+  }, [draft, reviewSelected]);
+
   const preselect = (item: { id: string; gap: number; price: number }) => {
     setIsNew(false);
     setForm((f) => ({
@@ -302,6 +691,12 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     await load();
   };
 
+  const clearReview = () => {
+    setReviewOpen(false);
+    setDraft(null);
+    setReviewRows([]);
+  };
+
   const onPickImages = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     for (const f of files) {
@@ -313,11 +708,180 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         ]);
       }
     }
+    clearReview();
     e.target.value = "";
   };
   const removeImage = (id: string) => {
     setImages((prev) => prev.filter((im) => im.id !== id));
     deleteReceiptImage(id);
+    clearReview();
+  };
+
+  const patchReviewRow = (key: string, patch: Partial<ReviewRow>) => {
+    setReviewRows((rows) =>
+      rows.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+    );
+  };
+
+  const recognize = async () => {
+    if (aiBusy) return;
+    if (!images.length) return toast.error("请先拍照或上传票据");
+    setAiBusy(true);
+    try {
+      const urls = (
+        await Promise.all(
+          images.slice(0, 4).map(async (im) => {
+            const saved = await getReceiptImage(im.id);
+            return saved ? receiptImageDataUrl(saved.blob) : null;
+          }),
+        )
+      ).filter((url): url is string => Boolean(url));
+      if (!urls.length) return toast.error("票据图片读取失败，请重新拍照");
+      const result = await recognizeReceipt(urls);
+      if (!result.ok) return toast.error(result.error);
+      const rows: ReviewRow[] = result.draft.items.map((item, i) => {
+        const match = matchInventoryItem(item.name, inv);
+        const matched = match ? inv.find((x) => x.id === match.id) : undefined;
+        const price =
+          item.unitPrice ||
+          (item.amount && item.quantity ? item.amount / item.quantity : 0);
+        const aiUnit = item.unit.trim();
+        return {
+          key: `ai-${Date.now()}-${i}`,
+          included: true,
+          name: item.name,
+          itemId: matched?.id || "",
+          quantity: item.quantity ? String(item.quantity) : "",
+          unit:
+            matched && sameUnit(aiUnit, matched.unit)
+              ? matched.unit
+              : aiUnit || matched?.unit || "",
+          unitPrice: price ? String(Number(price.toFixed(2))) : "",
+          confidence: item.confidence || result.draft.confidence,
+          matchScore: match?.score || 0,
+        };
+      });
+      setDraft(result.draft);
+      setReviewRows(rows);
+      setReviewOpen(true);
+      toast.success("识别完成，请逐项人工复核");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const saveReview = async () => {
+    if (aiSaving || !draft) return;
+    const selected = reviewRows.filter((r) => r.included);
+    if (!selected.length) return toast.error("请至少勾选一项入库");
+
+    const payloads: {
+      name: string;
+      itemId: string;
+      qty: number;
+      unit: string;
+      price: number;
+    }[] = [];
+    for (const row of selected) {
+      const item = row.itemId
+        ? inv.find((i) => i.id === row.itemId)
+        : undefined;
+      const qty = num(row.quantity);
+      const price = num(row.unitPrice);
+      const name = (item?.name || row.name).trim();
+      if (!name) return toast.error("存在未填写的原料名称");
+      if (!(qty > 0)) return toast.error(`「${name}」数量需大于 0`);
+      if (price < 0) return toast.error(`「${name}」单价不能为负数`);
+      let finalQty = qty;
+      let finalUnit = item?.unit || row.unit.trim() || "kg";
+      let finalPrice = price;
+      if (item) {
+        const buyUnit = row.unit.trim() || item.unit;
+        if (!sameUnit(buyUnit, item.unit)) {
+          const factor = conversionFactor(item.id, buyUnit);
+          if (!(factor > 0)) {
+            return toast.error(
+              `「${name}」单位 ${buyUnit} 与库存单位 ${item.unit} 不一致，请先换算或改为新原料`,
+            );
+          }
+          finalQty = qty * factor;
+          finalPrice = price / factor;
+        }
+      }
+      payloads.push({
+        name,
+        itemId: item?.id || newLocalId(),
+        qty: finalQty,
+        unit: finalUnit,
+        price: finalPrice,
+      });
+    }
+
+    const total = payloads.reduce((sum, p) => sum + p.qty * p.price, 0);
+    const priceNote = reviewFlags.price
+      ? `\n其中 ${reviewFlags.price} 项价格异常，请确认已核对历史采购价。`
+      : "";
+    if (
+      !confirm(
+        `确认将 ${payloads.length} 项采购入库，合计 ${fmtMoney(total)}？${priceNote}\n入库后库存与成本会立即更新。`,
+      )
+    )
+      return;
+
+    setAiSaving(true);
+    const when = draft.date
+      ? new Date(`${draft.date}T12:00:00`).toISOString()
+      : undefined;
+    const notes = [
+      draft.invoiceNumber ? `票据号 ${draft.invoiceNumber}` : "",
+      "AI识别·人工复核",
+      draft.notes,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    let ok = 0;
+    for (const p of payloads) {
+      const pid = newPurchaseId();
+      const done = await createPurchase({
+        id: pid,
+        supplier: draft.supplier,
+        inventory_item_id: p.itemId,
+        item_name: p.name,
+        quantity: p.qty,
+        unit: p.unit,
+        unit_price: p.price,
+        notes,
+        purchased_at: when,
+      });
+      if (done) {
+        ok += 1;
+        if (images.length)
+          linkReceipts(
+            pid,
+            images.map((im) => im.id),
+          );
+      }
+    }
+    setAiSaving(false);
+    if (!ok) return toast.error("入库失败（检查库存/采购表权限）");
+    toast.success(
+      `已入库 ${ok} 项${ok < payloads.length ? `，${payloads.length - ok} 项失败` : ""}`,
+    );
+    images.forEach((im) => URL.revokeObjectURL(im.url));
+    setImages([]);
+    setForm({
+      ...form,
+      itemId: "",
+      itemName: "",
+      quantity: "",
+      unit_price: "",
+      notes: "",
+    });
+    setBuyUnit("");
+    setIsNew(false);
+    clearReview();
+    setOpen(false);
+    load();
   };
 
   const submit = async () => {
@@ -787,7 +1351,10 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         open={open}
         title="新建采购入库"
         subtitle="保存后自动增加库存并写入成本流水"
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          clearReview();
+        }}
       >
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-xs text-zinc-400">
@@ -867,17 +1434,31 @@ export default function Procurement({ version = 0 }: { version?: number }) {
             <div className="text-xs text-zinc-400 mb-1.5">
               票据照片（存本机，可拍多张）
             </div>
-            <label className="inline-flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-950 border border-white/5 rounded-xl cursor-pointer active:scale-[0.99] transition-transform">
-              <Camera size={16} /> 拍照 / 上传
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                className="hidden"
-                onChange={onPickImages}
-              />
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 bg-zinc-950 border border-white/5 rounded-xl cursor-pointer active:scale-[0.99] transition-transform">
+                <Camera size={16} /> 拍照 / 上传
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={onPickImages}
+                />
+              </label>
+              <button
+                onClick={recognize}
+                disabled={aiBusy || !images.length}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-xl hover:bg-orange-500/15 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+              >
+                <ScanLine size={16} className={aiBusy ? "animate-pulse" : ""} />
+                {aiBusy ? "AI 识别中…" : "AI 识别票据"}
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-1.5 leading-relaxed">
+              支持发票 / 小票 / 手写收据，最多识别前 4 张；图片会发送到设置中的
+              AI 服务，识别后必须人工复核。
+            </p>
             {images.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {images.map((im) => (
@@ -987,6 +1568,152 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         >
           保存并入库
         </button>
+      </Sheet>
+
+      <Sheet
+        open={reviewOpen && !!draft}
+        title="AI 识别结果 · 人工复核"
+        subtitle="核对无误后再入库；未勾选项不会写入"
+        onClose={clearReview}
+        maxW="max-w-2xl"
+      >
+        {draft && (
+          <div className="space-y-3.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full bg-sky-500/10 text-sky-400">
+                <FileText size={12} />
+                {RECEIPT_DOC_LABEL[draft.documentType]}
+              </span>
+              <span
+                className={`text-[11px] px-2 py-1 rounded-full ${
+                  draft.confidence >= 0.8
+                    ? "bg-green-500/10 text-green-400"
+                    : draft.confidence >= 0.6
+                      ? "bg-amber-500/10 text-amber-400"
+                      : "bg-red-500/10 text-red-400"
+                }`}
+              >
+                置信度 {Math.round(draft.confidence * 100)}%
+              </span>
+              {draft.invoiceNumber && (
+                <span className="text-[11px] text-zinc-500">
+                  单号 {draft.invoiceNumber}
+                </span>
+              )}
+              <span className="text-[11px] text-zinc-500 ml-auto">
+                {reviewSelected.length}/{reviewRows.length} 项待入库
+              </span>
+            </div>
+
+            {(reviewFlags.price > 0 || reviewFlags.unit > 0) && (
+              <div className="flex flex-wrap gap-2 text-[11px]">
+                {reviewFlags.unit > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400">
+                    <Ruler size={12} />
+                    单位不匹配 {reviewFlags.unit} 项
+                  </span>
+                )}
+                {reviewFlags.price > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-400">
+                    <TrendingUp size={12} />
+                    价格异常 {reviewFlags.price} 项
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <label className="col-span-2 text-[11px] text-zinc-500">
+                供应商
+                <input
+                  value={draft.supplier}
+                  onChange={(e) =>
+                    setDraft({ ...draft, supplier: e.target.value })
+                  }
+                  placeholder="未识别到，请手工补充"
+                  className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                />
+              </label>
+              <label className="text-[11px] text-zinc-500">
+                开票 / 收货日期
+                <input
+                  type="date"
+                  value={draft.date}
+                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                  className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                />
+              </label>
+              <div className="text-[11px] text-zinc-500">
+                票面总额
+                <div className="mt-1 h-[42px] flex items-center justify-end px-3 rounded-lg bg-zinc-950 border border-white/5 tnum text-orange-400 font-semibold">
+                  {fmtMoney(draft.total)}
+                </div>
+              </div>
+            </div>
+
+            {liveWarnings.length > 0 && (
+              <div className="rounded-xl bg-amber-500/[0.07] border border-amber-500/25 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold mb-1">
+                  <AlertTriangle size={13} /> 请复核
+                </div>
+                <ul className="space-y-0.5 text-[11px] text-amber-300/90 list-disc pl-4">
+                  {liveWarnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+              {reviewRows.map((row) => {
+                const check = reviewChecks.get(row.key);
+                return check ? (
+                  <AiReviewRowCard
+                    key={row.key}
+                    row={row}
+                    inv={inv}
+                    check={check}
+                    onPatch={(patch) => patchReviewRow(row.key, patch)}
+                    onRemove={() =>
+                      setReviewRows((rows) =>
+                        rows.filter((r) => r.key !== row.key),
+                      )
+                    }
+                  />
+                ) : null;
+              })}
+              {!reviewRows.length && (
+                <div className="text-sm text-zinc-500 text-center py-8">
+                  识别明细已全部移除
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-zinc-950 border border-white/5 px-3.5 py-3 flex items-center justify-between gap-3">
+              <span className="text-sm text-zinc-400">
+                合计（勾选项）
+                <span className="block text-[11px] text-zinc-600">
+                  入库时按核对后的数量与单价计算
+                </span>
+              </span>
+              <span className="tnum text-lg font-bold text-orange-400">
+                {fmtMoney(reviewSum)}
+              </span>
+            </div>
+
+            <button
+              onClick={saveReview}
+              disabled={aiSaving || !reviewSelected.length}
+              className="w-full py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              <Sparkles size={15} className="inline mr-1.5" />
+              {aiSaving ? "入库中…" : `确认入库 ${reviewSelected.length} 项`}
+            </button>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              识别结果受图片质量影响，请核对名称、单位、数量、单价；单位与库存不一致时需先换算。
+            </p>
+          </div>
+        )}
       </Sheet>
     </div>
   );

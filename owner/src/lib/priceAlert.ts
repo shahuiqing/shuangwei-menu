@@ -55,6 +55,21 @@ export interface PriceCheck {
   message: string;
 }
 
+export interface PriceReference {
+  /** 参与比较的历史采购笔数（最多 MAX_SAMPLES 笔） */
+  sampleCount: number;
+  /** 历史采购价中位数，已按库存单位归一 */
+  median: number;
+  priceMin: number;
+  priceMax: number;
+  /** 最近一笔历史采购价 */
+  last: number;
+  lastAt: string;
+  /** 本次价相对历史中位数的涨跌幅；未填本次价时为 0 */
+  changePct: number;
+  level: AlertLevel;
+}
+
 /** 升序中位数 */
 export function median(values: number[]): number {
   const a = values
@@ -184,6 +199,64 @@ function parseAt(v: string | undefined): number {
   if (!v) return 0;
   const t = Date.parse(String(v).trim().replace(" ", "T"));
   return Number.isFinite(t) ? t : 0;
+}
+
+const normUnit = (v: string | undefined) =>
+  String(v || "")
+    .trim()
+    .toLowerCase();
+
+/**
+ * 用已有采购历史给“本次单价”做参考。用于 AI 票据复核等场景：
+ * - 只取最近 MAX_SAMPLES 笔有效历史价，中位数抗离群值；
+ * - 传入库存单位时只比较同单位历史，避免 kg/箱 混算；
+ * - 样本少于 SAMPLE_MIN 时返回 sample，不直接判定为异常。
+ */
+export function priceHistoryRef(
+  purchases: PurchaseOrder[],
+  itemId: string,
+  currentPrice: number,
+  unit = "",
+): PriceReference | null {
+  const targetUnit = normUnit(unit);
+  const rows = purchases
+    .filter((p) => {
+      if (String(p.item_id || "").trim() !== itemId) return false;
+      if (!(num(p.unit_price) > 0)) return false;
+      return !targetUnit || normUnit(p.unit) === targetUnit;
+    })
+    .slice()
+    .sort(
+      (a, b) =>
+        String(b.purchased_at || b.created_at || "").localeCompare(
+          String(a.purchased_at || a.created_at || ""),
+        ) || 0,
+    )
+    .slice(0, MAX_SAMPLES);
+  if (!rows.length) return null;
+
+  const prices = rows.map((r) => num(r.unit_price));
+  const baseline = median(prices);
+  const current = num(currentPrice);
+  const changePct =
+    baseline > 0 && current > 0 ? (current - baseline) / baseline : 0;
+  const level: AlertLevel =
+    prices.length < SAMPLE_MIN
+      ? "sample"
+      : current > 0
+        ? levelOf(changePct)
+        : "ok";
+
+  return {
+    sampleCount: prices.length,
+    median: baseline,
+    priceMin: Math.min(...prices),
+    priceMax: Math.max(...prices),
+    last: num(rows[0].unit_price),
+    lastAt: String(rows[0].purchased_at || rows[0].created_at || ""),
+    changePct,
+    level,
+  };
 }
 
 export const alertMap = (alerts: PriceAlert[]) =>

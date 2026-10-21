@@ -49,6 +49,19 @@ export function hasLlm(): boolean {
   return Boolean(c.baseUrl && c.apiKey && c.model);
 }
 
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const text = (part as { text?: unknown }).text;
+      return typeof text === "string" ? text : "";
+    })
+    .join("")
+    .trim();
+}
+
 /** 超时/非 2xx/坏响应一律 null → 调用方降级规则版 */
 export async function chatLLM(
   system: string,
@@ -81,8 +94,58 @@ export async function chatLLM(
     const data = (await res.json().catch(() => null)) as {
       choices?: { message?: { content?: unknown } }[];
     } | null;
-    const text = data?.choices?.[0]?.message?.content;
-    return typeof text === "string" && text.trim() ? text.trim() : null;
+    const text = messageText(data?.choices?.[0]?.message?.content);
+    return text || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 图片理解：OpenAI 兼容的多模态 content 数组（模型需支持 image_url） */
+export async function chatLLMVision(
+  system: string,
+  user: string,
+  images: string[],
+  opts: { timeoutMs?: number; maxTokens?: number } = {},
+): Promise<string | null> {
+  const cfg = getLlmConfig();
+  if (!cfg.baseUrl || !cfg.apiKey || !cfg.model || !images.length) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 60000);
+  try {
+    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: user },
+              ...images.map((url) => ({
+                type: "image_url",
+                image_url: { url },
+              })),
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: opts.maxTokens ?? 3000,
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as {
+      choices?: { message?: { content?: unknown } }[];
+    } | null;
+    return messageText(data?.choices?.[0]?.message?.content) || null;
   } catch {
     return null;
   } finally {

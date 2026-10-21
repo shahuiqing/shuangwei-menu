@@ -434,7 +434,7 @@ export default function Settings({
       <ChartCard
         id="set-ai"
         title="AI 服务（可选）"
-        subtitle="OpenAI 兼容接口 · 未配置时 AI 助手用规则版"
+        subtitle="OpenAI 兼容接口 · 票据识别需选择支持图片输入的模型"
         action={<Sparkles size={18} className="text-orange-500" />}
       >
         <label className="text-sm text-zinc-400">Base URL（到 /v1 为止）</label>
@@ -486,6 +486,7 @@ export default function Settings({
         </div>
         <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
           Key 只存本机浏览器，不上传、不随备份导出；请求由浏览器直连该接口。
+          采购票据识别需要模型支持图片输入（vision），且接口需允许浏览器跨域访问。
         </p>
       </ChartCard>
 

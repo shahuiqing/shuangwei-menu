@@ -4,6 +4,7 @@ import {
   checkUnitPrice,
   flaggedAlerts,
   median,
+  priceHistoryRef,
   MAX_SAMPLES,
   SAMPLE_MIN,
 } from "../priceAlert";
@@ -107,6 +108,64 @@ describe("buildPriceAlerts", () => {
     );
     expect(alerts[0].itemId).toBe("salt");
     expect(alerts[0].changePct).toBeCloseTo(2, 5);
+  });
+});
+
+describe("priceHistoryRef", () => {
+  it("用历史中位数判断本次价格异常", () => {
+    const ref = priceHistoryRef(
+      [po(20, 1), po(22, 3), po(24, 5), po(26, 7)],
+      "beef",
+      30,
+      "kg",
+    )!;
+    expect(ref.sampleCount).toBe(4);
+    expect(ref.median).toBe(23);
+    expect(ref.last).toBe(26);
+    expect(ref.priceMin).toBe(20);
+    expect(ref.priceMax).toBe(26);
+    expect(ref.changePct).toBeCloseTo((30 - 23) / 23, 5);
+    expect(ref.level).toBe("high");
+  });
+
+  it("样本不足时标记 sample，不误报异常", () => {
+    const ref = priceHistoryRef([po(20, 1), po(20, 3)], "beef", 40, "kg")!;
+    expect(ref.sampleCount).toBe(SAMPLE_MIN - 1);
+    expect(ref.level).toBe("sample");
+  });
+
+  it("单位不一致的历史不参与比较", () => {
+    const ref = priceHistoryRef(
+      [po(20, 1), po(20, 3), po(20, 5), po(200, 7, { unit: "箱" })],
+      "beef",
+      20,
+      "kg",
+    )!;
+    expect(ref.sampleCount).toBe(3);
+    expect(ref.priceMax).toBe(20);
+  });
+
+  it("无历史或未填本次价时安全返回", () => {
+    expect(priceHistoryRef([po(20, 1)], "salt", 20, "kg")).toBeNull();
+    const ref = priceHistoryRef(
+      [po(20, 1), po(22, 3), po(24, 5)],
+      "beef",
+      0,
+      "kg",
+    )!;
+    expect(ref.median).toBe(22);
+    expect(ref.level).toBe("ok");
+  });
+
+  it("低于历史中位数也判为异常", () => {
+    const ref = priceHistoryRef(
+      [po(20, 1), po(20, 3), po(20, 5)],
+      "beef",
+      15,
+      "kg",
+    )!;
+    expect(ref.changePct).toBeCloseTo(-0.25, 5);
+    expect(ref.level).toBe("warn");
   });
 });
 
