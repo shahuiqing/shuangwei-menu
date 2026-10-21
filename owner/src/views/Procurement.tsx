@@ -18,6 +18,7 @@ import {
   Ruler,
   TrendingDown,
   TrendingUp,
+  Languages,
 } from "lucide-react";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
@@ -56,7 +57,10 @@ import {
 } from "../lib/receipts";
 import { receiptImageDataUrl } from "../lib/image";
 import {
-  matchInventoryItem,
+  hasReceiptTranslation,
+  isNonChineseReceipt,
+  matchInventoryItemAny,
+  receiptLanguageLabel,
   receiptWarnings,
   recognizeReceipt,
   RECEIPT_DOC_LABEL,
@@ -165,7 +169,12 @@ function conversionFactor(itemId: string, unit: string): number {
 interface ReviewRow {
   key: string;
   included: boolean;
+  /** 用于入库的名称；采用译名后会变成中文 */
   name: string;
+  /** 票面原文，便于对照 */
+  sourceName: string;
+  /** 外文票据的中文译名；中文票据为空 */
+  nameZh: string;
   itemId: string;
   quantity: string;
   unit: string;
@@ -229,6 +238,19 @@ function AiReviewRowCard({
   const item = row.itemId ? inv.find((i) => i.id === row.itemId) : undefined;
   const { unit, mismatch, factor, history } = check;
   const amount = num(row.quantity) * num(row.unitPrice);
+  const displayName = item?.name || row.name || "未命名原料";
+  const headerSource =
+    item && row.sourceName && row.sourceName !== item.name
+      ? row.sourceName
+      : "";
+  const headerZh =
+    item && row.nameZh && row.nameZh !== item.name ? row.nameZh : "";
+  const sourceLine = [
+    headerSource ? `原文 ${headerSource}` : "",
+    headerZh ? `译名 ${headerZh}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const priceFlagged = history?.level === "high" || history?.level === "warn";
   const priceRising = (history?.changePct || 0) >= 0;
   const priceLabel =
@@ -255,9 +277,17 @@ function AiReviewRowCard({
             checked={row.included}
             onChange={(e) => onPatch({ included: e.target.checked })}
           />
-          <span className="text-sm text-zinc-200 truncate">
-            {item?.name || row.name || "未命名原料"}
-          </span>
+          <div className="min-w-0">
+            <span className="block text-sm text-zinc-200 truncate">
+              {displayName}
+            </span>
+            {sourceLine && (
+              <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[10px] text-zinc-500">
+                <Languages size={10} className="shrink-0" />
+                <span className="truncate">{sourceLine}</span>
+              </span>
+            )}
+          </div>
           {item ? (
             <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400">
               已匹配 {Math.round(row.matchScore * 100)}%
@@ -336,14 +366,38 @@ function AiReviewRowCard({
         </label>
 
         {!row.itemId && (
-          <label className="col-span-2 text-[11px] text-zinc-500">
-            原料名称
-            <input
-              value={row.name}
-              onChange={(e) => onPatch({ name: e.target.value })}
-              className={inputCls}
-            />
-          </label>
+          <div className="col-span-2">
+            <label className="block text-[11px] text-zinc-500">
+              原料名称
+              <input
+                value={row.name}
+                onChange={(e) => onPatch({ name: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            {row.nameZh && row.nameZh !== row.name && (
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-zinc-500">
+                <Languages size={11} className="shrink-0" />
+                <span className="min-w-0 truncate">
+                  中文译名 <span className="text-zinc-300">{row.nameZh}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onPatch({ name: row.nameZh })}
+                  className="ml-auto shrink-0 text-sky-400 hover:text-sky-300"
+                >
+                  采用
+                </button>
+              </div>
+            )}
+            {row.sourceName && row.name !== row.sourceName && (
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-zinc-600">
+                <span className="min-w-0 truncate">
+                  票据原文 {row.sourceName}
+                </span>
+              </div>
+            )}
+          </div>
         )}
 
         <label className="text-[11px] text-zinc-500">
@@ -642,6 +696,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       ...draft,
       items: reviewSelected.map((r) => ({
         name: r.name,
+        nameZh: r.nameZh,
         quantity: num(r.quantity),
         unit: r.unit,
         unitPrice: num(r.unitPrice),
@@ -740,7 +795,10 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       const result = await recognizeReceipt(urls);
       if (!result.ok) return toast.error(result.error);
       const rows: ReviewRow[] = result.draft.items.map((item, i) => {
-        const match = matchInventoryItem(item.name, inv);
+        const match = matchInventoryItemAny(
+          [item.nameZh, item.name].filter(Boolean),
+          inv,
+        );
         const matched = match ? inv.find((x) => x.id === match.id) : undefined;
         const price =
           item.unitPrice ||
@@ -750,6 +808,8 @@ export default function Procurement({ version = 0 }: { version?: number }) {
           key: `ai-${Date.now()}-${i}`,
           included: true,
           name: item.name,
+          sourceName: item.name,
+          nameZh: item.nameZh,
           itemId: matched?.id || "",
           quantity: item.quantity ? String(item.quantity) : "",
           unit:
@@ -1583,6 +1643,21 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                 <FileText size={12} />
                 {RECEIPT_DOC_LABEL[draft.documentType]}
               </span>
+              {isNonChineseReceipt(draft) && (
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full ${
+                    hasReceiptTranslation(draft)
+                      ? "bg-violet-500/10 text-violet-400"
+                      : "bg-amber-500/10 text-amber-400"
+                  }`}
+                >
+                  <Languages size={12} />
+                  {receiptLanguageLabel(draft.sourceLanguage)}票据
+                  {hasReceiptTranslation(draft)
+                    ? " · 已附中文翻译"
+                    : " · 未附翻译"}
+                </span>
+              )}
               <span
                 className={`text-[11px] px-2 py-1 rounded-full ${
                   draft.confidence >= 0.8
@@ -1632,6 +1707,15 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                   placeholder="未识别到，请手工补充"
                   className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
                 />
+                {draft.supplierZh && draft.supplierZh !== draft.supplier && (
+                  <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-zinc-500">
+                    <Languages size={11} className="shrink-0" />
+                    <span className="truncate">
+                      中文译名{" "}
+                      <span className="text-zinc-300">{draft.supplierZh}</span>
+                    </span>
+                  </span>
+                )}
               </label>
               <label className="text-[11px] text-zinc-500">
                 开票 / 收货日期
