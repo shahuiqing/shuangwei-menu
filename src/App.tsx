@@ -754,6 +754,8 @@ export default function App() {
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
+    // 同步到云端，否则刷新后会被云端旧值覆盖
+    handleSaveToCloud({ theme: newTheme, silent: true });
   };
 
   async function handleSaveToCloud(overrides?: any) {
