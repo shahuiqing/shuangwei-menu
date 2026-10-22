@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { mergeAndOrderCategories } from "../initialData";
+import {
+  mergeAndOrderCategories,
+  INITIAL_MENU_CATEGORIES,
+} from "../initialData";
 
 const initial = [
   {
@@ -100,5 +103,57 @@ describe("mergeAndOrderCategories", () => {
     ];
     const r = mergeAndOrderCategories(existing, initial, ["c2"]);
     expect(r.find((c) => c.id === "c2")).toBeUndefined();
+  });
+
+  it("merges legacy staples + drinks categories and drops removed rice/dumpling items", () => {
+    const legacy = [
+      {
+        id: "all-drinks-menu",
+        name: "饮品分类",
+        items: [{ id: "dk1", title: "冰镇可乐", price: "10" }],
+      },
+      {
+        id: "cat-staples",
+        name: "主食 & 沙拉",
+        items: [
+          { id: "main-poulet-teriyaki", title: "照烧鸡肉拌饭", price: "65" },
+          { id: "main-salade-fraiche", title: "鲜绿田园沙拉", price: "45" },
+        ],
+      },
+    ];
+    const r = mergeAndOrderCategories(legacy, INITIAL_MENU_CATEGORIES, []);
+    expect(r.find((c) => c.id === "cat-staples")).toBeUndefined();
+    expect(r.find((c) => c.id === "all-drinks-menu")).toBeUndefined();
+    const merged = r.find((c) => c.id === "cat-main-drinks");
+    expect(merged).toBeDefined();
+    const ids = merged!.items.map((i: any) => i.id);
+    expect(ids).toContain("dk1");
+    expect(ids).toContain("main-salade-fraiche");
+    expect(ids).toContain("main-rice-bowl");
+    expect(ids).not.toContain("main-poulet-teriyaki");
+  });
+
+  it("gives 紫菜包饭 / 寿司 a 大份 add-on at +25 and keeps its id", () => {
+    const existing = [
+      {
+        id: "kimbap-cat",
+        name: "其他",
+        items: [
+          {
+            id: "legacy-kimbap-id",
+            title: "紫菜包饭 / 寿司",
+            price: "MAD50",
+            image: "x.jpg",
+          },
+        ],
+      },
+    ];
+    const r = mergeAndOrderCategories(existing, [], []);
+    const item = r[0].items.find((i: any) => i.id === "legacy-kimbap-id");
+    expect(item).toBeDefined();
+    expect(item.image).toBe("x.jpg");
+    expect(item.addons).toEqual([
+      { id: "kimbap-large", name: "大份", enName: "Large Portion", price: 25 },
+    ]);
   });
 });

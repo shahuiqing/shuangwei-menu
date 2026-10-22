@@ -1047,8 +1047,151 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
     frName: "MENU FONDUE",
   },
   {
-    id: "all-drinks-menu",
+    id: "cat-main-drinks",
+    name: "主食 & 饮品",
+    enName: "MAINS & DRINKS",
+    frName: "PLATS & BOISSONS",
+    arName: "الأطباق الرئيسية والمشروبات",
+    maName: "الأطباق الرئيسية والمشروبات",
     items: [
+      {
+        id: "main-rice-bowl",
+        title: "拌饭",
+        enTitle: "Rice Bowl",
+        frTitle: "Bol de Riz",
+        arTitle: "وعاء الأرز",
+        maTitle: "بول الرز",
+        price: "MAD75",
+        description: "新鲜蔬菜、裙带菜与香米饭，可选口味。",
+        enDescription:
+          "Fresh vegetables, wakame seaweed and fragrant rice. Choose your flavor.",
+        image:
+          "https://images.unsplash.com/photo-1541518763669-27fef04b14ea?auto=format&fit=crop&w=800&q=80",
+        addons: [
+          {
+            id: "rice-teriyaki-chicken",
+            name: "照烧鸡肉",
+            enName: "Teriyaki Chicken",
+            price: 0,
+          },
+          {
+            id: "rice-filet",
+            name: "菲力牛肉",
+            enName: "Beef Tenderloin",
+            price: 0,
+          },
+          {
+            id: "rice-korean",
+            name: "韩式甜辣牛肉",
+            enName: "Korean Spicy Beef",
+            price: 0,
+          },
+          {
+            id: "rice-sausage",
+            name: "香烤牛肉香肠",
+            enName: "Grilled Beef Sausage",
+            price: 0,
+          },
+          {
+            id: "rice-secret",
+            name: "中式秘制牛肉",
+            enName: "Chinese Secret Beef",
+            price: 0,
+          },
+          {
+            id: "rice-teriyaki-premium",
+            name: "尊享照烧牛肉",
+            enName: "Premium Beef Teriyaki",
+            price: 0,
+          },
+        ],
+      },
+      {
+        id: "main-dumpling-dry",
+        title: "干饺",
+        enTitle: "Dry Dumplings",
+        frTitle: "Raviolis Secs",
+        arTitle: "زلابية جافة",
+        maTitle: "زلابية ناشفة",
+        price: "MAD75",
+        description: "手工牛肉馅饺子，干拌吃法，更能品尝牛肉原汁原味。",
+        enDescription:
+          "Handmade halal beef dumplings served dry, to savor the original flavor of the beef.",
+        image:
+          "https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=800&q=80",
+        addons: [
+          {
+            id: "dumpling-dry-large",
+            name: "大份",
+            enName: "Large Portion",
+            price: 15,
+          },
+        ],
+      },
+      {
+        id: "main-dumpling-pan",
+        title: "煎饺",
+        enTitle: "Pan-Fried Dumplings",
+        frTitle: "Raviolis Grillés",
+        arTitle: "زلابية مقلية",
+        maTitle: "زلابية مقلية",
+        price: "MAD75",
+        description: "外皮金黄酥脆，馅料鲜嫩多汁，经典美味。",
+        enDescription:
+          "Crispy outside, juicy and tender inside, pan-fried to perfection.",
+        image:
+          "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80",
+        addons: [
+          {
+            id: "dumpling-pan-large",
+            name: "大份",
+            enName: "Large Portion",
+            price: 15,
+          },
+        ],
+      },
+      {
+        id: "main-salade-fraiche",
+        title: "鲜绿田园沙拉",
+        enTitle: "Fresh Garden Salad",
+        frTitle: "Salade Fraîche",
+        arTitle: "سلطة طازجة",
+        maTitle: "شلاظة طرية",
+        price: "MAD45",
+        description:
+          "生菜、黄瓜、番茄、西兰花、青椒、牛油果和水波蛋，淋上优质橄榄油，撒上海盐与黑胡椒，轻卡高纤。",
+        enDescription:
+          "Lettuce, cucumber, tomato, broccoli, green bell pepper, avocado, and poached egg, seasoned with olive oil, salt, and black pepper.",
+        frDescription:
+          "Laitue, concombre, tomate, brocoli, poivron vert, avocat et œuf poché, assaisonnés d'huile d'olive, sel et poivre.",
+        arDescription:
+          "خس، خيار، طماطم، بروكلي، فلفل أخضر، أفوكادو، وبيض مسلوق، متبلة بزيت الزيتون، الملح والفلفل الأسود.",
+        maDescription:
+          "خس، خيار، طماطم، بروكلي، فلفل أخضر، أفوكادو، وبيض مسلوق، متبلة بزيت الزيتون، الملح والفلفل الأسود.",
+        image:
+          "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80",
+      },
+      {
+        id: "main-crevettes-orange",
+        title: "香橙大虾沙拉",
+        enTitle: "Orange Shrimp Salad",
+        frTitle: "Salade de Crevettes à l'Orange",
+        arTitle: "سلطة الروبيان بالبرتقال",
+        maTitle: "شلاظة كروفيت بالليمون",
+        price: "MAD55",
+        description:
+          "鲜美大虾配以清甜橙子、多汁番茄和牛油果，撒上少许黑胡椒，酸甜开胃，清新活力。",
+        enDescription:
+          "Fresh shrimp served with tomatoes, avocado, and orange, seasoned with a touch of black pepper.",
+        frDescription:
+          "Crevettes fraîches servies avec des tomates, avocat et orange, assaisonnées d'une touche de poivre noir.",
+        arDescription:
+          "روبيان طازج يقدم مع الطماطم، الأفوكادو، والبرتقال، متبل بلمسة من الفلفل الأسود.",
+        maDescription:
+          "روبيان طازج يقدم مع الطماطم، الأفوكادو، والبرتقال، متبل بلمسة من الفلفل الأسود.",
+        image:
+          "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80",
+      },
       {
         maTitle: "كوكا باردة",
         price: "10",
@@ -1198,305 +1341,6 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
           "https://images.unsplash.com/photo-1629203851122-3726ecdf080e?auto=format&fit=crop&w=1200&q=80",
       },
     ],
-    frName: "BOISSONS",
-    maName: "مشروبات",
-    enName: "DRINKS",
-    name: "饮品分类",
-    arName: "مشروبات",
-  },
-  {
-    id: "cat-staples",
-    name: "主食 & 沙拉",
-    enName: "MAINS & SALADS",
-    frName: "PLATS & SALADES",
-    arName: "الأطباق الرئيسية والسلطات",
-    maName: "الأطباق الرئيسية والسلطات",
-    items: [
-      {
-        id: "main-poulet-teriyaki",
-        title: "照烧鸡肉拌饭",
-        enTitle: "Teriyaki Chicken Bowl",
-        frTitle: "Bol Poulet Teriyaki",
-        arTitle: "وعاء دجاج تيرياكي",
-        maTitle: "بول بولي تيرياكي",
-        price: "MAD65",
-        description:
-          "美味且营养均衡的照烧鸡肉拌饭，配以新鲜蔬菜、裙带菜（海苔）和香气扑鼻的米饭。",
-        enDescription:
-          "A delicious and balanced bowl with marinated chicken in teriyaki sauce, served with fresh vegetables, wakame seaweed, and fragrant rice.",
-        frDescription:
-          "Un bol gourmand et équilibré au poulet mariné sauce teriyaki, accompagné de légumes frais, d'algues wakamé et de riz parfumé.",
-        arDescription:
-          "وعاء لذيذ ومتوازن مع الدجاج المتبل بصلصة التيرياكي، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        maDescription:
-          "بول لذيذ ومتوازن مع الدجاج المتبل بصلصة التيرياكي، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        image:
-          "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-filet-boeuf",
-        title: "菲力牛肉拌饭",
-        enTitle: "Beef Tenderloin Bowl",
-        frTitle: "Bol Filet de Bœuf",
-        arTitle: "وعاء فيليه لحم البقر",
-        maTitle: "بول فيليه البقر",
-        price: "MAD75",
-        description:
-          "精选嫩煎菲力牛肉，口感软嫩，配以新鲜蔬菜、裙带菜和香米饭，营养丰富。",
-        enDescription:
-          "A refined and balanced bowl with tenderly grilled beef tenderloin, served with fresh vegetables, wakame seaweed, and fragrant rice.",
-        frDescription:
-          "Un bol raffiné et équilibré au filet de bœuf tendrement grillé, accompagné de légumes frais, d'algues wakamé et de riz parfumé.",
-        arDescription:
-          "وعاء راق ومتوازن مع فيليه لحم البقر المشوي طرياً، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        maDescription:
-          "بول راق ومتوازن مع فيليه لحم البقر المشوي طرياً، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        image:
-          "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-boeuf-coreen",
-        title: "韩式甜辣牛肉拌饭",
-        enTitle: "Korean Spicy Beef Bowl",
-        frTitle: "Bol Bœuf Coréen Doux & Épicé",
-        arTitle: "وعاء لحم بقري كوري حلو وحار",
-        maTitle: "بول بقر كوري حلو وحار",
-        price: "MAD70",
-        description:
-          "地道韩式甜辣风味（辣椒酱）腌制牛肉，搭配新鲜时蔬、裙带菜和香米饭，口感浓郁、美味均衡。",
-        enDescription:
-          "A complete bowl with sweet and spicy marinated Korean beef (gochujang), accompanied by fresh vegetables, wakame seaweed, and fragrant rice, for a tasty and perfectly balanced meal.",
-        frDescription:
-          "Un bol complet au bœuf mariné coréen doux et épicé (gochujang), accompagné de légumes frais, d'algues wakamé et de riz parfumé, pour un repas savoureux et parfaitement équilibré.",
-        arDescription:
-          "وعاء متكامل مع لحم البقر الكوري المتبل الحلو والحار (غوتشوجانغ)، يرافقه الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر，لوجبة لذيذة ومتوازنة تماماً.",
-        maDescription:
-          "بول متكامل مع لحم البقر الكوري المتبل الحلو والحار (غوتشوجانغ)，يرافقه الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر，لوجبة لذيذة ومتوازنة تماماً.",
-        image:
-          "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-saucisses-grillees",
-        title: "香烤牛肉香肠拌饭",
-        enTitle: "Grilled Halal Beef Sausage Bowl",
-        frTitle: "Bol Saucisses de Bœuf Grillées (Halal)",
-        arTitle: "وعاء نقانق بقر مشوية حلال",
-        maTitle: "بول صوصيص بقر مشوي حلال",
-        price: "MAD60",
-        description:
-          "自制美味清真烤牛肉香肠，外酥里嫩，配上爽口蔬菜、裙带菜和香气四溢的米饭，健康又满足。",
-        enDescription:
-          "A tasty and balanced bowl with homemade grilled halal beef sausages, served with fresh vegetables, wakame seaweed, and fragrant rice, for a healthy and delicious meal.",
-        frDescription:
-          "Un bol savoureux et équilibré aux saucisses de bœuf halal grillées maison, accompagné de légumes frais, d'algues wakamé et de riz parfumé, pour un repas sain et gourmand.",
-        arDescription:
-          "وعاء لذيذ ومتوازن مع النقانق المشوية المنزلية، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر，لوجبة صحية وشهية.",
-        maDescription:
-          "بول لذيذ ومتوازن مع النقانق المشوية المنزلية، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر，لوجبة صحية وشهية.",
-        image:
-          "https://images.unsplash.com/photo-1541518763669-27fef04b14ea?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-secret-chinois",
-        title: "中式秘制拌饭",
-        enTitle: "Chinese Secret Beef Bowl",
-        frTitle: "Bol Secret Chinois",
-        arTitle: "وعاء اللحم البقري السري الصيني",
-        maTitle: "بول بقر سري صيني",
-        price: "MAD65",
-        description:
-          "中式独家秘制腌牛肉，酱香浓郁，配以丰富爽脆的蔬菜、裙带菜与优质香米饭。",
-        enDescription:
-          "A bowl inspired by Chinese flavors, with beef marinated in our secret sauce, served with fresh vegetables, wakame seaweed, and fragrant rice.",
-        frDescription:
-          "Un bol inspiré des saveurs chinoises, au bœuf mariné à la sauce secrète, accompagné de légumes frais, d'algues wakamé et de riz parfumé.",
-        arDescription:
-          "وعاء مستوحى من النكهات الصينية، مع لحم البقر المتبل بالصلصة السرية، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        maDescription:
-          "بول مستوحى من النكهات الصينية، مع لحم البقر المتبل بالصلصة السرية، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        image:
-          "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-boeuf-coco-citron",
-        title: "椰香柠檬牛肉拌饭",
-        enTitle: "Coconut & Lemon Beef Bowl",
-        frTitle: "Bol Bœuf Huile de Coco & Citron",
-        arTitle: "وعاء لحم بقري بزيت جوز الهند والليمون",
-        maTitle: "بول بقر بزيت جوز الهند والحامض",
-        price: "MAD70",
-        description:
-          "独特椰子油与清爽柠檬香气融合的腌制牛肉，健康油润，口感清新怡人。",
-        enDescription:
-          "A savory and balanced bowl with beef marinated in coconut oil and lemon, accompanied by fresh vegetables, wakame seaweed, and fragrant rice.",
-        frDescription:
-          "Un bol savoureux et équilibré au bœuf mariné à l'huile de coco et citron, accompagné de légumes frais, d'algues wakamé et de riz parfumé.",
-        arDescription:
-          "وعاء لذيذ ومتوازن مع لحم البقر المتبل بزيت جوز الهند والليمون، يقدم مع الخضار الطازجة، وأعشاب البحر واكامي، والأرز المعطر.",
-        maDescription:
-          "بول لذيذ ومتوازن مع لحم البقر المتبل بزيت جوز الهند والليمون، يقدم مع الخضار الطازجة，وأعشاب البحر واكامي، والأرز المعطر.",
-        image:
-          "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-boeuf-oignons-citron",
-        title: "葱香柠檬牛肉拌饭",
-        enTitle: "Lemon Onion Beef Bowl",
-        frTitle: "Bol Bœuf Oignons & Citron",
-        arTitle: "وعاء لحم البقر بالبصل والليمون",
-        maTitle: "بول بقر بالبصل والحامض",
-        price: "MAD70",
-        description:
-          "鲜嫩牛肉与洋葱爆炒，融入柠檬和清新薄荷香气，搭配爽脆蔬菜与香米饭，令人胃口大开。",
-        enDescription:
-          "A fresh and tasty bowl with beef sautéed with onions, highlighted with a touch of lemon and mint, accompanied by crunchy vegetables and fragrant rice.",
-        frDescription:
-          "Un bol frais et savoureux au bœuf sauté aux oignons, relevé d'une touche de citron et de menthe, accompagné de légumes croquants et de riz parfumé.",
-        arDescription:
-          "وعاء طازج ولذيذ مع لحم البقر المقلي مع البصل، ممزوج بلمسة من الليمون والنعناع، يرافقه خضار مقرمشة وأرز معطر.",
-        maDescription:
-          "بول طازج ولذيذ مع لحم البقر المقلي مع البصل، ممزوج بلمسة من الليمون والنعناع، يرافقه خضار مقرمشة وأرز معطر.",
-        image:
-          "https://images.unsplash.com/photo-1543353071-10c8ba85a904?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-beef-teriyaki-premium",
-        title: "尊享照烧牛肉拌饭",
-        enTitle: "Premium Beef Teriyaki Bowl",
-        frTitle: "Bol Bœuf Teriyaki Premium",
-        arTitle: "وعاء لحم بقر تيرياكي فاخر",
-        maTitle: "بول بقر تيرياكي فاخر",
-        price: "MAD75",
-        description:
-          "尊享日式经典风味，秘制照烧牛肉酱香浓郁，撒上香芝麻，搭配丰富蔬菜与香米，极其美味。",
-        enDescription:
-          "A complete and balanced bowl with Japanese flavors: teriyaki-marinated beef, fresh vegetables, fragrant rice, and a touch of sesame, for a healthy and delicious meal.",
-        frDescription:
-          "Un bol complet et équilibré aux saveurs japonaises : bœuf mariné sauce teriyaki, légumes frais, riz parfumé et touche de sésame, pour un repas sain et gourmand.",
-        arDescription:
-          "وعاء كامل ومتوازن بالنكهات اليابانية: لحم بقري متبل بصلصة التيرياكي، خضار طازجة، أرز معطر ولمسة من السمسم، لوجبة صحية وشهية.",
-        maDescription:
-          "بول كامل ومتوازن بالنكهات اليابانية: لحم بقري متبل بصلصة التيرياكي، خضار طازجة，أرز معطر ولمسة من السمسم، لوجبة صحية وشهية.",
-        image:
-          "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-salade-fraiche",
-        title: "鲜绿田园沙拉",
-        enTitle: "Fresh Garden Salad",
-        frTitle: "Salade Fraîche",
-        arTitle: "سلطة طازجة",
-        maTitle: "شلاظة طرية",
-        price: "MAD45",
-        description:
-          "生菜、黄瓜、番茄、西兰花、青椒、牛油果和水波蛋，淋上优质橄榄油，撒上海盐与黑胡椒，轻卡高纤。",
-        enDescription:
-          "Lettuce, cucumber, tomato, broccoli, green bell pepper, avocado, and poached egg, seasoned with olive oil, salt, and black pepper.",
-        frDescription:
-          "Laitue, concombre, tomate, brocoli, poivron vert, avocat et œuf poché, assaisonnés d'huile d'olive, sel et poivre.",
-        arDescription:
-          "خس، خيار، طماطم، بروكلي، فلفل أخضر، أفوكادو، وبيض مسلوق، متبلة بزيت الزيتون، الملح والفلفل الأسود.",
-        maDescription:
-          "خس، خيار، طماطم، بروكلي، فلفل أخضر، أفوكادو، وبيض مسلوق، متبلة بزيت الزيتون، الملح والفلفل الأسود.",
-        image:
-          "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-crevettes-orange",
-        title: "香橙大虾沙拉",
-        enTitle: "Orange Shrimp Salad",
-        frTitle: "Salade de Crevettes à l'Orange",
-        arTitle: "سلطة الروبيان بالبرتقال",
-        maTitle: "شلاظة كروفيت بالليمون",
-        price: "MAD55",
-        description:
-          "鲜美大虾配以清甜橙子、多汁番茄和牛油果，撒上少许黑胡椒，酸甜开胃，清新活力。",
-        enDescription:
-          "Fresh shrimp served with tomatoes, avocado, and orange, seasoned with a touch of black pepper.",
-        frDescription:
-          "Crevettes fraîches servies avec des tomates, avocat et orange, assaisonnées d'une touche de poivre noir.",
-        arDescription:
-          "روبيان طازج يقدم مع الطماطم، الأفوكادو، والبرتقال، متبل بلمسة من الفلفل الأسود.",
-        maDescription:
-          "روبيان طازج يقدم مع الطماطم، الأفوكادو، والبرتقال، متبل بلمسة من الفلفل الأسود.",
-        image:
-          "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-dumpling-soup",
-        title: "干饺 (大份)",
-        enTitle: "Dry Dumplings (Large)",
-        frTitle: "Raviolis (sans bouillon) (Grande Portion)",
-        arTitle: "زلابية جافة (حجم كبير)",
-        maTitle: "زلابية ناشفة (حجم كبير)",
-        price: "MAD90",
-        description: "手工牛肉馅饺子，干拌吃法，更能品尝牛肉原汁原味。",
-        enDescription:
-          "Handmade halal beef dumplings served dry, allowing you to taste the original flavor of the beef filling.",
-        frDescription:
-          "Raviolis faits maison au bœuf halal servis sans bouillon, pour savourer le goût original de la farce au bœuf.",
-        arDescription:
-          "زلابية مصنوعة يدوياً تقدم جافة، لتذوق النكهة الأصلية لحشوة اللحم.",
-        maDescription:
-          "زلابية مصنوعة يدوياً تقدم ناشفة، لتذوق النكهة الأصلية لحشوة اللحم.",
-        image:
-          "https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-dumpling-soup-small",
-        title: "干饺 (小份)",
-        enTitle: "Dry Dumplings (Small)",
-        frTitle: "Raviolis (sans bouillon) (Petite Portion)",
-        arTitle: "زلابية جافة (حجم صغير)",
-        maTitle: "زلابية ناشفة (حجم صغير)",
-        price: "MAD75",
-        description: "手工牛肉馅饺子，干拌吃法，小份精致美味。",
-        enDescription:
-          "Handmade halal beef dumplings served dry. (Small Portion)",
-        frDescription:
-          "Raviolis faits maison au bœuf halal servis sans bouillon. (Petite Portion)",
-        arDescription: "زلابية مصنوعة يدوياً تقدم جافة. (حجم صغير)",
-        maDescription: "زلابية مصنوعة يدوياً تقدم ناشفة. (حجم صغير)",
-        image:
-          "https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-pan-fried-dumplings",
-        title: "煎饺 (大份)",
-        enTitle: "Pan-Fried Dumplings (Large)",
-        frTitle: "Raviolis Grillés (Grande Portion)",
-        arTitle: "زلابية مقلية (حجم كبير)",
-        maTitle: "زلابية مقلية (حجم كبير)",
-        price: "MAD90",
-        description: "外皮金黄酥脆，馅料鲜嫩多汁，香气四溢，经典美味。",
-        enDescription:
-          "Crispy on the outside, juicy and tender on the inside, pan-fried to perfection.",
-        frDescription:
-          "Raviolis grillés à la poêle, croustillants à l'extérieur et juteux à l'intérieur.",
-        arDescription: "زلابية مقلية مقرمشة من الخارج وهشة ولذيذة من الداخل.",
-        maDescription: "زلابية مقلية مقرمشة من الخارج وهشة ولذيذة من الداخل.",
-        image:
-          "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80",
-      },
-      {
-        id: "main-pan-fried-dumplings-small",
-        title: "煎饺 (小份)",
-        enTitle: "Pan-Fried Dumplings (Small)",
-        frTitle: "Raviolis Grillés (Petite Portion)",
-        arTitle: "زلابية مقلية (حجم صغير)",
-        maTitle: "زلابية مقلية (حجم صغير)",
-        price: "MAD75",
-        description: "外皮金黄酥脆，馅料鲜嫩多汁，小份精致适量。",
-        enDescription:
-          "Crispy on the outside, juicy and tender on the inside. (Small Portion)",
-        frDescription:
-          "Raviolis grillés à la poêle, croustillants et juteux. (Petite Portion)",
-        arDescription: "زلابية مقلية مقرمشة من الخارج وهشة ولذيذة. (حجم صغير)",
-        maDescription: "زلابية مقلية مقرمشة من الخارج وهشة ولذيذة. (حجم صغير)",
-        image:
-          "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80",
-      },
-    ],
   },
 ];
 
@@ -1521,7 +1365,76 @@ export function mergeAndOrderCategories(
     "hp-new-shanghai-bok",
     "hp-spinach",
     "hp-new-achoy",
+    // 主食与饮品合并；拌饭、饺子只保留一个，其余改为可选加项
+    "main-poulet-teriyaki",
+    "main-filet-boeuf",
+    "main-boeuf-coreen",
+    "main-saucisses-grillees",
+    "main-secret-chinois",
+    "main-boeuf-coco-citron",
+    "main-boeuf-oignons-citron",
+    "main-beef-teriyaki-premium",
+    "main-dumpling-soup",
+    "main-dumpling-soup-small",
+    "main-pan-fried-dumplings",
+    "main-pan-fried-dumplings-small",
+    "main-dumpling",
   ]);
+
+  // 旧的「主食 & 沙拉」「饮品分类」合并为一个分类（云端旧数据迁移）
+  const LEGACY_MERGED_CAT_IDS = ["cat-staples", "all-drinks-menu"];
+  const MERGED_CAT_ID = "cat-main-drinks";
+  const migrateLegacyCategories = (cats: any[]) => {
+    if (!Array.isArray(cats)) return cats;
+    const legacy = cats.filter(
+      (c) => c && LEGACY_MERGED_CAT_IDS.includes(c.id),
+    );
+    if (legacy.length === 0) return cats;
+    const mergedItems = legacy.flatMap((c) => c.items || []);
+    const out: any[] = [];
+    let placed = false;
+    for (const c of cats) {
+      if (c && LEGACY_MERGED_CAT_IDS.includes(c.id)) {
+        if (!placed) {
+          out.push({
+            id: MERGED_CAT_ID,
+            name: "主食 & 饮品",
+            items: mergedItems,
+          });
+          placed = true;
+        }
+      } else {
+        out.push(c);
+      }
+    }
+    return out;
+  };
+  existingCats = migrateLegacyCategories(existingCats);
+
+  // 紫菜包饭 / 寿司：保留原菜品（含图片），基础价 MAD50，「大份」加价 25（小份为默认，不显示）
+  if (Array.isArray(existingCats)) {
+    const isKimbapTitle = (t: any) =>
+      typeof t === "string" && t.replace(/\s/g, "") === "紫菜包饭/寿司";
+    existingCats = existingCats.map((c) => ({
+      ...c,
+      items: (c.items || []).map((i: any) =>
+        isKimbapTitle(i?.title)
+          ? {
+              ...i,
+              price: "MAD50",
+              addons: [
+                {
+                  id: "kimbap-large",
+                  name: "大份",
+                  enName: "Large Portion",
+                  price: 25,
+                },
+              ],
+            }
+          : i,
+      ),
+    }));
+  }
 
   const deletedSet = new Set(
     (Array.isArray(deletedItemIds) ? deletedItemIds : [])

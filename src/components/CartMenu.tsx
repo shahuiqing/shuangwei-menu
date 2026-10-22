@@ -17,12 +17,12 @@ import { getLoc, Language } from "../utils/loc";
 import { isValidImageSrc } from "../utils/image";
 import { api } from "../api";
 import type { MenuCategory, ReceiptSettings } from "../types/menu";
+import { parseLineKey } from "../utils/cartLine";
 
 interface CartMenuProps {
   isOpen: boolean;
   onClose: () => void;
   cart: Record<string, number>;
-  cartAddons: Record<string, string[]>;
   updateCart: (id: string, delta: number) => void;
   clearCart: () => void;
   categories: MenuCategory[];
@@ -38,7 +38,6 @@ export default function CartMenu({
   isOpen,
   onClose,
   cart,
-  cartAddons,
   updateCart,
   clearCart,
   categories,
@@ -74,14 +73,15 @@ export default function CartMenu({
   const cartEntries = Object.entries(cart).filter(([_, qty]) => qty > 0);
 
   // Calculate total
-  const totalPrice = cartEntries.reduce((sum, [id, qty]) => {
-    const item = allItems.find((i) => i.id === id);
+  const totalPrice = cartEntries.reduce((sum, [lineKey, qty]) => {
+    const { dishId, addonIds } = parseLineKey(lineKey);
+    const item = allItems.find((i) => i.id === dishId);
     if (!item) return sum;
     // Extract first number from price string (e.g. "¥28 / 份" -> 28)
     const priceString = String(item.price || "0");
     const priceMatch = priceString.match(/\d+(\.\d+)?/);
     const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
-    const addonTotal = (cartAddons[id] || []).reduce((s, addonId) => {
+    const addonTotal = addonIds.reduce((s, addonId) => {
       const addon = (item.addons || []).find((a) => a.id === addonId);
       return s + (addon ? Number(addon.price) || 0 : 0);
     }, 0);
@@ -161,11 +161,12 @@ export default function CartMenu({
         orderNumber: "ORD-" + Math.floor(Math.random() * 1000000),
         timestamp: new Date().toISOString(),
         deviceInfo: deviceName,
-        items: cartEntries.map(([id, qty]) => {
+        items: cartEntries.map(([lineKey, qty]) => {
+          const { dishId: id, addonIds } = parseLineKey(lineKey);
           const item = allItems.find((i) => i.id === id);
           const priceString = String(item?.price || "0");
           const priceMatch = priceString.match(/\d+(\.\d+)?/);
-          const addons = (cartAddons[id] || [])
+          const addons = addonIds
             .map((addonId) =>
               (item?.addons || []).find((a) => a.id === addonId),
             )
@@ -201,13 +202,14 @@ export default function CartMenu({
       let stockDeducted = false;
       const updatedCategories = categories.map((cat: any) => {
         const updatedItems = (cat.items || []).map((item: any) => {
-          const orderItem = orderData.items.find(
-            (oi: any) => oi.id === item.id,
-          );
-          if (orderItem && item.stock !== undefined && item.stock !== null) {
+          // 同一菜品可能有多条不同加项的行，库存按合计扣减
+          const orderQty = orderData.items
+            .filter((oi: any) => oi.id === item.id)
+            .reduce((s: number, oi: any) => s + Number(oi.quantity || 0), 0);
+          if (orderQty > 0 && item.stock !== undefined && item.stock !== null) {
             const currentStock = Number(item.stock);
             if (!isNaN(currentStock)) {
-              const newStock = Math.max(0, currentStock - orderItem.quantity);
+              const newStock = Math.max(0, currentStock - orderQty);
               stockDeducted = true;
               return {
                 ...item,
@@ -420,12 +422,13 @@ export default function CartMenu({
                   </p>
                 </div>
               ) : (
-                cartEntries.map(([id, qty]) => {
-                  const item = allItems.find((i) => i.id === id);
+                cartEntries.map(([lineKey, qty]) => {
+                  const { dishId, addonIds } = parseLineKey(lineKey);
+                  const item = allItems.find((i) => i.id === dishId);
                   if (!item) return null;
 
                   return (
-                    <div key={id} className="flex gap-4 items-center">
+                    <div key={lineKey} className="flex gap-4 items-center">
                       {isValidImageSrc(item.image) ? (
                         <img
                           src={item.image}
@@ -444,10 +447,10 @@ export default function CartMenu({
                         <p className="text-xs text-orange-500 mt-1">
                           {item.price}
                         </p>
-                        {(cartAddons[id] || []).length > 0 && (
+                        {addonIds.length > 0 && (
                           <p className="text-[10px] text-zinc-400 mt-0.5 truncate">
                             +{" "}
-                            {(cartAddons[id] || [])
+                            {addonIds
                               .map((addonId) =>
                                 (item.addons || []).find(
                                   (a) => a.id === addonId,
@@ -474,7 +477,7 @@ export default function CartMenu({
                       </div>
                       <div className="flex items-center gap-3 bg-zinc-900 rounded-lg p-1 border border-zinc-800">
                         <button
-                          onClick={() => updateCart(id, -1)}
+                          onClick={() => updateCart(lineKey, -1)}
                           className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
                         >
                           <Minus size={14} />
@@ -485,7 +488,7 @@ export default function CartMenu({
                         <button
                           onClick={() => {
                             if (!item.isSoldOut) {
-                              updateCart(id, 1);
+                              updateCart(lineKey, 1);
                             }
                           }}
                           disabled={item.isSoldOut}
@@ -506,7 +509,9 @@ export default function CartMenu({
                 // Extract currency symbol dynamically from cart items or all items
                 let currencySymbol = "¥";
                 const firstItemWithSymbol = cartEntries
-                  .map(([id]) => allItems.find((i) => i.id === id))
+                  .map(([lineKey]) =>
+                    allItems.find((i) => i.id === parseLineKey(lineKey).dishId),
+                  )
                   .find(
                     (i) => i && i.price && /[^\d.\s]/.test(String(i.price)),
                   );

@@ -52,6 +52,7 @@ import {
 import type { MenuCategory, Promotion, MenuItem } from "./types/menu";
 
 import { getLoc, getSubLoc, Language } from "./utils/loc";
+import { makeLineKey, parseLineKey } from "./utils/cartLine";
 
 const AUTO_PLAY_INTERVAL = 12000; // 12 seconds per category page
 
@@ -1177,17 +1178,17 @@ export default function App() {
   }, [currentIndex, soundEnabled]);
   const [cart, setCart] = useState<Record<string, number>>(() => {
     try {
-      const saved = safeGetItem("cart");
-      return saved ? JSON.parse(saved) || {} : {};
-    } catch {
-      return {};
-    }
-  });
-
-  const [cartAddons, setCartAddons] = useState<Record<string, string[]>>(() => {
-    try {
-      const saved = safeGetItem("cartAddons");
-      return saved ? JSON.parse(saved) || {} : {};
+      const saved: Record<string, number> =
+        JSON.parse(safeGetItem("cart") || "null") || {};
+      // 旧版本的加项存放在 cartAddons 中，迁移为行键
+      const legacyAddons: Record<string, string[]> =
+        JSON.parse(safeGetItem("cartAddons") || "null") || {};
+      const out: Record<string, number> = {};
+      for (const [k, q] of Object.entries(saved)) {
+        const key = makeLineKey(k, legacyAddons[k] || []);
+        out[key] = (out[key] || 0) + Number(q);
+      }
+      return out;
     } catch {
       return {};
     }
@@ -1229,12 +1230,11 @@ export default function App() {
 
   useEffect(() => {
     safeSetItem("cart", JSON.stringify(cart));
-    safeSetItem("cartAddons", JSON.stringify(cartAddons));
     if (!isInternalCartUpdateRef.current && scanSession?.tableNo) {
       api.broadcastCart(scanSession.tableNo, cart);
     }
     isInternalCartUpdateRef.current = false;
-  }, [cart, cartAddons, scanSession]);
+  }, [cart, scanSession]);
 
   // Purge deleted dishes from local cart whenever categories or deletedItemIds change
   useEffect(() => {
@@ -1254,8 +1254,9 @@ export default function App() {
     const newCart: Record<string, number> = {};
 
     Object.entries(cart).forEach(([itemId, qty]) => {
-      const normId = String(itemId).trim().toLowerCase();
-      if (activeItemIds.has(itemId) && !deletedSet.has(normId)) {
+      const dishId = parseLineKey(itemId).dishId;
+      const normId = String(dishId).trim().toLowerCase();
+      if (activeItemIds.has(dishId) && !deletedSet.has(normId)) {
         newCart[itemId] = Number(qty);
       } else {
         cartChanged = true;
@@ -1284,7 +1285,8 @@ export default function App() {
     }
   };
 
-  const updateCart = (id: string, delta: number) => {
+  const updateCart = (lineKey: string, delta: number) => {
+    const id = parseLineKey(lineKey).dishId;
     setCart((prev) => {
       if (delta > 0) {
         // Find item in categories to check its stock
@@ -1311,7 +1313,10 @@ export default function App() {
 
           if (itemObj.stock !== undefined && itemObj.stock !== null) {
             const maxStock = Number(itemObj.stock);
-            const currentQty = prev[id] || 0;
+            const currentQty = Object.entries(prev).reduce(
+              (s, [k, q]) => (parseLineKey(k).dishId === id ? s + q : s),
+              0,
+            );
             if (!isNaN(maxStock) && currentQty + delta > maxStock) {
               setTimeout(() => {
                 alert(
@@ -1337,13 +1342,20 @@ export default function App() {
 
   const clearCart = () => {
     setCart({});
-    setCartAddons({});
   };
+
+  // 同一菜品的购物车数量（含所有加项组合的行）
+  const dishQty = (dishId: string) =>
+    Object.entries(cart).reduce(
+      (s, [k, q]) => (parseLineKey(k).dishId === dishId ? s + Number(q) : s),
+      0,
+    );
 
   const tryAddToCart = (item: MenuItem) => {
     if (item.isSoldOut) return;
     if (item.addons && item.addons.length > 0) {
-      setAddonTempSelection(cartAddons[item.id] || []);
+      // 每次点击都是一次新的选择，选择结果作为独立的购物车行
+      setAddonTempSelection([]);
       setPendingAddonDish(item);
       return;
     }
@@ -1356,30 +1368,10 @@ export default function App() {
     );
   };
 
-  const toggleCartAddon = (dishId: string, addonId: string) => {
-    setCartAddons((prev) => {
-      const cur = prev[dishId] || [];
-      const next = cur.includes(addonId)
-        ? cur.filter((x) => x !== addonId)
-        : [...cur, addonId];
-      const { [dishId]: _, ...rest } = prev;
-      return next.length > 0 ? { ...prev, [dishId]: next } : rest;
-    });
-  };
-
   const confirmAddons = () => {
     if (!pendingAddonDish) return;
-    const dishId = pendingAddonDish.id;
-    const selectedIds = addonTempSelection;
-    if (selectedIds.length > 0) {
-      setCartAddons((prev) => ({ ...prev, [dishId]: selectedIds }));
-    } else {
-      setCartAddons((prev) => {
-        const { [dishId]: _, ...rest } = prev;
-        return rest;
-      });
-    }
-    updateCart(dishId, 1);
+    const lineKey = makeLineKey(pendingAddonDish.id, addonTempSelection);
+    updateCart(lineKey, 1);
     setPendingAddonDish(null);
   };
 
@@ -2427,7 +2419,7 @@ export default function App() {
                         }
                       >
                         {(isAdminAuthed || isDeviceAuthed || scanSession) &&
-                          (cart[item.id] ? (
+                          (!item.addons?.length && cart[item.id] ? (
                             <div
                               className={
                                 layoutStyle === "compact"
@@ -2488,6 +2480,12 @@ export default function App() {
                               }
                             >
                               <ShoppingBag size={18} />
+                              {!!item.addons?.length &&
+                                dishQty(item.id) > 0 && (
+                                  <span className="min-w-5 h-5 px-1.5 rounded-full bg-orange-600 text-white text-[10px] flex items-center justify-center">
+                                    {dishQty(item.id)}
+                                  </span>
+                                )}
                               {language === "zh"
                                 ? "加入购物车"
                                 : language === "fr"
@@ -2632,50 +2630,6 @@ export default function App() {
                     {getLoc(selectedDish, language, "desc")}
                   </div>
 
-                  {selectedDish.addons && selectedDish.addons.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-sm font-semibold text-zinc-300 mb-2">
-                        {language === "zh"
-                          ? "选择配菜（可多选）："
-                          : "Select add-ons:"}
-                      </p>
-                      <div className="space-y-2">
-                        {selectedDish.addons.map((addon) => {
-                          const selected = (
-                            cartAddons[selectedDish.id] || []
-                          ).includes(addon.id);
-                          return (
-                            <label
-                              key={addon.id}
-                              className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
-                                selected
-                                  ? "bg-orange-500/10 border-orange-500/50"
-                                  : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
-                              }`}
-                            >
-                              <span className="flex items-center gap-2.5">
-                                <input
-                                  type="checkbox"
-                                  checked={selected}
-                                  onChange={() =>
-                                    toggleCartAddon(selectedDish.id, addon.id)
-                                  }
-                                  className="w-4 h-4 accent-orange-500"
-                                />
-                                <span className="text-sm text-zinc-200">
-                                  {getLoc(addon, language, "name")}
-                                </span>
-                              </span>
-                              <span className="text-sm font-semibold text-orange-400">
-                                {addon.price > 0 ? `+${addon.price}` : "免费"}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
                   <div className="mt-auto pt-6 w-full flex-col gap-3 hidden md:flex">
                     {/* Multilingual Preview Section (Optional, nice to have for admin/gastronomy context) */}
                     <details className="text-xs text-zinc-500 mt-2 bg-zinc-950 rounded-xl border border-zinc-800 p-3 group">
@@ -2746,7 +2700,7 @@ export default function App() {
                   {/* Mobile Fixed Bottom Action Bar */}
                   {(isAdminAuthed || isDeviceAuthed || scanSession) && (
                     <div className="sticky bottom-0 mt-auto -mx-6 sm:-mx-8 -mb-6 sm:-mb-8 p-4 bg-zinc-900/95 backdrop-blur-md border-t border-zinc-800 md:relative md:border-t-0 md:bg-transparent md:mx-0 md:mb-0 md:p-0 md:mt-auto z-20">
-                      {cart[selectedDish.id] ? (
+                      {!selectedDish.addons?.length && cart[selectedDish.id] ? (
                         <div className="flex items-center gap-3 bg-zinc-800/80 rounded-xl p-1.5 border border-zinc-700 w-full justify-between">
                           <button
                             onClick={(e) => {
@@ -2792,11 +2746,16 @@ export default function App() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            updateCart(selectedDish.id, 1);
+                            tryAddToCart(selectedDish);
                           }}
                           className="w-full h-12 md:h-14 flex items-center justify-center gap-2 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-base font-bold shadow-lg transition-colors"
                         >
                           <ShoppingBag size={20} />
+                          {dishQty(selectedDish.id) > 0 && (
+                            <span className="ml-1 min-w-6 h-6 px-1.5 rounded-full bg-white/20 text-sm flex items-center justify-center">
+                              {dishQty(selectedDish.id)}
+                            </span>
+                          )}
                           {language === "zh"
                             ? "加入购物车"
                             : language === "fr"
@@ -2905,7 +2864,6 @@ export default function App() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cart={cart}
-        cartAddons={cartAddons}
         updateCart={updateCart}
         clearCart={clearCart}
         categories={categories}
@@ -2970,7 +2928,7 @@ export default function App() {
                         {getLoc(addon, language, "name")}
                       </span>
                       <span className="text-sm font-semibold text-orange-400">
-                        {addon.price > 0 ? `+${addon.price}` : "免费"}
+                        {addon.price > 0 ? `+${addon.price}` : ""}
                       </span>
                     </button>
                   );
