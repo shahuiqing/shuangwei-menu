@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { rateLimit } from "../../server/middleware/rateLimit";
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  rateLimit,
+  resolveClientIp,
+  __resetRateLimitForTests,
+} from "../../server/middleware/rateLimit";
 
 function mockRes() {
   const state = { status: 0, body: null as any };
@@ -15,6 +19,11 @@ function mockRes() {
   };
   return { res, state };
 }
+
+afterEach(() => {
+  __resetRateLimitForTests();
+  delete process.env.TRUST_PROXY;
+});
 
 describe("rateLimit middleware", () => {
   it("allows up to max requests then returns 429", () => {
@@ -56,26 +65,64 @@ describe("rateLimit middleware", () => {
     mw({ ip, path: p1, headers: {} } as any, blocked.res, next);
     expect(blocked.state.status).toBe(429);
   });
+});
 
-  it("falls back to x-forwarded-for when req.ip is absent", () => {
+describe("resolveClientIp —— x-forwarded-for 防伪造（FIX_PLAN #11）", () => {
+  it("默认忽略 x-forwarded-for，只认 TCP 对端 IP", () => {
+    const ip = resolveClientIp({
+      ip: "1.2.3.4",
+      headers: { "x-forwarded-for": "9.9.9.9" },
+    } as any);
+    expect(ip).toBe("1.2.3.4");
+  });
+
+  it("伪造 x-forwarded-for 无法绕过限流（同一 TCP 源仍被拦）", () => {
     const mw = rateLimit(60_000, 1);
-    const path = "/xf-" + Math.random();
+    const path = "/forge-" + Math.random();
     let nextCount = 0;
     const next = () => {
       nextCount++;
     };
+    // 第 1 次：真实 IP 1.1.1.1，带一个伪造的 XFF
     mw(
-      { headers: { "x-forwarded-for": "9.9.9.9" }, path } as any,
+      { ip: "1.1.1.1", headers: { "x-forwarded-for": "6.6.6.6" }, path } as any,
       mockRes().res,
       next,
     );
+    // 第 2 次：同一真实 IP，但换一个伪造 XFF，试图绕过
     const blocked = mockRes();
     mw(
-      { headers: { "x-forwarded-for": "9.9.9.9" }, path } as any,
+      { ip: "1.1.1.1", headers: { "x-forwarded-for": "7.7.7.7" }, path } as any,
       blocked.res,
       next,
     );
     expect(nextCount).toBe(1);
     expect(blocked.state.status).toBe(429);
+  });
+
+  it("未配置 TRUST_PROXY 时 req.ip 缺失则归入 unknown，不采信 XFF", () => {
+    const ip = resolveClientIp({
+      headers: { "x-forwarded-for": "9.9.9.9" },
+    } as any);
+    expect(ip).toBe("unknown");
+  });
+
+  it("配置 TRUST_PROXY=true 时取 XFF 最右侧地址（不可伪造的一端）", () => {
+    process.env.TRUST_PROXY = "true";
+    const ip = resolveClientIp({
+      headers: { "x-forwarded-for": "1.1.1.1, 2.2.2.2, 203.0.113.7" },
+    } as any);
+    expect(ip).toBe("203.0.113.7");
+  });
+
+  it("配置 TRUST_PROXY=true 时优先使用 cf-connecting-ip", () => {
+    process.env.TRUST_PROXY = "true";
+    const ip = resolveClientIp({
+      headers: {
+        "cf-connecting-ip": "198.51.100.5",
+        "x-forwarded-for": "1.1.1.1",
+      },
+    } as any);
+    expect(ip).toBe("198.51.100.5");
   });
 });

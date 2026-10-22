@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
+import { allowRequest, tooManyRequests } from "../../_lib/helpers";
 
 interface Env {
   SUPABASE_URL?: string;
@@ -14,11 +15,16 @@ interface Env {
  * 校验老板端密码：settings.ownerPasswordHash (bcrypt)
  * 回退：ADMIN_SECRET（若未配置 owner 密码哈希）
  * 与顾客端管理员密码分离。
+ *
+ * 安全：加 IP 限流（FIX_PLAN #6）—— 此前该端点可被无限次暴力破解。
  */
 export async function onRequest(context: {
   request: Request;
   env: Env;
 }): Promise<Response> {
+  if (!allowRequest(context.request, "auth-verify-owner", 60_000, 10)) {
+    return tooManyRequests(60);
+  }
   try {
     const { password } = await context.request.json().catch(() => ({}));
     if (!password) {

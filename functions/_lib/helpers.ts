@@ -30,6 +30,82 @@ export function checkAdmin(request: Request, env: EdgeEnv): boolean {
   return false;
 }
 
+/**
+ * 取客户端 IP（用于限流）。
+ * 优先边缘平台注入的不可伪造头 cf-connecting-ip；
+ * 其次取 x-forwarded-for **最右侧**地址（最近一跳可信代理写入，客户端无法伪造）；
+ * 都取不到时返回 unknown（共享桶，宁可误伤不放开）。
+ */
+export function clientIp(request: Request): string {
+  const cf = request.headers.get("cf-connecting-ip")?.trim();
+  if (cf) return cf;
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) {
+    const parts = xff
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const rightmost = parts[parts.length - 1];
+    if (rightmost) return rightmost;
+  }
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+  return "unknown";
+}
+
+/**
+ * 轻量内存限流器（FIX_PLAN #6：边缘鉴权端点此前完全无限流）。
+ *
+ * 说明：边缘函数实例可能被回收/多实例并存，内存桶只在单实例内精确；
+ * 但足以把"无限暴力破解"降级为"有限次尝试"，且不引入 KV 读写的延迟与配额消耗。
+ * 生产如需全局精确限流，可在 EdgeOne 控制台叠加 WAF 速率限制。
+ */
+const rateBuckets = new Map<string, number[]>();
+
+/**
+ * @returns true = 允许放行；false = 应返回 429
+ */
+export function allowRequest(
+  request: Request,
+  scope: string,
+  windowMs: number,
+  max: number,
+): boolean {
+  const now = Date.now();
+  const key = `${scope}:${clientIp(request)}`;
+
+  // 顺手清理过期桶，避免内存无界增长
+  if (rateBuckets.size > 5000) {
+    for (const [k, hits] of rateBuckets) {
+      if (hits.every((t) => now - t >= windowMs)) rateBuckets.delete(k);
+    }
+  }
+
+  const hits = (rateBuckets.get(key) || []).filter((t) => now - t < windowMs);
+  hits.push(now);
+  rateBuckets.set(key, hits);
+  return hits.length <= max;
+}
+
+/** 仅供测试：清空边缘限流桶 */
+export function __resetEdgeRateLimitForTests() {
+  rateBuckets.clear();
+}
+
+/** 统一的 429 响应 */
+export function tooManyRequests(retryAfterSec = 60): Response {
+  return new Response(
+    JSON.stringify({ ok: false, error: "too many requests" }),
+    {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(retryAfterSec),
+      },
+    },
+  );
+}
+
 /** EdgeOne KV：优先原生绑定 env.my_kv，回退 pages-blob store */
 export async function kvWrite(
   env: EdgeEnv,

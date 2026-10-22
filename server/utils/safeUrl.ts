@@ -1,7 +1,8 @@
 /**
  * P1-10 SSRF 校验：打印 Worker 外发地址白名单。
  * 仅允许 https，且拒绝本地/环回/私网/链路本地/云元数据等内网目标。
- * 可选 PRINT_WORKER_ALLOWLIST=host1,host2；设置后仅放行白名单主机或 *.workers.dev。
+ * 可选 PRINT_WORKER_ALLOWLIST=host1,host2；设置后**仅**放行白名单主机。
+ * 注意：不再对 *.workers.dev 做无条件放行——否则白名单形同虚设。
  */
 export function isSafePrintUrl(u: string): boolean {
   let url: URL;
@@ -47,8 +48,7 @@ export function isSafePrintUrl(u: string): boolean {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  if (allow.length && !allow.includes(host) && !host.endsWith(".workers.dev"))
-    return false;
+  if (allow.length && !allow.includes(host)) return false;
 
   return true;
 }

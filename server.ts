@@ -19,6 +19,14 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// FIX_PLAN #11：显式声明信任代理层。
+// 默认不信任任何代理（Express 的 req.ip 即 TCP 对端，XFF 伪造无效）；
+// 部署在可信反代/边缘之后时，设置 TRUST_PROXY=1 才会采信 x-forwarded-for。
+app.set(
+  "trust proxy",
+  (process.env.TRUST_PROXY || "").trim().toLowerCase() === "true" ? 1 : false,
+);
+
 // P1-7 CORS 白名单 - B1 修复：生产未配则默认拒绝
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || "")
   .split(",")
@@ -187,33 +195,35 @@ app.post("/api/orders", rateLimit(60_000, 20), async (req, res) => {
     orders.push(payload);
     writeOrdersSafely(LOCAL_ORDERS_FILE, orders);
 
-    // Send the order to external worker (可配置) - P1-10 SSRF 校验
-    const printWorkerUrl =
-      process.env.PRINT_WORKER_URL ||
-      "https://dayin.shahuiqing2024.workers.dev/";
+    // Send the order to external worker (必须显式配置) - P1-10 SSRF 校验
+    // 安全：不再提供默认外发地址。未配置 PRINT_WORKER_URL 时仅记录日志、不外发，
+    // 避免在店主不知情的情况下把订单（含顾客信息）POST 到第三方。
+    const printWorkerUrl = (process.env.PRINT_WORKER_URL || "").trim();
     const printWorkerToken = process.env.PRINT_WORKER_TOKEN;
-    if (printWorkerUrl) {
-      if (!isSafePrintUrl(printWorkerUrl)) {
-        console.warn(
-          `[security] blocked unsafe PRINT_WORKER_URL: ${printWorkerUrl}`,
+    if (!printWorkerUrl) {
+      console.log(
+        "[print] PRINT_WORKER_URL 未配置，跳过外部打印外发（订单已本地保存）",
+      );
+    } else if (!isSafePrintUrl(printWorkerUrl)) {
+      console.warn(
+        `[security] blocked unsafe PRINT_WORKER_URL: ${printWorkerUrl}`,
+      );
+    } else {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (printWorkerToken)
+          headers["Authorization"] = `Bearer ${printWorkerToken}`;
+        fetch(printWorkerUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        }).catch((err) =>
+          console.error("Error sending to external worker:", err),
         );
-      } else {
-        try {
-          const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-          };
-          if (printWorkerToken)
-            headers["Authorization"] = `Bearer ${printWorkerToken}`;
-          fetch(printWorkerUrl, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload),
-          }).catch((err) =>
-            console.error("Error sending to external worker:", err),
-          );
-        } catch (e) {
-          console.error("Failed to initiate external worker request", e);
-        }
+      } catch (e) {
+        console.error("Failed to initiate external worker request", e);
       }
     }
 
@@ -228,18 +238,23 @@ app.post("/api/orders", rateLimit(60_000, 20), async (req, res) => {
   }
 });
 
-// Webhook for receiving external orders - 需配置 PRINT_WORKER_TOKEN 或 ADMIN_SECRET 二选一
+// Webhook for receiving external orders - 必须配置专用 token（fail-closed）
+// 安全：此前未配置 token 时端点对公网完全开放（任何人可注入订单）。
+// 现在未配置即禁用；且优先只认 PRINT_WORKER_TOKEN，不再把 ADMIN_SECRET 当万能凭据。
 app.post("/api/webhooks/orders", rateLimit(60_000, 30), async (req, res) => {
-  const expectedToken =
-    process.env.PRINT_WORKER_TOKEN || process.env.ADMIN_SECRET;
-  if (expectedToken) {
-    const got =
-      (req.headers["x-webhook-token"] as string) ||
-      (req.headers["authorization"] as string)?.replace("Bearer ", "") ||
-      (req.body as any)?.token;
-    if (got !== expectedToken) {
-      return res.status(401).json({ error: "Unauthorized webhook token" });
-    }
+  const expectedToken = (process.env.PRINT_WORKER_TOKEN || "").trim();
+  if (!expectedToken) {
+    return res.status(503).json({
+      error: "webhook disabled: PRINT_WORKER_TOKEN not configured",
+      code: "E_WEBHOOK_DISABLED",
+    });
+  }
+  const got =
+    (req.headers["x-webhook-token"] as string) ||
+    (req.headers["authorization"] as string)?.replace("Bearer ", "") ||
+    (req.body as any)?.token;
+  if (got !== expectedToken) {
+    return res.status(401).json({ error: "Unauthorized webhook token" });
   }
   try {
     const payload = req.body;

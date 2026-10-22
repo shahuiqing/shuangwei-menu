@@ -45,10 +45,11 @@ describe("isSafePrintUrl (SSRF guard)", () => {
     expect(isSafePrintUrl("https://[::ffff:127.0.0.1]/")).toBe(false);
   });
 
-  it("enforces the allowlist when configured (but always allows workers.dev)", () => {
+  it("enforces the allowlist strictly (workers.dev is NOT auto-allowed)", () => {
     process.env.PRINT_WORKER_ALLOWLIST = "print.example.com";
     expect(isSafePrintUrl("https://print.example.com/x")).toBe(true);
     expect(isSafePrintUrl("https://other.example.com/x")).toBe(false);
-    expect(isSafePrintUrl("https://dayin.example.workers.dev/")).toBe(true);
+    // 回归：曾无条件放行 *.workers.dev，使白名单形同虚设
+    expect(isSafePrintUrl("https://dayin.example.workers.dev/")).toBe(false);
   });
 });

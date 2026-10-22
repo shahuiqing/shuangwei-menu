@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
+import { allowRequest, tooManyRequests } from "../../_lib/helpers";
 
 interface Env {
   SUPABASE_URL?: string;
@@ -13,13 +14,18 @@ interface Env {
  * EdgeOne Pages Function: POST /api/auth/verify
  * 校验管理员密码：
  * 1) Supabase settings.adminPasswordHash (bcrypt)
- * 2) 兼容明文 adminPassword
- * 3) ADMIN_SECRET 环境变量
+ * 2) ADMIN_SECRET 环境变量
+ *
+ * 安全：加 IP 限流（FIX_PLAN #6）—— 此前该端点可被无限次暴力破解。
  */
 export async function onRequest(context: {
   request: Request;
   env: Env;
 }): Promise<Response> {
+  // 限流：同一 IP 每 60 秒最多 10 次尝试
+  if (!allowRequest(context.request, "auth-verify", 60_000, 10)) {
+    return tooManyRequests(60);
+  }
   try {
     const { password } = await context.request.json().catch(() => ({}));
     if (!password) {
