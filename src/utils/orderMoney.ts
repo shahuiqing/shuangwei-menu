@@ -253,6 +253,12 @@ export function mergeOrderItems(items: unknown): OrderItem[] {
       merged.push(item);
     } else {
       const prev = merged[pos];
+      // noUncheckedIndexedAccess：索引访问可能为 undefined，需显式收窄
+      if (!prev) {
+        index.set(key, merged.length);
+        merged.push(item);
+        continue;
+      }
       const quantity = round2(prev.quantity + item.quantity);
       merged[pos] = {
         ...prev,
