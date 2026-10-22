@@ -31,7 +31,10 @@ import {
 import { QRCodeCanvas } from "qrcode.react";
 import { getOptimizedImageUrl, isValidImageSrc } from "./utils/image";
 import { checkpointService } from "./services/checkpoint";
-import { isAdminAuthed as readAdminAuthed } from "./utils/adminAuth";
+import {
+  isAdminAuthedSync,
+  isAdminAuthed as verifyAdminAuthed,
+} from "./utils/adminAuth";
 import { lazy, Suspense } from "react";
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 import CartMenu from "./components/CartMenu";
@@ -1179,7 +1182,7 @@ export default function App() {
     return "fr"; // 未匹配默认法语（摩洛哥常用，想改默认告诉我）
   });
   const [showSplash, setShowSplash] = useState(true);
-  const [isAdminAuthed, setIsAdminAuthed] = useState(() => readAdminAuthed());
+  const [isAdminAuthed, setIsAdminAuthed] = useState(() => isAdminAuthedSync());
   const [isDeviceAuthed, setIsDeviceAuthed] = useState(() => {
     const savedToken = safeGetItem("deviceAuthToken");
     const expiry = safeGetItem("deviceAuthTokenExpiry");
@@ -1188,6 +1191,20 @@ export default function App() {
   const [isWaiterLoginOpen, setIsWaiterLoginOpen] = useState(false);
   const [waiterPasswordInput, setWaiterPasswordInput] = useState("");
   const [waiterLoginError, setWaiterLoginError] = useState("");
+
+  // 异步重验 admin session：isAdminAuthedSync 只看时间戳（乐观），
+  // 这里用 HMAC 校验拦截控制台伪造的 token（P1-6）
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const ok = await verifyAdminAuthed();
+      if (active && ok !== isAdminAuthed) setIsAdminAuthed(ok);
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleWaiterLogin = async (e: FormEvent) => {
     e.preventDefault();

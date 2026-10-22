@@ -663,7 +663,7 @@ export default function AdminPanel({
     }
     await saveAdminPassword(resetPassword);
     if (setAdminPassword) setAdminPassword(resetPassword);
-    markAdminAuthed();
+    await markAdminAuthed();
     setIsAuthed(true);
     setResetPassword("");
     setIsResetMode(false);
@@ -692,7 +692,7 @@ export default function AdminPanel({
     // 本地密码校验，不依赖数据库（数据库挂了也能登录）
     const ok = await verifyAdminPassword(password);
     if (ok) {
-      markAdminAuthed();
+      await markAdminAuthed();
       setIsAuthed(true);
       if (setAdminPassword) setAdminPassword(password);
       return;
@@ -708,7 +708,7 @@ export default function AdminPanel({
     }
     await saveAdminPassword(setupPassword);
     if (setAdminPassword) setAdminPassword(setupPassword);
-    markAdminAuthed();
+    await markAdminAuthed();
     setIsAuthed(true);
     setSetupPassword("");
   };
