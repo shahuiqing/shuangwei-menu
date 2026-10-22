@@ -3,6 +3,17 @@ import { renameBom } from "./inventory";
 
 /* ============ 类型（与顾客端 settings.categories 对齐） ============ */
 
+/** 配菜/口味加价定义（与顾客端 src/types/menu.ts 的 MenuItemAddon 同构） */
+export interface MenuItemAddon {
+  id: string;
+  name: string;
+  enName?: string;
+  frName?: string;
+  arName?: string;
+  maName?: string;
+  price: number; // 0 = 免费
+}
+
 export interface MenuItem {
   id: string;
   title: string;
@@ -16,6 +27,8 @@ export interface MenuItem {
   allergens?: string[];
   stock?: number | string | null; // null/空 = 不限
   isSoldOut?: boolean;
+  /** 配菜/口味：加价规则，顾客端下单时快照到订单行 addons */
+  addons?: MenuItemAddon[];
 }
 
 export interface MenuCategory {
@@ -27,11 +40,12 @@ export interface MenuCategory {
 export const genId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
-/** 从 "MAD75" / "75" 中取数字 */
+/** 从 "MAD75" / "75" 中取数字（支持小数，如 "12.5"） */
 export function parsePrice(v: unknown): number {
-  if (typeof v === "number") return v;
-  const m = String(v ?? "").match(/[\d.]+/);
-  return m ? Number(m[0]) : 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const m = String(v ?? "").match(/\d+(?:\.\d+)?/);
+  const n = m ? Number(m[0]) : 0;
+  return Number.isFinite(n) ? n : 0;
 }
 
 /** 保留原有价签货币前缀（若有） */

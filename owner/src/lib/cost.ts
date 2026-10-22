@@ -6,6 +6,7 @@ import {
   within,
   isCompleted,
   isCancelled,
+  lineRevenue,
   type Bounds,
   type MatrixQuad,
 } from "./analytics";
@@ -88,6 +89,7 @@ export function computeCostReport(
   boms: RecipeBom[],
   inventory: InventoryItem[],
   b: Bounds,
+  menuAddonMap?: Map<string, any[]>,
 ): CostReport {
   const dishCost = buildDishCostMap(boms, inventory);
   const orders = allOrders.filter((o) => within(o, b) && !isCancelled(o));
@@ -106,7 +108,8 @@ export function computeCostReport(
     orderItems(o).forEach((it) => {
       const name = itemName(it);
       const qty = itemQty(it);
-      const unitRev = num(it?.price) * qty;
+      // 菜品营收含配菜加价（与结账单行小计一致），否则毛利会被低估
+      const lineRev = lineRevenue(it, menuAddonMap);
       const unitCost = (dishCost.get(name) || 0) * qty;
       const e =
         dishMap.get(name) ||
@@ -120,7 +123,7 @@ export function computeCostReport(
           hasCost: dishCost.has(name),
         } as DishMargin);
       e.qty += qty;
-      e.revenue += unitRev;
+      e.revenue += lineRev;
       e.cost += unitCost;
       dishMap.set(name, e);
     });

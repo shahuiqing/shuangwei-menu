@@ -262,6 +262,97 @@ export async function dishStats(
   }));
 }
 
+/* ============ 含配菜加价的菜品营收（服务端 RPC 口径不含 addons） ============ */
+
+export interface DishRevenue {
+  name: string;
+  qty: number;
+  /** 菜品营收，含配菜加价 */
+  revenue: number;
+  /** 其中配菜加价部分 */
+  addonRevenue?: number;
+}
+
+/**
+ * 直接从订单行聚合菜品营收，口径与结账单逐行小计一致：
+ * 行金额 =（菜品单价 + Σ 配菜单价）× 数量，配菜单价取订单行 addons 快照。
+ *
+ * 为什么不用 owner_dish_stats：该 RPC 只按 i->>'price' 计价，丢了配菜加价，
+ * 也没有暴露 addons 快照。这里按区间分页拉订单（只取需要的列），
+ * 失败/未部署时返回 null，调用方回退 RPC 结果并在界面上标注口径。
+ */
+export async function dishRevenueWithAddons(
+  start: string,
+  end: string,
+  pageSize = 1000,
+  maxRows = 20000,
+): Promise<DishRevenue[] | null> {
+  if (!supabase) return null;
+  const map = new Map<string, DishRevenue>();
+  let offset = 0;
+  let fetched = 0;
+  while (fetched < maxRows) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("items,orderTag,status,created_at")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) {
+      console.warn("[owner] dishRevenueWithAddons:", error.message);
+      return null;
+    }
+    const rows = data || [];
+    for (const o of rows) {
+      // 与 RPC 相同的营收过滤：退菜/赠送/员工餐/试菜不计
+      if (
+        ["refund", "gift", "staff", "trial"].includes(
+          String((o as any)?.orderTag || "normal"),
+        )
+      ) {
+        continue;
+      }
+      for (const it of Array.isArray((o as any)?.items)
+        ? (o as any).items
+        : []) {
+        const name = String(it?.name || it?.title || "未知");
+        const qty = Number(it?.quantity ?? it?.count ?? 1) || 0;
+        const addons = Array.isArray(it?.addons) ? it.addons : [];
+        const addonPerUnit = addons.reduce(
+          (s: number, a: any) => s + (Number(a?.price) || 0),
+          0,
+        );
+        const line = (Number(it?.price) || 0) * qty;
+        const addon = addonPerUnit * qty;
+        const e = map.get(name) || {
+          name,
+          qty: 0,
+          revenue: 0,
+          addonRevenue: 0,
+        };
+        e.qty += qty;
+        e.revenue += line + addon;
+        e.addonRevenue = (e.addonRevenue || 0) + addon;
+        map.set(name, e);
+      }
+    }
+    fetched += rows.length;
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+  return Array.from(map.values())
+    .map((d) => ({
+      ...d,
+      revenue: round2(d.revenue),
+      addonRevenue: round2(d.addonRevenue || 0),
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
 export interface DailyProfit {
   day: string;
   revenue: number;

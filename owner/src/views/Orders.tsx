@@ -25,6 +25,8 @@ import {
   tableName,
   itemQty,
   itemRevenue,
+  itemAddons,
+  parsePrice,
   type RangeKey,
 } from "../lib/analytics";
 import {
@@ -861,32 +863,55 @@ export default function Orders({
                       !!title &&
                       !menuTitles.has(title) &&
                       detail?.status !== "cancelled";
+                    const addons = itemAddons(it);
                     return (
                       <div
                         key={i}
-                        className="flex justify-between items-center bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
+                        className="bg-zinc-950 rounded-xl px-3 py-2.5 text-sm"
                       >
-                        <span className="text-zinc-200 truncate mr-2">
-                          {title}
-                        </span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {needMenu && (
-                            <button
-                              disabled={busy}
-                              onClick={() => addToMenu(it)}
-                              title="把这道菜加入菜单（自动建「平台外卖」分类）"
-                              className="text-[11px] font-semibold px-2 py-1 rounded-md bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50"
-                            >
-                              + 菜单
-                            </button>
-                          )}
-                          <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
-                            ×{itemQty(it)}
+                        <div className="flex justify-between items-center">
+                          <span className="text-zinc-200 truncate mr-2">
+                            {title}
                           </span>
-                          <span className="tnum text-zinc-300 w-16 text-right">
-                            {fmtMoney(itemRevenue(it))}
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {needMenu && (
+                              <button
+                                disabled={busy}
+                                onClick={() => addToMenu(it)}
+                                title="把这道菜加入菜单（自动建「平台外卖」分类）"
+                                className="text-[11px] font-semibold px-2 py-1 rounded-md bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50"
+                              >
+                                + 菜单
+                              </button>
+                            )}
+                            <span className="tnum text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">
+                              ×{itemQty(it)}
+                            </span>
+                            <span className="tnum text-zinc-300 w-16 text-right">
+                              {fmtMoney(itemRevenue(it))}
+                            </span>
+                          </div>
                         </div>
+                        {/* 配菜/口味：显示加价，行小计已含配菜（口径同结账单） */}
+                        {addons.length > 0 && (
+                          <div className="mt-1 pl-1 space-y-0.5">
+                            {addons.map((a: any, k: number) => (
+                              <div
+                                key={k}
+                                className="flex justify-between text-[11px] text-zinc-500"
+                              >
+                                <span className="truncate mr-2">
+                                  + {String(a?.name ?? "").trim() || "配菜"}
+                                </span>
+                                <span className="tnum shrink-0">
+                                  {parsePrice(a?.price) > 0
+                                    ? `+${fmtMoney(parsePrice(a?.price))}`
+                                    : "免费"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -928,16 +953,26 @@ export default function Orders({
                   </div>
                 )}
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   <button
                     onClick={() =>
                       import("../lib/print-lite").then((m) =>
-                        m.printOrder(detail),
+                        m.printOrder(detail, "receipt"),
                       )
                     }
                     className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
                   >
-                    <Printer size={16} /> 打印小票
+                    <Printer size={16} /> 结账单
+                  </button>
+                  <button
+                    onClick={() =>
+                      import("../lib/print-lite").then((m) =>
+                        m.printOrder(detail, "addition"),
+                      )
+                    }
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm"
+                  >
+                    <Printer size={16} /> 加菜单
                   </button>
                   <button
                     disabled={busy}

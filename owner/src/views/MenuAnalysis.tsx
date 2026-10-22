@@ -14,7 +14,12 @@ import { ChartCard, EmptyState, SkeletonChart } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { fmtMoney } from "../lib/format";
 import { QUAD_LABEL, type MatrixQuad, type RangeKey } from "../lib/analytics";
-import { rangeToIso, dishStats, type DishStat } from "../lib/aggregate";
+import {
+  rangeToIso,
+  dishStats,
+  dishRevenueWithAddons,
+  type DishStat,
+} from "../lib/aggregate";
 import {
   fetchBoms,
   fetchInventory,
@@ -48,21 +53,35 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
   const [boms, setBoms] = useState<RecipeBom[]>([]);
   const [inv, setInv] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // 服务端 RPC 不含配菜加价：优先用订单行重算（含 addons），失败再回退
+  const [withAddons, setWithAddons] = useState(false);
+  const [addonRevenue, setAddonRevenue] = useState(0);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       const b = rangeToIso(range);
-      const [d, pd, bm, iv] = await Promise.all([
+      const [d, pd, bm, iv, curAddon, prevAddon] = await Promise.all([
         dishStats(b.start, b.end),
         dishStats(b.prevStart, b.prevEnd),
         fetchBoms(),
         fetchInventory(),
+        dishRevenueWithAddons(b.start, b.end),
+        dishRevenueWithAddons(b.prevStart, b.prevEnd),
       ]);
       if (!alive) return;
-      setDishes(d);
-      setPrevDishes(pd);
+      // 有 addons 加价时用重算口径（与结账单逐行小计一致），否则保留 RPC 结果
+      const useCur =
+        !!curAddon && curAddon.some((x) => (x.addonRevenue || 0) > 0);
+      const usePrev =
+        !!prevAddon && prevAddon.some((x) => (x.addonRevenue || 0) > 0);
+      setDishes(useCur ? curAddon! : d);
+      setPrevDishes(usePrev ? prevAddon! : pd);
+      setWithAddons(!!curAddon);
+      setAddonRevenue(
+        curAddon ? curAddon.reduce((s, x) => s + (x.addonRevenue || 0), 0) : 0,
+      );
       setBoms(bm);
       setInv(iv);
       setLoading(false);
@@ -133,6 +152,13 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
         <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5">
           有 {noRecipe} 个菜品未配配方，成本按 0 计。请到「配方
           BOM」补全后，毛利口径才准确。
+        </div>
+      )}
+
+      {withAddons && addonRevenue > 0 && (
+        <div className="text-[11px] text-zinc-400">
+          营收已含配菜/口味加价 {fmtMoney(addonRevenue)}
+          （口径同结账单逐行小计）
         </div>
       )}
 

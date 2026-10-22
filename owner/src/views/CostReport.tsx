@@ -33,6 +33,7 @@ import {
   rangeToIso,
   salesSummary,
   dishStats,
+  dishRevenueWithAddons,
   dailyProfit,
   costSummary,
   consumptionByItem,
@@ -88,7 +89,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
     (async () => {
       setLoading(true);
       const b = rangeToIso(range);
-      const [bm, iv, sum, ds, dp, cs, ws] = await Promise.all([
+      const [bm, iv, sum, ds, dp, cs, ws, dsAddons] = await Promise.all([
         fetchBoms(),
         fetchInventory(),
         salesSummary(b.start, b.end),
@@ -96,10 +97,14 @@ export default function CostReport({ version = 0 }: { version?: number }) {
         dailyProfit(b.start, b.end),
         costSummary(b.start, b.end),
         consumptionByItem(b.start, b.end, "waste"),
+        // 服务端 RPC 不含配菜加价：有加价时用订单行重算，否则沿用 RPC（省流量）
+        dishRevenueWithAddons(b.start, b.end),
       ]);
       if (!alive) return;
+      const useAddons =
+        !!dsAddons && dsAddons.some((x) => (x.addonRevenue || 0) > 0);
       setRevenue(sum.revenue);
-      setMargins(dishMargins(ds, bm, iv));
+      setMargins(dishMargins(useAddons ? dsAddons! : ds, bm, iv));
       setDaily(dp);
       setBounds({
         start: new Date(b.start).getTime(),

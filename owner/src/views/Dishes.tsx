@@ -10,6 +10,7 @@ import {
   Ban,
   Check,
   Languages,
+  ListPlus,
   Download,
 } from "lucide-react";
 import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
@@ -27,6 +28,7 @@ import {
   updateDish,
   type MenuCategory,
   type MenuItem,
+  type MenuItemAddon,
 } from "../lib/menu";
 import {
   LANGS,
@@ -37,6 +39,72 @@ import {
   type DishLangNames,
 } from "../lib/langNames";
 import { downloadText } from "../lib/localdb";
+
+/** 配菜（口味/加料）草稿：价格用字符串编辑，保存时归一化成数字 */
+type AddonDraft = {
+  id: string;
+  name: string;
+  priceText: string;
+  free: boolean;
+};
+
+/** 菜单里的配菜 → 草稿（老菜单无 addons 时为空） */
+function toAddonDrafts(list: unknown): AddonDraft[] {
+  if (!Array.isArray(list)) return [];
+  return list.map((a: any, i: number) => ({
+    id: String(a?.id || `addon-${i}-${a?.name || ""}`),
+    name: String(a?.name ?? ""),
+    priceText: String(Number(a?.price) || 0),
+    free: !(Number(a?.price) > 0),
+  }));
+}
+
+/** 草稿 → 菜单配菜（保持顾客端字段结构：id / name / price 数字，price 0 = 免费） */
+function normalizeAddons(list: unknown): MenuItemAddon[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((a: any, i: number) => {
+      const name = String(a?.name ?? "").trim();
+      const price = Number(a?.price) || 0;
+      return {
+        id: String(a?.id || `addon-${Date.now().toString(36)}-${i}`),
+        name,
+        price: price > 0 ? price : 0,
+        // 已有多语言名保留，避免编辑价格时丢掉
+        ...(a?.enName ? { enName: String(a.enName) } : {}),
+        ...(a?.frName ? { frName: String(a.frName) } : {}),
+        ...(a?.arName ? { arName: String(a.arName) } : {}),
+        ...(a?.maName ? { maName: String(a.maName) } : {}),
+      };
+    })
+    .filter((a) => a.name);
+}
+
+const addonDraftsToMenu = (drafts: AddonDraft[]): MenuItemAddon[] =>
+  normalizeAddons(
+    drafts.map((d) => ({
+      id: d.id,
+      name: d.name,
+      price: d.free ? 0 : Number(d.priceText) || 0,
+    })),
+  );
+
+const genAddonId = () =>
+  `addon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+/** 保存前校验：空名配菜不落库（否则顾客端会出现「+ 空名字 +¥」） */
+function addonDraftToMenuSafe(drafts: AddonDraft[]): {
+  list: MenuItemAddon[];
+  bad: string[];
+} {
+  const bad = drafts
+    .filter((d) => !String(d.name || "").trim())
+    .map(() => "未命名配菜");
+  return {
+    list: addonDraftsToMenu(drafts.filter((d) => String(d.name || "").trim())),
+    bad,
+  };
+}
 
 export default function Dishes({ version = 0 }: { version?: number }) {
   const [cats, setCats] = useState<MenuCategory[]>([]);
@@ -59,6 +127,14 @@ export default function Dishes({ version = 0 }: { version?: number }) {
     id: string;
     title: string;
     draft: DishLangNames;
+  } | null>(null);
+
+  // 配菜/口味弹窗：非空即打开
+  const [addonModal, setAddonModal] = useState<{
+    catId: string;
+    id: string;
+    title: string;
+    list: AddonDraft[];
   } | null>(null);
 
   const load = async () => {
@@ -144,6 +220,9 @@ export default function Dishes({ version = 0 }: { version?: number }) {
           // 库存归零即视为售罄，避免「库存 0 却仍可卖」的矛盾
           isSoldOut: stock === 0 ? true : !!d.isSoldOut,
           allergens: d.allergens || [],
+          // 配菜/口味必须原样保留：顾客端会把它作为订单行 addons 快照，
+          // 丢了这里等于「加了口味却不加价」（老板反馈的原始问题）。
+          addons: normalizeAddons(d.addons),
         };
         return dishModal.dishId
           ? updateDish(dishModal.catId, dishModal.dishId, payload)
@@ -175,6 +254,25 @@ export default function Dishes({ version = 0 }: { version?: number }) {
     if (!ok) return toast.error("保存失败（检查数据库权限）");
     toast.success("多语言名称已保存并同步顾客端");
     setLangModal(null);
+    load();
+  };
+
+  const saveAddons = async () => {
+    if (!addonModal) return;
+    const rows = addonDraftToMenuSafe(addonModal.list);
+    if (rows.bad.length) {
+      return toast.error(`配菜「${rows.bad[0]}」名称不能为空`);
+    }
+    const ok = await updateDish(addonModal.catId, addonModal.id, {
+      addons: rows.list,
+    });
+    if (!ok) return toast.error("保存失败（检查数据库权限）");
+    toast.success(
+      rows.list.length
+        ? `配菜已保存（${rows.list.length} 项），顾客端下单按此加价`
+        : "已清空配菜",
+    );
+    setAddonModal(null);
     load();
   };
 
@@ -313,6 +411,9 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                             </div>
                             <div className="text-xs text-zinc-500">
                               {fmtMoney(parsePrice(it.price))}
+                              {Array.isArray(it.addons) &&
+                                it.addons.length > 0 &&
+                                ` · ${it.addons.length} 种配菜`}
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -358,6 +459,28 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                               }
                             >
                               <Languages size={15} />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setAddonModal({
+                                  catId: c.id,
+                                  id: it.id,
+                                  title: it.title,
+                                  list: toAddonDrafts(it.addons),
+                                })
+                              }
+                              className={`p-2.5 rounded-lg ${
+                                Array.isArray(it.addons) && it.addons.length
+                                  ? "text-orange-400 hover:bg-orange-500/10"
+                                  : "text-zinc-400 hover:text-white hover:bg-white/5"
+                              }`}
+                              title={
+                                Array.isArray(it.addons) && it.addons.length
+                                  ? `配菜/口味（${it.addons.length} 项）`
+                                  : "配菜/口味"
+                              }
+                            >
+                              <ListPlus size={15} />
                             </button>
                             <button
                               onClick={() =>
@@ -552,6 +675,139 @@ export default function Dishes({ version = 0 }: { version?: number }) {
             <button
               onClick={saveLang}
               className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold active:scale-[0.98] transition-transform"
+            >
+              <Save size={16} /> 保存并同步
+            </button>
+          </>
+        )}
+      </Sheet>
+
+      {/* 配菜/口味弹窗：加价规则在这里维护，顾客端下单会快照到订单行 */}
+      <Sheet
+        open={!!addonModal}
+        title="配菜 / 口味"
+        subtitle={
+          addonModal
+            ? `${addonModal.title} · 顾客选口味时按这里的价格加价`
+            : undefined
+        }
+        onClose={() => setAddonModal(null)}
+      >
+        {addonModal && (
+          <>
+            {addonModal.list.length === 0 && (
+              <div className="text-xs text-zinc-500 mb-3">
+                还没有配菜。新增「大份 +10」「加芝士
+                +5」这类口径后，顾客端下单会自动带价， 结账单和加菜单也会显示
+                +价格。
+              </div>
+            )}
+            <div className="space-y-2">
+              {addonModal.list.map((a, i) => (
+                <div
+                  key={a.id}
+                  className="bg-zinc-950 rounded-xl p-2.5 space-y-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <SheetField
+                      label="配菜名称"
+                      className="flex-1"
+                      value={a.name}
+                      placeholder="如：大份 / 加芝士"
+                      onChange={(v) =>
+                        setAddonModal({
+                          ...addonModal,
+                          list: addonModal.list.map((x, k) =>
+                            k === i ? { ...x, name: v } : x,
+                          ),
+                        })
+                      }
+                    />
+                    <button
+                      onClick={() =>
+                        setAddonModal({
+                          ...addonModal,
+                          list: addonModal.list.filter((_, k) => k !== i),
+                        })
+                      }
+                      className="mt-4 p-2.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 shrink-0"
+                      title="删除配菜"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <SheetField
+                      label="加价"
+                      type="number"
+                      className="flex-1"
+                      value={a.free ? "0" : a.priceText}
+                      onChange={(v) =>
+                        setAddonModal({
+                          ...addonModal,
+                          list: addonModal.list.map((x, k) =>
+                            k === i
+                              ? { ...x, priceText: v, free: !(Number(v) > 0) }
+                              : x,
+                          ),
+                        })
+                      }
+                    />
+                    <label className="flex items-center gap-1.5 text-xs text-zinc-300 pb-2.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={a.free}
+                        onChange={(e) =>
+                          setAddonModal({
+                            ...addonModal,
+                            list: addonModal.list.map((x, k) =>
+                              k === i
+                                ? {
+                                    ...x,
+                                    free: e.target.checked,
+                                    priceText: e.target.checked
+                                      ? "0"
+                                      : x.priceText,
+                                  }
+                                : x,
+                            ),
+                          })
+                        }
+                      />
+                      免费
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <button
+                onClick={() =>
+                  setAddonModal({
+                    ...addonModal,
+                    list: [
+                      ...addonModal.list,
+                      {
+                        id: genAddonId(),
+                        name: "",
+                        priceText: "0",
+                        free: true,
+                      },
+                    ],
+                  })
+                }
+                className="flex items-center gap-1.5 text-sm text-orange-400 hover:text-orange-300"
+              >
+                <Plus size={15} /> 新增配菜
+              </button>
+              <span className="text-[11px] text-zinc-600">
+                加价按份数累加，0 = 免费
+              </span>
+            </div>
+            <button
+              disabled={busy}
+              onClick={saveAddons}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
               <Save size={16} /> 保存并同步
             </button>

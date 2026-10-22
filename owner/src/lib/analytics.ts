@@ -13,7 +13,65 @@ export const orderItems = (o: any): any[] =>
   Array.isArray(o?.items) ? o.items : [];
 export const itemQty = (it: any) => Number(it?.quantity ?? it?.count ?? 1);
 export const itemName = (it: any) => it?.name || it?.title || "未知";
-export const itemRevenue = (it: any) => Number(it?.price || 0) * itemQty(it);
+
+/* ---------- 金额口径（与顾客端 Web 统一） ----------
+ * 行金额 = (菜品单价 + Σ 配菜单价) × 数量
+ * 配菜单价优先取订单行 addons 快照（{ id, name, price }[]），快照缺失时回退到菜单定义
+ * （settings.categories[].items[].addons，{ id, name, ..., price }[]）。
+ * 老订单没有 addons 字段（undefined/null/非数组）时按「无配菜」处理，不抛错。
+ */
+
+/** 价格归一化："75" / "MAD75" / 75 → 75；空值/非法 → 0 */
+export function parsePrice(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const m = String(v ?? "").match(/\d+(?:\.\d+)?/);
+  const n = m ? Number(m[0]) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 订单行上的配菜快照（老订单无该字段时返回空数组） */
+export function itemAddons(it: any): any[] {
+  return Array.isArray(it?.addons) ? it.addons : [];
+}
+
+/** 单价合计：菜品单价 + Σ 配菜单价（未乘数量） */
+export function itemUnitTotal(it: any): number {
+  return (
+    parsePrice(it?.price) +
+    itemAddons(it).reduce((s, a) => s + parsePrice(a?.price), 0)
+  );
+}
+
+/** 行金额：(菜品单价 + Σ 配菜单价) × 数量 */
+export const itemRevenue = (it: any) => itemUnitTotal(it) * itemQty(it);
+
+/** 从菜品定义（settings.categories[].items[]）建「菜名 → 配菜定义」索引 */
+export function buildMenuAddonMap(settings: any): Map<string, any[]> {
+  const map = new Map<string, any[]>();
+  const cats = settings?.categories;
+  if (!Array.isArray(cats)) return map;
+  cats.forEach((c: any) => {
+    (c?.items || []).forEach((it: any) => {
+      const name = String(it?.title || it?.name || "").trim();
+      if (!name) return;
+      const list = Array.isArray(it?.addons) ? it.addons : [];
+      if (list.length) map.set(name, list);
+    });
+  });
+  return map;
+}
+
+/**
+ * 订单行配菜定义：优先订单行快照，缺失（老订单/后台导入）时回退菜单定义。
+ * 快照里的配菜单价不会被菜单现价覆盖，保证历史单金额可复现。
+ */
+export function resolveItemAddons(it: any, menuAddonMap?: Map<string, any[]>) {
+  const snap = itemAddons(it);
+  if (snap.length) return snap;
+  const def = menuAddonMap?.get(String(itemName(it)).trim());
+  return Array.isArray(def) ? def : [];
+}
+
 export const isCompleted = (o: any) => o?.status === "completed";
 export const isCancelled = (o: any) => o?.status === "cancelled";
 
@@ -177,14 +235,21 @@ export interface DishStat {
   revenue: number;
 }
 
-export function dishStats(orders: any[]): DishStat[] {
+/**
+ * 菜品统计：营收含配菜加价（与结账单/小票逐行小计口径一致），
+ * menuAddonMap 用于老订单缺 addons 快照时回退菜单定义。
+ */
+export function dishStats(
+  orders: any[],
+  menuAddonMap?: Map<string, any[]>,
+): DishStat[] {
   const map = new Map<string, DishStat>();
   orders.filter(isRevenueOrder).forEach((o) =>
     orderItems(o).forEach((it) => {
       const name = itemName(it);
       const e = map.get(name) || { name, qty: 0, revenue: 0 };
       e.qty += itemQty(it);
-      e.revenue += itemRevenue(it);
+      e.revenue += lineRevenue(it, menuAddonMap);
       map.set(name, e);
     }),
   );
@@ -206,6 +271,22 @@ export function buildDishCategoryMap(settings: any): Map<string, string> {
   return map;
 }
 
+/**
+ * 行金额（带菜单回退）：订单行缺 addons 快照时按菜单定义的配菜计价。
+ * 报表/成本/毛利统一走这个入口，避免与结账单口径不一致。
+ */
+export function lineRevenue(
+  it: any,
+  menuAddonMap?: Map<string, any[]>,
+): number {
+  if (itemAddons(it).length) return itemRevenue(it);
+  const addons = resolveItemAddons(it, menuAddonMap);
+  const unit =
+    parsePrice(it?.price) +
+    addons.reduce((s, a) => s + parsePrice(a?.price), 0);
+  return unit * itemQty(it);
+}
+
 export interface CategoryStat {
   name: string;
   revenue: number;
@@ -215,6 +296,7 @@ export interface CategoryStat {
 export function categoryStats(
   orders: any[],
   dishCatMap: Map<string, string>,
+  menuAddonMap?: Map<string, any[]>,
 ): CategoryStat[] {
   const map = new Map<string, CategoryStat>();
   orders.filter(isRevenueOrder).forEach((o) =>
@@ -222,12 +304,23 @@ export function categoryStats(
       const name = itemName(it);
       const cat = dishCatMap.get(name) || "其他";
       const e = map.get(cat) || { name: cat, revenue: 0, qty: 0 };
-      e.revenue += itemRevenue(it);
+      e.revenue += lineRevenue(it, menuAddonMap);
       e.qty += itemQty(it);
       map.set(cat, e);
     }),
   );
   return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+}
+
+/**
+ * 逐行累加得到的订单金额（结账单/小票口径）。
+ * 与 orderTotal 的差异只可能来自折扣、退菜等订单级优惠。
+ */
+export function orderComputedTotal(
+  o: any,
+  menuAddonMap?: Map<string, any[]>,
+): number {
+  return orderItems(o).reduce((s, it) => s + lineRevenue(it, menuAddonMap), 0);
 }
 
 /* ---------- 支付方式 ---------- */

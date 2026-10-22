@@ -53,6 +53,7 @@ import {
   salesSummary,
   dailySeries,
   dishStats,
+  dishRevenueWithAddons,
   hourlySeries,
   costSummary,
   fetchOrdersPage,
@@ -253,16 +254,19 @@ export default function Dashboard({
       };
       const r3Start = dayStartIso(2);
       const p7Start = dayStartIso(9);
-      const [cur, prev, daily, dish, hours, r3, p7, cs] = await Promise.all([
-        salesSummary(b.start, b.end),
-        salesSummary(b.prevStart, b.prevEnd),
-        dailySeries(rangeToIso("30d").start, rangeToIso("30d").end),
-        dishStats(b.start, b.end),
-        hourlySeries(b.start, b.end),
-        dishStats(r3Start, now.toISOString()),
-        dishStats(p7Start, r3Start),
-        costSummary(b.start, b.end),
-      ]);
+      const [cur, prev, daily, dish, hours, r3, p7, cs, dishAddons] =
+        await Promise.all([
+          salesSummary(b.start, b.end),
+          salesSummary(b.prevStart, b.prevEnd),
+          dailySeries(rangeToIso("30d").start, rangeToIso("30d").end),
+          dishStats(b.start, b.end),
+          hourlySeries(b.start, b.end),
+          dishStats(r3Start, now.toISOString()),
+          dishStats(p7Start, r3Start),
+          costSummary(b.start, b.end),
+          // 服务端 RPC 只按菜品单价聚合、不含配菜加价；有加价时用订单行重算
+          dishRevenueWithAddons(b.start, b.end),
+        ]);
       if (!alive) return;
       const aov = cur.orders ? cur.revenue / cur.orders : 0;
       const pavg = prev.orders ? prev.revenue / prev.orders : 0;
@@ -276,7 +280,11 @@ export default function Dashboard({
         aovChange: pct(aov, pavg),
       });
       setTrend(daily);
-      setDishes(dish);
+      setDishes(
+        dishAddons && dishAddons.some((x) => (x.addonRevenue || 0) > 0)
+          ? dishAddons
+          : dish,
+      );
       setSnapshotCogs(cs ? cs.cogs : null);
       setHourly(hours);
       setDishDrops(detectDishDrops(r3, p7, 3, 7).slice(0, 5));
