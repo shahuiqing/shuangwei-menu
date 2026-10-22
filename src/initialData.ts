@@ -1613,28 +1613,40 @@ export function mergeAndOrderCategories(
   };
   existingCats = migrateLegacyCategories(existingCats);
 
-  // 紫菜包饭 / 寿司：保留原菜品（含图片），基础价 MAD50，「大份」加价 25（小份为默认，不显示）
+  // 紫菜包饭 / 寿司：保留原菜品（含图片），**仅在新数据缺少价格时**补默认价 MAD50，
+  // 并确保「大份 +25」加项存在。
+  // 曾无条件写入 price: "MAD50"，导致每次读取都把后台改过的价格打回默认值。
   if (Array.isArray(existingCats)) {
     const isKimbapTitle = (t: any) =>
       typeof t === "string" && t.replace(/\s/g, "") === "紫菜包饭/寿司";
     existingCats = existingCats.map((c) => ({
       ...c,
-      items: (c.items || []).map((i: any) =>
-        isKimbapTitle(i?.title)
-          ? {
-              ...i,
-              price: "MAD50",
-              addons: [
+      items: (c.items || []).map((i: any) => {
+        if (!isKimbapTitle(i?.title)) return i;
+        const hasPrice =
+          i?.price !== undefined &&
+          i?.price !== null &&
+          String(i.price).trim() !== "";
+        const existingAddons = Array.isArray(i?.addons) ? i.addons : [];
+        const hasLarge = existingAddons.some(
+          (a: any) => a?.id === "kimbap-large" || a?.name === "大份",
+        );
+        return {
+          ...i,
+          price: hasPrice ? i.price : "MAD50",
+          addons: hasLarge
+            ? existingAddons
+            : [
                 {
                   id: "kimbap-large",
                   name: "大份",
                   enName: "Large Portion",
                   price: 25,
                 },
+                ...existingAddons,
               ],
-            }
-          : i,
-      ),
+        };
+      }),
     }));
   }
 

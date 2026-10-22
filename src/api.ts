@@ -110,6 +110,13 @@ async function getTableColumns(tableName: string): Promise<string[] | null> {
   return null;
 }
 
+/** 明文敏感列：schema 已下线这些列，前端若仍传入说明写错了字段，必须显式告警。 */
+const LEGACY_SECRET_COLUMNS = [
+  "adminPassword",
+  "devicePasswords",
+  "securityAnswer",
+] as const;
+
 async function filterPayloadByTable(
   tableName: string,
   payload: Record<string, unknown>,
@@ -124,6 +131,19 @@ async function filterPayloadByTable(
       filtered[key] = payload[key];
     }
   }
+
+  // 不再静默丢弃敏感字段：明文列被丢弃时给出明确告警，
+  // 避免「UI 提示保存成功但云端没变」这类问题再次无声发生。
+  if (tableName === "settings") {
+    for (const legacy of LEGACY_SECRET_COLUMNS) {
+      if (legacy in payload && !(legacy in filtered)) {
+        console.warn(
+          `[settings] 明文列 "${legacy}" 不被 schema 接受，已丢弃；请改写对应的 *Hash 列。`,
+        );
+      }
+    }
+  }
+
   return filtered;
 }
 

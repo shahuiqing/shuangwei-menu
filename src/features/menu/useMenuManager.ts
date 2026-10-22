@@ -791,7 +791,12 @@ export function useMenuManager(deps: MenuManagerDeps) {
                       ...newDish,
                       price: editPrice,
                       stock: editStock,
-                      isSoldOut: editStock === 0 ? true : i.isSoldOut,
+                      // 库存与售罄联动：有明确库存时按库存判定（补货即解除售罄），
+                      // 未设库存（null）时保留原有售罄开关。
+                      // 曾写成 `editStock === 0 ? true : i.isSoldOut`，
+                      // 导致库存从 0 改回 5 后仍显示售罄（菜永久卖不出去）。
+                      isSoldOut:
+                        editStock === null ? i.isSoldOut : editStock <= 0,
                       addons: (newDish.addons || [])
                         .filter((a) => String(a?.name || "").trim())
                         .map((a) => ({

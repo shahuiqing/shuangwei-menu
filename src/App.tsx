@@ -52,7 +52,8 @@ import {
 import type { MenuCategory, Promotion, MenuItem } from "./types/menu";
 
 import { getLoc, getSubLoc, Language } from "./utils/loc";
-import { makeLineKey, parseLineKey } from "./utils/cartLine";
+import { makeLineKey, parseLineKey, applyCartDelta } from "./utils/cartLine";
+import { deriveDeletedItemIds, type DeletedId } from "./utils/deletedItems";
 
 const AUTO_PLAY_INTERVAL = 12000; // 12 seconds per category page
 
@@ -774,50 +775,53 @@ export default function App() {
       );
       const catsToSave = overrides?.categories || categories;
 
-      INITIAL_MENU_CATEGORIES.forEach((cat) => {
-        const catFound = catsToSave.find(
-          (c: MenuCategory) =>
-            c.id === cat.id ||
-            c.name === cat.name ||
-            (c as any).title === cat.title,
+      // 仅在「菜品结构确实被编辑」的场景补齐内置菜品的删除标记。
+      // 改主题/布局/店名等非菜单写入（overrides 不含 categories 且为 silent）
+      // 不再重算，避免把默认菜品成批误标为已删除。
+      const menuMutation =
+        overrides?.menuMutation === true ||
+        (overrides?.categories !== undefined && overrides?.silent !== true);
+
+      if (menuMutation) {
+        const derived = deriveDeletedItemIds(
+          INITIAL_MENU_CATEGORIES as MenuCategory[],
+          catsToSave as MenuCategory[],
+          updatedDeletedItemIds as DeletedId[],
         );
-        if (!catFound) {
-          if (cat.id && !updatedDeletedItemIds.includes(cat.id))
-            updatedDeletedItemIds.push(cat.id);
-          if (cat.name && !updatedDeletedItemIds.includes(cat.name))
-            updatedDeletedItemIds.push(cat.name);
-          if (cat.title && !updatedDeletedItemIds.includes(cat.title))
-            updatedDeletedItemIds.push(cat.title);
-          (cat.items || []).forEach((item: MenuItem) => {
-            if (item.id && !updatedDeletedItemIds.includes(item.id))
-              updatedDeletedItemIds.push(item.id);
-            if (item.title && !updatedDeletedItemIds.includes(item.title))
-              updatedDeletedItemIds.push(item.title);
-            if (item.name && !updatedDeletedItemIds.includes(item.name))
-              updatedDeletedItemIds.push(item.name);
-          });
-        } else {
-          (cat.items || []).forEach((item: MenuItem) => {
-            const itemFound = (catFound.items || []).find(
-              (i: MenuItem) =>
-                i.id === item.id ||
-                i.title === item.title ||
-                i.name === item.name,
-            );
-            if (!itemFound) {
-              if (item.id && !updatedDeletedItemIds.includes(item.id))
-                updatedDeletedItemIds.push(item.id);
-              if (item.title && !updatedDeletedItemIds.includes(item.title))
-                updatedDeletedItemIds.push(item.title);
-              if (item.name && !updatedDeletedItemIds.includes(item.name))
-                updatedDeletedItemIds.push(item.name);
-            }
-          });
-        }
-      });
+        updatedDeletedItemIds.length = 0;
+        updatedDeletedItemIds.push(...derived);
+      }
 
       setDeletedItemIds(updatedDeletedItemIds);
       safeSetItem("menuDeletedItemIds", JSON.stringify(updatedDeletedItemIds));
+
+      // 云端只接受哈希列（adminPasswordHash / devicePasswordsHash / securityAnswerHash）。
+      // 曾把明文列 adminPassword / devicePasswords / securityAnswer 传给 updateSettings，
+      // 被 KNOWN_COLUMNS 静默过滤掉，导致「改密码」UI 报成功但云端根本没变。
+      // 这里按需在本次保存中生成哈希；只有显式传入明文时才写，避免每次保存都重算。
+      const { hashPassword } = await import("./utils/password");
+      const secretPatch: Record<string, unknown> = {};
+      if (overrides?.adminPassword !== undefined) {
+        secretPatch.adminPasswordHash = await hashPassword(
+          String(overrides.adminPassword),
+        );
+      }
+      if (overrides?.devicePasswords !== undefined) {
+        const raw = Array.isArray(overrides.devicePasswords)
+          ? overrides.devicePasswords
+          : [];
+        secretPatch.devicePasswordsHash = await Promise.all(
+          raw.map(async (d: { name: string; password: string }) => ({
+            name: d.name,
+            hash: await hashPassword(String(d.password)),
+          })),
+        );
+      }
+      if (overrides?.securityAnswer !== undefined) {
+        secretPatch.securityAnswerHash = await hashPassword(
+          String(overrides.securityAnswer),
+        );
+      }
 
       await api.updateSettings(
         {
@@ -835,19 +839,11 @@ export default function App() {
               : welcomeMessage,
           logoUrl:
             overrides?.logoUrl !== undefined ? overrides.logoUrl : logoUrl,
-          adminPassword:
-            overrides?.adminPassword !== undefined
-              ? overrides.adminPassword
-              : adminPassword,
-          devicePasswords: overrides?.devicePasswords || devicePasswords,
+          ...secretPatch,
           securityQuestion:
             overrides?.securityQuestion !== undefined
               ? overrides.securityQuestion
               : securityQuestion,
-          securityAnswer:
-            overrides?.securityAnswer !== undefined
-              ? overrides.securityAnswer
-              : securityAnswer,
           soundEnabled:
             overrides?.soundEnabled !== undefined
               ? overrides.soundEnabled
@@ -1286,6 +1282,9 @@ export default function App() {
   };
 
   const updateCart = (lineKey: string, delta: number) => {
+    // 购物车以 lineKey（dishId 或 dishId|addonIds）为行键：不同口味必须是独立行。
+    // 曾误用 parseLineKey(lineKey).dishId 作为行键，导致口味合并、
+    // 且从加项行减数量会误减到同菜品的无加项行。
     const id = parseLineKey(lineKey).dishId;
     setCart((prev) => {
       if (delta > 0) {
@@ -1313,6 +1312,7 @@ export default function App() {
 
           if (itemObj.stock !== undefined && itemObj.stock !== null) {
             const maxStock = Number(itemObj.stock);
+            // 库存按菜品总量校验（所有口味行合计）
             const currentQty = Object.entries(prev).reduce(
               (s, [k, q]) => (parseLineKey(k).dishId === id ? s + q : s),
               0,
@@ -1331,12 +1331,8 @@ export default function App() {
         }
       }
 
-      const qty = (prev[id] || 0) + delta;
-      if (qty <= 0) {
-        const { [id]: _, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [id]: qty };
+      // 以传入的 lineKey 为准读写该行（逻辑集中在 applyCartDelta，便于测试）
+      return applyCartDelta(prev, lineKey, delta);
     });
   };
 
