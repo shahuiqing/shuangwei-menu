@@ -13,7 +13,15 @@ import {
   List,
   Armchair,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  auditOrderTotal,
+  describeAddons,
+  lineSubtotal,
+  orderComputedTotal,
+  removeOneFromLine,
+} from "../../utils/orderMoney";
 
 interface OrdersTabProps {
   orders: any[];
@@ -227,9 +235,18 @@ export function OrdersTab({
         <button
           onClick={() =>
             import("../../lib/print").then((m) => {
+              // 加菜单只打印加菜明细，金额必须是「这批加菜的逐项合计」，
+              // 不能沿用整单 total（否则加菜单底部会打出整单金额）。
+              const additionItems = (order.items || []).filter(
+                (i: any) => i.isAdded,
+              );
+              const additionsTotal = orderComputedTotal(additionItems);
               const additionsOrder = {
                 ...order,
-                items: order.items.filter((i: any) => i.isAdded),
+                items: additionItems,
+                total: additionsTotal,
+                total_amount: additionsTotal,
+                additionsTotal,
               };
               m.printReceipt(
                 additionsOrder,
@@ -270,13 +287,16 @@ export function OrdersTab({
 
   const renderItems = (order: any) => (
     <ul className="space-y-2">
-      {(order?.items || []).map((item: any, i: number) =>
-        item ? (
+      {(order?.items || []).map((item: any, i: number) => {
+        if (!item) return null;
+        const addonLines = describeAddons(item, "¥");
+        const subtotal = lineSubtotal(item);
+        return (
           <li
             key={i}
             className={`flex justify-between items-center text-sm p-2.5 rounded-lg ${item.served ? "bg-green-500/10 text-green-500/70 line-through" : item.isAdded ? "bg-orange-500/10 border border-orange-500/20" : "bg-zinc-950"}`}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 onClick={async () => {
                   const newItems = [...order.items];
@@ -291,44 +311,52 @@ export function OrdersTab({
               >
                 <CheckCircle size={14} />
               </button>
-              <span
-                className={
-                  item.served
-                    ? "text-green-500/70"
-                    : item.isAdded
-                      ? "text-orange-400 font-medium"
-                      : "text-zinc-300"
-                }
-              >
-                {item?.name || ""}
-                {item?.isAdded ? (
-                  <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded-sm">
-                    加菜
+              <span className="min-w-0">
+                <span
+                  className={
+                    item.served
+                      ? "text-green-500/70"
+                      : item.isAdded
+                        ? "text-orange-400 font-medium"
+                        : "text-zinc-300"
+                  }
+                >
+                  {item?.name || ""}
+                  {item?.isAdded ? (
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded-sm">
+                      加菜
+                    </span>
+                  ) : null}
+                </span>
+                {addonLines.length > 0 && (
+                  <span className="block mt-0.5 text-[11px] leading-tight text-amber-400/80">
+                    {addonLines.map((line, ai) => (
+                      <span key={ai} className="block truncate">
+                        {line}
+                      </span>
+                    ))}
                   </span>
-                ) : null}
+                )}
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               {(!order?.status || order?.status === "pending") && (
                 <button
                   onClick={async () => {
                     if (confirm(`确定要退掉一个 ${item?.name || ""} 吗？`)) {
-                      const newItems = [...order.items];
-                      let newTotal =
-                        (order.total || 0) - (newItems[i]?.price || 0);
-                      if (newTotal < 0) newTotal = 0;
-                      if (newItems[i].quantity > 1) {
-                        newItems[i] = {
-                          ...newItems[i],
-                          quantity: newItems[i].quantity - 1,
-                        };
-                      } else {
-                        newItems.splice(i, 1);
-                      }
+                      // 退菜按行小计扣减：(菜品单价 + Σ配菜单价)，配菜钱一起退，
+                      // total 以退菜后的逐项合计为准（不再用 total 盲减单价）。
+                      const result = removeOneFromLine(
+                        order.items,
+                        i,
+                        Number(order.total || 0),
+                      );
+                      if (!result) return;
                       try {
                         await api.updateOrder(order._id, {
-                          items: newItems,
-                          total: newTotal,
+                          items: result.items,
+                          total: result.total,
+                          total_amount: result.total,
                         });
                       } catch {
                         alert("退菜失败");
@@ -346,14 +374,19 @@ export function OrdersTab({
                 x{item?.quantity || 1}
               </span>
               <span
-                className={`${item.served ? "text-green-500/70" : "text-zinc-400"} w-14 text-right`}
+                className={`${item.served ? "text-green-500/70" : "text-zinc-400"} w-16 text-right font-mono`}
+                title={
+                  addonLines.length > 0
+                    ? `¥${(item?.price || 0).toFixed(2)} + 口味加价 × ${item?.quantity || 1}`
+                    : undefined
+                }
               >
-                {((item?.price || 0) * (item?.quantity || 1)).toFixed(2)}
+                {subtotal.toFixed(2)}
               </span>
             </div>
           </li>
-        ) : null,
-      )}
+        );
+      })}
     </ul>
   );
 
@@ -681,12 +714,71 @@ export function OrdersTab({
                 {renderActions(selected)}
               </div>
               {selected?.status !== "completed" && renderItems(selected)}
-              <div className="flex justify-between items-center mt-5 pt-4 border-t border-zinc-800">
-                <span className="text-zinc-400 text-sm">合计</span>
-                <span className="text-2xl font-black text-orange-400">
-                  {selected?.total || 0} {currency !== "none" ? currency : ""}
-                </span>
-              </div>
+              {(() => {
+                const audit = auditOrderTotal(selected);
+                const computedItemsTotal = orderComputedTotal(selected?.items);
+                return (
+                  <div className="mt-5 pt-4 border-t border-zinc-800 space-y-2">
+                    {audit.mismatch &&
+                      computedItemsTotal > 0 &&
+                      selected?.status !== "completed" && (
+                        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300">
+                          <AlertTriangle
+                            size={14}
+                            className="shrink-0 mt-0.5"
+                          />
+                          <span className="flex-1">
+                            订单金额与菜品明细不一致：明细合计 ¥
+                            {audit.computed.toFixed(2)}，订单金额 ¥
+                            {audit.stored.toFixed(2)}（差 ¥
+                            {Math.abs(audit.diff).toFixed(2)}
+                            ）。结账将按明细合计 ¥{audit.resolved.toFixed(
+                              2,
+                            )}{" "}
+                            收款。
+                          </span>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.updateOrder(
+                                  selected._id || selected.id,
+                                  {
+                                    total: audit.resolved,
+                                    total_amount: audit.resolved,
+                                  },
+                                );
+                              } catch {
+                                alert("修正订单金额失败");
+                              }
+                            }}
+                            className="px-2 py-1 bg-amber-500 text-black rounded font-bold whitespace-nowrap"
+                          >
+                            按明细修正
+                          </button>
+                        </div>
+                      )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400 text-sm">
+                        合计
+                        {audit.mismatch &&
+                          computedItemsTotal > 0 &&
+                          audit.resolved !== audit.stored && (
+                            <span className="ml-2 text-[11px] text-zinc-500 line-through">
+                              {audit.stored.toFixed(2)}
+                            </span>
+                          )}
+                      </span>
+                      <span className="text-2xl font-black text-orange-400">
+                        {(audit.mismatch && computedItemsTotal > 0
+                          ? audit.resolved
+                          : Number(selected?.total || 0) || 0
+                        ).toFixed(2)}{" "}
+                        {currency !== "none" ? currency : ""}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

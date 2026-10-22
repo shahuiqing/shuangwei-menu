@@ -9,8 +9,21 @@ import {
   Loader2,
   GitMerge,
   Flame,
+  Check,
 } from "lucide-react";
 import type { MenuCategory, ReceiptSettings } from "../../types/menu";
+import {
+  makeLineKey,
+  parseLineKey,
+  applyCartDelta,
+} from "../../utils/cartLine";
+import {
+  cartLinesToOrderItems,
+  mergeOrderItems,
+  orderComputedTotal,
+  resolveOrderTotal,
+  parseMenuPrice,
+} from "../../utils/orderMoney";
 
 interface OrderBoardProps {
   orders: any[];
@@ -43,9 +56,43 @@ export function OrderBoard({
   const [addDishCategory, setAddDishCategory] = useState<string>("all");
   const [addDishSearch, setAddDishSearch] = useState<string>("");
   const [isSubmittingAddDish, setIsSubmittingAddDish] = useState(false);
+  // 后台加菜的口味多选：点有配菜的菜品时先弹口味选择，选中的组合成为独立的一行
+  const [addDishPendingDish, setAddDishPendingDish] = useState<any | null>(
+    null,
+  );
+  const [addDishAddonSelection, setAddDishAddonSelection] = useState<string[]>(
+    [],
+  );
 
   const [mergeTargetOrderId, setMergeTargetOrderId] = useState<string>("");
   const [isMergingOrders, setIsMergingOrders] = useState(false);
+
+  /** 点「加菜」：有配菜先选口味，无配菜直接加一份 */
+  const startAddDishLine = (dish: any) => {
+    if (!dish) return;
+    if (Array.isArray(dish.addons) && dish.addons.length > 0) {
+      setAddDishAddonSelection([]);
+      setAddDishPendingDish(dish);
+      return;
+    }
+    setAddDishCart((prev) => applyCartDelta(prev, makeLineKey(dish.id, []), 1));
+  };
+
+  const toggleAddDishAddon = (addonId: string) => {
+    setAddDishAddonSelection((prev) =>
+      prev.includes(addonId)
+        ? prev.filter((x) => x !== addonId)
+        : [...prev, addonId],
+    );
+  };
+
+  const confirmAddDishAddons = () => {
+    if (!addDishPendingDish) return;
+    const lineKey = makeLineKey(addDishPendingDish.id, addDishAddonSelection);
+    setAddDishCart((prev) => applyCartDelta(prev, lineKey, 1));
+    setAddDishPendingDish(null);
+    setAddDishAddonSelection([]);
+  };
 
   const handleExecuteMergeOrders = async () => {
     if (!mergeSourceOrder || !mergeTargetOrderId) return;
@@ -59,21 +106,17 @@ export function OrderBoard({
 
     try {
       setIsMergingOrders(true);
-      const sourceItems = mergeSourceOrder.items || [];
-      const sanitizedSourceItems = sourceItems.map((item: any) => ({
-        ...item,
-        isAdded: true,
-      }));
+      // 合并后逐行重算：同一菜品 + 同一组口味合并数量，不同口味保持独立行。
+      // 金额一律以逐项合计为准，修正历史上丢掉配菜加价导致的 total 偏差。
+      const mergedItems = mergeOrderItems([
+        ...(targetOrder.items || []),
+        ...(mergeSourceOrder.items || []),
+      ]).map((item) => ({ ...item, isAdded: true }));
+      const newTotal = orderComputedTotal(mergedItems);
 
-      const existingTargetItems = targetOrder.items || [];
-      const newItems = [...existingTargetItems, ...sanitizedSourceItems];
-      const sourceTotal = Number(
-        mergeSourceOrder.total || mergeSourceOrder.total_amount || 0,
-      );
-      const targetTotal = Number(
-        targetOrder.total || targetOrder.total_amount || 0,
-      );
-      const newTotal = Number((targetTotal + sourceTotal).toFixed(2));
+      const sanitizedSourceItems = mergeOrderItems(
+        mergeSourceOrder.items || [],
+      ).map((item) => ({ ...item, isAdded: true }));
 
       const currentUnprinted = targetOrder.unprintedAdditions || [];
       const newUnprinted = [
@@ -82,7 +125,7 @@ export function OrderBoard({
       ];
 
       const updatePayload = {
-        items: newItems,
+        items: mergedItems,
         total: newTotal,
         total_amount: newTotal,
         unprintedAdditions: newUnprinted,
@@ -98,8 +141,15 @@ export function OrderBoard({
 
       const sourceName = mergeSourceOrder.customerName || "未知桌号";
       const targetName = targetOrder.customerName || "未知桌号";
+      const prevSourceTotal = resolveOrderTotal(mergeSourceOrder);
+      const prevTargetTotal = resolveOrderTotal(targetOrder);
+      const prevSum = Number((prevSourceTotal + prevTargetTotal).toFixed(2));
+      const previewDiff =
+        Math.abs(prevSum - newTotal) > 0.01
+          ? `\n（原两单合计 ¥${prevSum.toFixed(2)}，已按菜品+口味重算修正为 ¥${newTotal.toFixed(2)}）`
+          : "";
       alert(
-        `成功将【${sourceName}】的订单合并并入【${targetName}】！\n合并后订单金额: ¥${newTotal.toFixed(2)}`,
+        `成功将【${sourceName}】的订单合并并入【${targetName}】！\n合并后订单金额: ¥${newTotal.toFixed(2)}${previewDiff}`,
       );
 
       setMergeSourceOrder(null);
@@ -122,33 +172,19 @@ export function OrderBoard({
     try {
       setIsSubmittingAddDish(true);
       const allDishes = categories.flatMap((c) => c.items || []);
-      const addedItems = selectedEntries.map(([id, qty]) => {
-        const item = allDishes.find((i) => i.id === id);
-        const priceString = String(item?.price || "0");
-        const priceMatch = priceString.match(/\d+(\.\d+)?/);
-        const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
-        return {
-          id: item?.id || id,
-          name: item?.title || item?.name || id,
-          enTitle: item?.enTitle || "",
-          frTitle: item?.frTitle || "",
-          arTitle: item?.arTitle || "",
-          maTitle: item?.maTitle || "",
-          quantity: Number(qty),
-          price: priceNum,
-          isAdded: true,
-        };
-      });
+      // 行键 = 菜品 id + 口味组合；同一菜不同口味各自成行，并带上配菜快照
+      const addedItems = cartLinesToOrderItems(addDishCart, allDishes);
+
+      if (addedItems.length === 0) {
+        alert("所选菜品已不在菜单中，请重新选择。");
+        return;
+      }
 
       const existingItems = addDishTargetOrder.items || [];
       const newItems = [...existingItems, ...addedItems];
-      const additionTotal = addedItems.reduce(
-        (sum: number, i: any) => sum + Number(i.price) * Number(i.quantity),
-        0,
-      );
-      const newTotal = Number(
-        ((Number(addDishTargetOrder.total) || 0) + additionTotal).toFixed(2),
-      );
+      // 金额统一口径：(菜品单价 + Σ配菜单价) × 数量
+      const additionTotal = orderComputedTotal(addedItems);
+      const newTotal = orderComputedTotal(newItems);
 
       const currentUnprinted = addDishTargetOrder.unprintedAdditions || [];
       const newUnprinted = [
@@ -171,14 +207,14 @@ export function OrderBoard({
       let stockUpdated = false;
       const updatedCategories = categories.map((cat: any) => {
         const updatedItems = (cat.items || []).map((item: any) => {
-          const added = addedItems.find((ai: any) => ai.id === item.id);
-          if (added && item.stock !== undefined && item.stock !== null) {
+          // 库存按菜品合计扣减（不同口味的行都算在该菜品上）
+          const addedQty = addedItems
+            .filter((ai: any) => ai.id === item.id)
+            .reduce((s: number, ai: any) => s + Number(ai.quantity || 0), 0);
+          if (addedQty > 0 && item.stock !== undefined && item.stock !== null) {
             const currentStock = Number(item.stock);
             if (!isNaN(currentStock)) {
-              const newStock = Math.max(
-                0,
-                currentStock - Number(added.quantity),
-              );
+              const newStock = Math.max(0, currentStock - addedQty);
               stockUpdated = true;
               return {
                 ...item,
@@ -210,14 +246,19 @@ export function OrderBoard({
         0,
       );
 
+      // 加菜单打印对象：items 逐行带配菜快照，total 为这批加菜的逐项合计
       const additionsOrderObj = {
         ...addDishTargetOrder,
         total: additionTotal,
+        total_amount: additionTotal,
+        additionsTotal: additionTotal,
         items: addedItems,
       };
 
       setAddDishTargetOrder(null);
       setAddDishCart({});
+      setAddDishPendingDish(null);
+      setAddDishAddonSelection([]);
 
       onConfirmDialog({
         isOpen: true,
@@ -406,10 +447,19 @@ export function OrderBoard({
                 }
 
                 return filteredDishes.map((dish: any) => {
-                  const qty = addDishCart[dish.id] || 0;
-                  const priceStr = String(dish.price || "0");
-                  const priceMatch = priceStr.match(/\d+(\.\d+)?/);
-                  const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
+                  // 同一菜品可能因口味不同而有多行，这里汇总该菜品在所有口味行上的数量
+                  const dishLineKeys = Object.keys(addDishCart).filter(
+                    (k) => parseLineKey(k).dishId === dish.id,
+                  );
+                  const qty = dishLineKeys.reduce(
+                    (s, k) => s + Number(addDishCart[k] || 0),
+                    0,
+                  );
+                  const menuAddons: any[] = Array.isArray(dish.addons)
+                    ? dish.addons
+                    : [];
+                  const hasAddons = menuAddons.length > 0;
+                  const priceNum = parseMenuPrice(dish.price);
 
                   return (
                     <div
@@ -439,7 +489,35 @@ export function OrderBoard({
                           )}
                           <div className="text-xs font-bold text-amber-400 font-mono mt-0.5">
                             ¥{priceNum.toFixed(2)}
+                            {hasAddons && (
+                              <span className="ml-1 text-[10px] font-normal text-zinc-500">
+                                +口味
+                              </span>
+                            )}
                           </div>
+                          {qty > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                              {dishLineKeys.map((k) => {
+                                const addonIds = parseLineKey(k).addonIds;
+                                if (addonIds.length === 0) return null;
+                                const names = addonIds
+                                  .map(
+                                    (aid) =>
+                                      menuAddons.find((a) => a.id === aid)
+                                        ?.name || aid,
+                                  )
+                                  .join("、");
+                                return (
+                                  <div
+                                    key={k}
+                                    className="text-[10px] text-amber-500/80 truncate"
+                                  >
+                                    · {names} ×{addDishCart[k]}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -448,22 +526,29 @@ export function OrderBoard({
                           <span className="text-[11px] text-zinc-500 bg-zinc-800 px-2.5 py-1 rounded-lg">
                             已售罄
                           </span>
-                        ) : qty > 0 ? (
+                        ) : qty > 0 || hasAddons ? (
                           <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
                             <button
                               type="button"
+                              title={
+                                hasAddons ? "去掉最后加入的一份" : "减一份"
+                              }
                               onClick={() => {
                                 setAddDishCart((prev) => {
-                                  const next = { ...prev };
-                                  if ((next[dish.id] ?? 0) > 1) {
-                                    next[dish.id]!--;
-                                  } else {
-                                    delete next[dish.id];
-                                  }
-                                  return next;
+                                  // 有口味的菜品：按该菜品最后加入的那一行减一
+                                  const lastKey = [
+                                    ...dishLineKeys,
+                                  ].reverse()[0];
+                                  if (!lastKey) return prev;
+                                  return applyCartDelta(prev, lastKey, -1);
                                 });
                               }}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
+                              disabled={qty === 0}
+                              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+                                qty === 0
+                                  ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                                  : "bg-zinc-800 hover:bg-zinc-700 text-white"
+                              }`}
                             >
                               <Minus size={14} />
                             </button>
@@ -472,12 +557,8 @@ export function OrderBoard({
                             </span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setAddDishCart((prev) => ({
-                                  ...prev,
-                                  [dish.id]: (prev[dish.id] || 0) + 1,
-                                }));
-                              }}
+                              title="再加一份"
+                              onClick={() => startAddDishLine(dish)}
                               className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
                             >
                               <Plus size={14} />
@@ -486,12 +567,7 @@ export function OrderBoard({
                         ) : (
                           <button
                             type="button"
-                            onClick={() => {
-                              setAddDishCart((prev) => ({
-                                ...prev,
-                                [dish.id]: 1,
-                              }));
-                            }}
+                            onClick={() => startAddDishLine(dish)}
                             className="px-3 py-2 bg-amber-600/20 hover:bg-amber-600 border border-amber-500/40 text-amber-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
                           >
                             <Plus size={14} /> 加菜
@@ -507,45 +583,81 @@ export function OrderBoard({
             {/* 底部结算与提交悬浮栏 */}
             {(() => {
               const allDishes = categories.flatMap((c) => c.items || []);
-              const selectedEntries = Object.entries(addDishCart).filter(
-                ([_, q]) => Number(q) > 0,
+              const previewItems = cartLinesToOrderItems(
+                addDishCart,
+                allDishes,
               );
-              const totalAddCount = selectedEntries.reduce(
-                (sum: number, [_, q]) => sum + Number(q),
+              const totalAddCount = previewItems.reduce(
+                (sum: number, i) => sum + Number(i.quantity || 0),
                 0,
               );
-              const totalAddPrice = selectedEntries.reduce(
-                (sum: number, [id, q]) => {
-                  const d = allDishes.find((i) => i.id === id);
-                  const priceStr = String(d?.price || "0");
-                  const priceMatch = priceStr.match(/\d+(\.\d+)?/);
-                  const priceNum = priceMatch ? parseFloat(priceMatch[0]) : 0;
-                  return sum + priceNum * Number(q);
-                },
-                0,
-              );
-              const projectedTotal =
-                (Number(addDishTargetOrder.total) || 0) + totalAddPrice;
+              // 口径：(菜品单价 + Σ配菜单价) × 数量
+              const totalAddPrice = orderComputedTotal(previewItems);
+              const currentOrderItems = addDishTargetOrder.items || [];
+              const projectedTotal = orderComputedTotal([
+                ...currentOrderItems,
+                ...previewItems,
+              ]);
 
               return (
                 <div className="p-3.5 bg-zinc-950 border-t border-zinc-800/80 flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="text-zinc-400">
-                      已选{" "}
-                      <span className="text-amber-400 font-bold font-mono">
-                        {totalAddCount}
-                      </span>{" "}
-                      项加菜
-                      {totalAddCount > 0 && (
-                        <button
-                          onClick={() => setAddDishCart({})}
-                          className="ml-2 text-zinc-500 hover:text-red-400 underline"
-                        >
-                          清空
-                        </button>
+                  <div className="flex items-start justify-between gap-3 text-xs">
+                    <div className="text-zinc-400 flex-1 min-w-0">
+                      <div>
+                        已选{" "}
+                        <span className="text-amber-400 font-bold font-mono">
+                          {totalAddCount}
+                        </span>{" "}
+                        项加菜
+                        {totalAddCount > 0 && (
+                          <button
+                            onClick={() => setAddDishCart({})}
+                            className="ml-2 text-zinc-500 hover:text-red-400 underline"
+                          >
+                            清空
+                          </button>
+                        )}
+                      </div>
+                      {previewItems.length > 0 && (
+                        <div className="mt-1 max-h-20 overflow-y-auto custom-scrollbar space-y-0.5">
+                          {previewItems.map((line, idx) => (
+                            <div
+                              key={`${line.id}-${idx}`}
+                              className="flex items-center justify-between gap-2 text-[10px] text-zinc-400"
+                            >
+                              <span className="truncate">
+                                {line.name} ×{line.quantity}
+                                {line.addons && line.addons.length > 0 && (
+                                  <span className="text-amber-500/80">
+                                    {" "}
+                                    （
+                                    {line.addons
+                                      .map(
+                                        (a) =>
+                                          `${a.name}${a.price > 0 ? ` +¥${a.price.toFixed(2)}` : ""}`,
+                                      )
+                                      .join("、")}
+                                    ）
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-mono text-amber-400/90 shrink-0">
+                                ¥
+                                {(
+                                  (line.price +
+                                    (line.addons || []).reduce(
+                                      (s, a) => s + Number(a.price || 0),
+                                      0,
+                                    )) *
+                                  Number(line.quantity || 0)
+                                ).toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <span className="text-zinc-400">加菜小计: </span>
                       <span className="text-amber-400 font-bold font-mono text-sm sm:text-base">
                         +¥{totalAddPrice.toFixed(2)}
@@ -590,6 +702,111 @@ export function OrderBoard({
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* 后台加菜 - 口味多选弹窗（有配菜的菜品先选口味再入购物车行） */}
+      {addDishTargetOrder && addDishPendingDish && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          style={{ zIndex: 10000 }}
+        >
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col shadow-2xl text-left">
+            <div className="p-4 border-b border-zinc-800 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {addDishPendingDish.title || addDishPendingDish.name}
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  选择口味/配菜（可多选），不同组合会成为独立的一行
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setAddDishPendingDish(null);
+                  setAddDishAddonSelection([]);
+                }}
+                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 space-y-2 overflow-y-auto custom-scrollbar">
+              {(addDishPendingDish.addons || []).map((addon: any) => {
+                const selected = addDishAddonSelection.includes(addon.id);
+                const addonPriceNum = parseMenuPrice(addon.price);
+                return (
+                  <button
+                    key={addon.id}
+                    type="button"
+                    onClick={() => toggleAddDishAddon(addon.id)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition-colors ${
+                      selected
+                        ? "bg-amber-500/15 border-amber-500 text-white"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <span
+                        className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
+                          selected
+                            ? "bg-amber-500 border-amber-500 text-white"
+                            : "border-zinc-600"
+                        }`}
+                      >
+                        {selected ? <Check size={11} /> : null}
+                      </span>
+                      {addon.name}
+                    </span>
+                    <span className="text-sm font-semibold text-amber-400 font-mono">
+                      {addonPriceNum > 0
+                        ? `+¥${addonPriceNum.toFixed(2)}`
+                        : "免费"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="px-4 py-2 border-t border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between">
+              <span>
+                本行单价：
+                <span className="text-amber-400 font-mono font-bold">
+                  ¥
+                  {(
+                    parseMenuPrice(addDishPendingDish.price) +
+                    addDishAddonSelection.reduce((s, id) => {
+                      const a = (addDishPendingDish.addons || []).find(
+                        (x: any) => x.id === id,
+                      );
+                      return s + parseMenuPrice(a?.price);
+                    }, 0)
+                  ).toFixed(2)}
+                </span>
+              </span>
+              <span className="text-zinc-500">
+                已选 {addDishAddonSelection.length} 个口味
+              </span>
+            </div>
+            <div className="p-4 pt-2 border-t border-zinc-800 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddDishPendingDish(null);
+                  setAddDishAddonSelection([]);
+                }}
+                className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs sm:text-sm font-semibold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmAddDishAddons}
+                className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs sm:text-sm font-bold transition-colors"
+              >
+                加入加菜清单
+              </button>
+            </div>
           </div>
         </div>
       )}

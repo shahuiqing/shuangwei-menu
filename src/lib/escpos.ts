@@ -1,4 +1,14 @@
 import type { ReceiptSettings } from "../types/menu";
+import {
+  buildLines,
+  formatAmount,
+  pickItemTitles,
+  resolveOrderTotals,
+  resolveTicketLayout,
+  toAmount,
+  type NormalizedLine,
+  type TicketType,
+} from "./print";
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -107,32 +117,40 @@ function wrapLine(s: string, width: number): string[] {
   return out;
 }
 
-function pickTitles(
-  item: { name?: string; enTitle?: string; frTitle?: string },
-  langs: string[],
-): string[] {
-  const set = langs?.length ? langs : ["zh", "en"];
-  const titles: string[] = [];
-  if (set.includes("zh") && item.name) titles.push(item.name);
-  if (set.includes("en") && item.enTitle) titles.push(item.enTitle);
-  if (set.includes("fr") && item.frTitle) titles.push(item.frTitle);
-  const unique = [...new Set(titles.filter(Boolean))];
-  if (unique.length === 0 && item.name) unique.push(item.name);
-  return unique;
-}
-
 export function buildOrderTicket(
   order: any,
   receiptSettings: ReceiptSettings | undefined,
-  ticketType: "kitchen" | "addition" | "receipt",
+  ticketType: TicketType,
   currency = "MAD",
   opts: EscPosOptions = {},
+  renderOptions: { itemCount?: number; partial?: boolean } = {},
 ): Uint8Array {
   const width = opts.width || 48;
   const langs = receiptSettings?.printLanguages || ["zh", "en"];
   const storeName = receiptSettings?.storeName || "炙·双味居";
-  const isKitchen = ticketType === "kitchen" || ticketType === "addition";
-  const isAddition = ticketType === "addition";
+  // 与 print.ts 同一口径：加菜单（addition）必须显示金额，厨房单不显示
+  const { isKitchen, isAddition, showAmounts } = resolveTicketLayout(
+    undefined,
+    ticketType,
+  );
+
+  const separator = () =>
+    b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
+  const printRow = (left: string, right: string) => {
+    if (!right) {
+      for (const seg of wrapLine(left, width)) b.line(seg);
+      return;
+    }
+    const segs = wrapLine(left, Math.max(1, width - measure(right) - 1));
+    segs.forEach((seg, idx) => {
+      if (idx === segs.length - 1) {
+        const pad = Math.max(1, width - measure(seg) - measure(right));
+        b.line(seg + " ".repeat(pad) + right);
+      } else {
+        b.line(seg);
+      }
+    });
+  };
 
   const b = new EscPosBuilder();
   b.init().align("center");
@@ -145,117 +163,80 @@ export function buildOrderTicket(
         ? "厨房单 / Kitchen"
         : "结账单 / Receipt",
   );
-  b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
+  separator();
 
   b.align("left");
-  b.line(`桌号/顾客: ${order.customerName || order.customer_name || "未填写"}`);
-  b.line(`订单号: ${order.orderNumber || order.id || order._id || ""}`);
+  b.line(
+    `桌号/顾客: ${order?.customerName || order?.customer_name || "未填写"}`,
+  );
+  b.line(`订单号: ${order?.orderNumber || order?.id || order?._id || ""}`);
   if (receiptSettings?.showDate !== false) {
-    const d = order.timestamp
+    const d = order?.timestamp
       ? new Date(order.timestamp).toLocaleString()
       : new Date().toLocaleString();
     b.line(`时间: ${d}`);
   }
-  b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
+  separator();
 
-  const renderItems = (items: any[]) => {
-    const grouped = new Map<
-      string,
-      {
-        title: string;
-        qty: number;
-        price: number;
-        addons: { name: string; price: number }[];
-      }
-    >();
-    for (const it of items || []) {
-      const addons = (it.addons || [])
-        .map((a: any) => ({
-          name: String(a?.name || "").trim(),
-          price: Number(a?.price) || 0,
-        }))
-        .filter((a: { name: string }) => a.name);
-      const key = `${it.id || it.name || ""}|${addons
-        .map((a: { name: string; price: number }) => `${a.name}:${a.price}`)
-        .join(",")}`;
-      const title = pickTitles(it, langs)[0] || it.name || "";
-      const qty = Number(it.quantity || 1);
-      const prev = grouped.get(key);
-      if (prev) prev.qty += qty;
-      else
-        grouped.set(key, {
-          title,
-          qty,
-          price: Number(it.price) || 0,
-          addons,
-        });
-    }
-    const printRow = (left: string, right: string) => {
-      if (!right) {
-        for (const seg of wrapLine(left, width)) b.line(seg);
-        return;
-      }
-      const segs = wrapLine(left, Math.max(1, width - measure(right) - 1));
-      segs.forEach((seg, idx) => {
-        if (idx === segs.length - 1) {
-          const pad = Math.max(1, width - measure(seg) - measure(right));
-          b.line(seg + " ".repeat(pad) + right);
-        } else {
-          b.line(seg);
-        }
-      });
-    };
-    for (const g of grouped.values()) {
-      const unitTotal =
-        g.price +
-        g.addons.reduce(
-          (s: number, a: { name: string; price: number }) => s + a.price,
-          0,
-        );
+  const renderLines = (lines: NormalizedLine[]) => {
+    for (const line of lines) {
+      const title = pickItemTitles(line, langs)[0] || line.name || "";
       printRow(
-        `  ${g.qty}x ${g.title}`,
-        isKitchen ? "" : `${currency}${unitTotal * g.qty}`,
+        `  ${line.quantity}x ${title}`,
+        showAmounts ? `${currency}${formatAmount(line.lineSubtotal)}` : "",
       );
-      for (const a of g.addons) {
+      for (const a of line.addons) {
+        // 免费配菜（price = 0）不打印 +0
         printRow(
           `      + ${a.name}`,
-          !isKitchen && a.price > 0 ? `+${currency}${a.price}` : "",
+          showAmounts && a.price > 0
+            ? `+${currency}${formatAmount(a.price)}`
+            : "",
         );
       }
     }
   };
 
-  if (isAddition) {
-    renderItems(order.items);
-  } else if (isKitchen) {
-    const original = (order.items || []).filter((i: any) => !i.isAdded);
-    const added = (order.items || []).filter((i: any) => i.isAdded);
-    renderItems(original);
-    if (added.length > 0) {
-      b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
-      b.line("--- 加菜 / Additions ---");
-      renderItems(added);
-    }
+  const allItems: any[] = Array.isArray(order?.items) ? order.items : [];
+
+  if (isAddition || !isKitchen) {
+    // 加菜单 / 结账单：整单合并（加菜单调用方通常只传加菜行）
+    renderLines(buildLines(allItems));
   } else {
-    renderItems(order.items);
+    // 整单厨房单：原单 / 加菜 分段
+    const original = allItems.filter((i: any) => !i?.isAdded);
+    const added = allItems.filter((i: any) => i?.isAdded);
+    renderLines(buildLines(original));
+    if (buildLines(added).length > 0) {
+      separator();
+      b.line("--- 加菜 / Additions ---");
+      renderLines(buildLines(added));
+    }
   }
 
-  if (!isKitchen) {
-    b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
-    b.line(`原价: ${currency}${order.total || 0}`);
-    if (order.discountAmount)
-      b.line(`折扣: -${currency}${order.discountAmount}`);
-    if (order.finalTotal !== undefined)
-      b.line(`应收: ${currency}${order.finalTotal}`);
-    if (order.paymentMethod) b.line(`支付方式: ${order.paymentMethod}`);
-    if (order.receivedAmount !== undefined)
-      b.line(`实收: ${currency}${order.receivedAmount}`);
-    if (order.changeAmount !== undefined && order.changeAmount > 0)
-      b.line(`找零: ${currency}${order.changeAmount}`);
+  if (showAmounts) {
+    const totals = resolveOrderTotals(order, {
+      itemCount: renderOptions.itemCount,
+      partial: renderOptions.partial,
+    });
+    separator();
+    b.line(
+      `${isAddition ? "加菜小计" : "原价"}: ${currency}${formatAmount(totals.total)}`,
+    );
+    const discount = toAmount(order?.discountAmount);
+    if (discount > 0) b.line(`折扣: -${currency}${formatAmount(discount)}`);
+    if (order?.finalTotal !== undefined && order?.finalTotal !== null)
+      b.line(`应收: ${currency}${formatAmount(order.finalTotal)}`);
+    if (order?.paymentMethod) b.line(`支付方式: ${order.paymentMethod}`);
+    if (order?.receivedAmount !== undefined)
+      b.line(`实收: ${currency}${formatAmount(order.receivedAmount)}`);
+    const change = toAmount(order?.changeAmount);
+    if (order?.changeAmount !== undefined && change > 0)
+      b.line(`找零: ${currency}${formatAmount(change)}`);
   }
 
-  if (order.notes) {
-    b.line("-".repeat(Math.max(20, Math.floor(width / 2))));
+  if (order?.notes) {
+    separator();
     b.line(`备注: ${order.notes}`);
   }
 
@@ -278,4 +259,19 @@ export function buildTestTicket(
     total: 180,
   };
   return buildOrderTicket(order, receiptSettings, "receipt", "MAD", opts);
+}
+
+/** 将票据字节解码为可断言的文本（UTF-8，控制字符转为可读标记） */
+export function ticketToText(bytes: Uint8Array): string {
+  let text = "";
+  try {
+    text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    text = Array.from(bytes)
+      .map((b) => String.fromCharCode(b))
+      .join("");
+  }
+  return text
+    .replace(/\u001b[@aEd-]\d?/g, "")
+    .replace(/\u001dV[\u0000-\u0042]/g, "");
 }

@@ -1,4 +1,6 @@
 import { NUMPAD_KEYS } from "./adminConstants";
+import { AlertTriangle } from "lucide-react";
+import { auditOrderTotal, orderComputedTotal } from "../../utils/orderMoney";
 
 export interface CheckoutResult {
   finalTotal: number;
@@ -54,13 +56,23 @@ export function CheckoutModal({
   onComplete: (result: CheckoutResult) => void;
 }) {
   const rawDiscountNum = parseFloat(discountStr) || 0;
+  // 结算基准金额：有明细时一律以逐项合计为准（明细为空的老订单才用 order.total）。
+  // 这样打折、折后应收、找零、完成结账四处金额与菜品明细口径一致，
+  // 后台加菜/合并订单丢掉配菜加价时也不会少收钱。
+  const checkoutAudit = order ? auditOrderTotal(order) : null;
+  const hasItemDetail = ((order?.items || []) as any[]).length > 0;
+  const baseTotal = !order
+    ? 0
+    : hasItemDetail
+      ? checkoutAudit!.resolved
+      : Number(order.total) || 0;
+
   let parsedDiscount = 0;
   if (discountMode === "rate") {
     let rate = rawDiscountNum;
     if (rate > 10 && rate <= 100) rate = rate / 10;
     if (rate > 0 && rate < 10) {
-      const total = order?.total || 0;
-      parsedDiscount = total * (1 - rate / 10);
+      parsedDiscount = baseTotal * (1 - rate / 10);
     } else if (rate === 10 || rate === 0) {
       parsedDiscount = 0;
     }
@@ -85,6 +97,16 @@ export function CheckoutModal({
 
   if (!order) return null;
 
+  // 金额口径统一校验：逐项合计 = (菜品单价 + Σ配菜单价) × 数量 之和。
+  // 历史上后台加菜/合并订单会丢掉配菜加价，导致 order.total 与明细不一致；
+  // 这里不静默采用 total，而是提示并以逐项合计为准收款。
+  const itemAudit = checkoutAudit!;
+  const itemsTotal = orderComputedTotal(order?.items);
+  const hasAddons = (order?.items || []).some(
+    (it: any) => Array.isArray(it?.addons) && it.addons.length > 0,
+  );
+  const useComputed = hasItemDetail && itemAudit.mismatch;
+
   return (
     <div
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto touch-pan-y"
@@ -102,9 +124,32 @@ export function CheckoutModal({
                 订单总金额 (Total Amount)
               </label>
               <div className="text-2xl font-bold text-white">
-                {currency} {order.total}
+                {currency} {baseTotal.toFixed(2)}
               </div>
+              {hasItemDetail && (
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  菜品明细合计（含口味加价）：{currency} {itemsTotal.toFixed(2)}
+                  {!itemAudit.mismatch && hasAddons ? " · 已含配菜加价" : ""}
+                </div>
+              )}
             </div>
+
+            {useComputed && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-xs text-amber-300">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-bold">
+                    订单金额与菜品明细不一致，已按明细合计收款
+                  </div>
+                  <div className="mt-0.5 text-amber-200/80">
+                    订单记录金额 {currency} {itemAudit.stored.toFixed(2)}，
+                    明细合计 {currency} {itemAudit.computed.toFixed(2)}（差{" "}
+                    {itemAudit.diff > 0 ? "-" : "+"}
+                    {currency} {Math.abs(itemAudit.diff).toFixed(2)}）。
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-zinc-400 mb-2">
@@ -218,7 +263,7 @@ export function CheckoutModal({
                   {
                     label: "免单",
                     mode: "amount",
-                    val: String(order.total || 0),
+                    val: String(baseTotal),
                   },
                 ].map((d) => (
                   <button
@@ -270,8 +315,7 @@ export function CheckoutModal({
                 折后应收 (After Discount)
               </label>
               <div className="text-xl font-bold text-orange-500">
-                {currency}{" "}
-                {Math.max(0, (order.total || 0) - parsedDiscount).toFixed(2)}
+                {currency} {Math.max(0, baseTotal - parsedDiscount).toFixed(2)}
               </div>
             </div>
 
@@ -310,8 +354,7 @@ export function CheckoutModal({
                 {currency}{" "}
                 {Math.max(
                   0,
-                  parsedReceived -
-                    Math.max(0, (order.total || 0) - parsedDiscount),
+                  parsedReceived - Math.max(0, baseTotal - parsedDiscount),
                 ).toFixed(2)}
               </div>
             </div>
@@ -326,10 +369,7 @@ export function CheckoutModal({
             </button>
             <button
               onClick={() => {
-                const finalTotalVal = Math.max(
-                  0,
-                  (order.total || 0) - parsedDiscount,
-                );
+                const finalTotalVal = Math.max(0, baseTotal - parsedDiscount);
                 const changeVal = Math.max(0, parsedReceived - finalTotalVal);
                 onComplete({
                   finalTotal: finalTotalVal,
