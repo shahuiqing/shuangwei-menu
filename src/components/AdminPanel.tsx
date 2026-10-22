@@ -36,8 +36,8 @@ interface AdminPanelProps {
   setBgUrl: (url: string) => void;
   logoUrl: string;
   setLogoUrl: (url: string) => void;
-  layoutStyle?: "grid" | "list" | "bento";
-  setLayoutStyle?: (style: "grid" | "list" | "bento") => void;
+  layoutStyle?: "grid" | "list" | "bento" | "compact";
+  setLayoutStyle?: (style: "grid" | "list" | "bento" | "compact") => void;
   theme?: "midnight" | "light";
   setTheme?: (theme: "midnight" | "light") => void;
   adminPassword?: string;

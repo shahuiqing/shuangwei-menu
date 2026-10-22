@@ -72,7 +72,10 @@ export const appSettingsSchema = z
     securityQuestion: z.string().max(200).optional().default(""),
     securityAnswer: z.string().max(200).optional().default(""),
     soundEnabled: z.boolean().optional().default(true),
-    layoutStyle: z.enum(["grid", "list", "bento"]).optional().default("grid"),
+    layoutStyle: z
+      .enum(["grid", "list", "bento", "compact"])
+      .optional()
+      .default("grid"),
     receiptSettings: receiptSettingsSchema.optional(),
     deletedItemIds: z.array(z.string()).max(500).optional().default([]),
     theme: z.enum(["midnight", "light"]).optional().default("midnight"),

@@ -37,8 +37,8 @@ export function AppearanceTab({
   setIsUploading,
   onSaveToCloud,
 }: {
-  layoutStyle?: "grid" | "list" | "bento";
-  setLayoutStyle?: (style: "grid" | "list" | "bento") => void;
+  layoutStyle?: "grid" | "list" | "bento" | "compact";
+  setLayoutStyle?: (style: "grid" | "list" | "bento" | "compact") => void;
   theme?: "midnight" | "light";
   setTheme?: (theme: "midnight" | "light") => void;
   soundEnabled?: boolean;
@@ -67,7 +67,7 @@ export function AppearanceTab({
           <Layout size={20} className="text-orange-500" />
           菜单布局样式 / Layout Style
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <button
             onClick={() => setLayoutStyle && setLayoutStyle("grid")}
             className={`flex flex-col items-center justify-center p-4 rounded-xl border ${layoutStyle === "grid" ? "border-orange-500 bg-orange-500/10 text-orange-500" : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600"} transition-colors gap-2`}
@@ -102,6 +102,19 @@ export function AppearanceTab({
               <div className="col-span-1 border border-zinc-700 rounded-sm"></div>
             </div>
             <span className="text-sm font-semibold mt-1">便当网格 (Bento)</span>
+          </button>
+          <button
+            onClick={() => setLayoutStyle && setLayoutStyle("compact")}
+            className={`flex flex-col items-center justify-center p-4 rounded-xl border ${layoutStyle === "compact" ? "border-orange-500 bg-orange-500/10 text-orange-500" : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600"} transition-colors gap-2`}
+          >
+            <div className="w-16 h-12 bg-zinc-800 rounded relative overflow-hidden p-1">
+              <div className="absolute inset-1 bg-zinc-700 rounded-sm"></div>
+              <div className="absolute top-1 left-1 right-1 h-3 bg-zinc-600/90 rounded-sm"></div>
+              <div className="absolute bottom-1 right-1 w-6 h-3 bg-orange-500/80 rounded-sm"></div>
+            </div>
+            <span className="text-sm font-semibold mt-1">
+              雅致矩形 (Compact)
+            </span>
           </button>
         </div>
       </div>

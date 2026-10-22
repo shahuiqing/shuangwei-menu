@@ -294,9 +294,12 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(
     () => safeGetItem("menuSoundEnabled") !== "false",
   );
-  const [layoutStyle, setLayoutStyle] = useState<"grid" | "list" | "bento">(
+  const [layoutStyle, setLayoutStyle] = useState<
+    "grid" | "list" | "bento" | "compact"
+  >(
     () =>
-      (safeGetItem("menuLayoutStyle") as "grid" | "list" | "bento") || "grid",
+      (safeGetItem("menuLayoutStyle") as
+        "grid" | "list" | "bento" | "compact") || "grid",
   );
   const [theme, setTheme] = useState<"midnight" | "light">(
     () => (safeGetItem("menuThemeMode") as "midnight" | "light") || "midnight",
@@ -460,7 +463,9 @@ export default function App() {
         safeSetItem("menuSoundEnabled", String(data.soundEnabled));
       }
       if (data.layoutStyle !== undefined) {
-        setLayoutStyle(data.layoutStyle);
+        setLayoutStyle(
+          data.layoutStyle as "grid" | "list" | "bento" | "compact",
+        );
         safeSetItem("menuLayoutStyle", data.layoutStyle);
       }
       if (data.theme !== undefined) {
@@ -732,9 +737,13 @@ export default function App() {
     safeSetItem("menuSoundEnabled", String(enabled));
   };
 
-  const handleUpdateLayoutStyle = (style: "grid" | "list" | "bento") => {
+  const handleUpdateLayoutStyle = (
+    style: "grid" | "list" | "bento" | "compact",
+  ) => {
     setLayoutStyle(style);
     safeSetItem("menuLayoutStyle", style);
+    // 同步到云端，否则刷新后会被云端旧值（grid）覆盖
+    handleSaveToCloud({ layoutStyle: style, silent: true });
   };
 
   const handleUpdateTheme = (newTheme: "midnight" | "light") => {
@@ -916,7 +925,9 @@ export default function App() {
         safeSetItem("menuLogoUrl", data.logoUrl);
       }
       if (data.layoutStyle !== undefined) {
-        setLayoutStyle(data.layoutStyle);
+        setLayoutStyle(
+          data.layoutStyle as "grid" | "list" | "bento" | "compact",
+        );
         safeSetItem("menuLayoutStyle", data.layoutStyle);
       }
       if (data.theme !== undefined) {
@@ -2230,7 +2241,9 @@ export default function App() {
                     ? "grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8"
                     : layoutStyle === "bento"
                       ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6"
-                      : `grid grid-cols-1 sm:grid-cols-2 ${category.items?.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-6 lg:gap-8`
+                      : layoutStyle === "compact"
+                        ? "grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2 lg:gap-3"
+                        : `grid grid-cols-1 sm:grid-cols-2 ${category.items?.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-6 lg:gap-8`
                 }
               >
                 {category.items?.map((item: MenuItem, idx: number) => (
@@ -2254,7 +2267,9 @@ export default function App() {
                         ? "flex-row h-40 md:h-48"
                         : layoutStyle === "bento"
                           ? `flex-col h-full min-h-[300px] ${idx === 0 ? "sm:col-span-2 sm:row-span-2" : ""}`
-                          : "flex-col h-full"
+                          : layoutStyle === "compact"
+                            ? "flex-col h-96 md:h-112 relative rounded-[28px] border border-white/10 bg-zinc-900 shadow-[0_20px_60px_rgba(0,0,0,0.35)] overflow-hidden"
+                            : "flex-col h-full"
                     }`}
                   >
                     {/* Image container */}
@@ -2264,7 +2279,9 @@ export default function App() {
                           ? "w-32 md:w-48 h-full shrink-0"
                           : layoutStyle === "bento" && idx === 0
                             ? "h-64 sm:h-full shrink-0 min-h-[220px] sm:absolute sm:inset-0 sm:w-full"
-                            : "h-48 md:h-52 lg:h-[220px]"
+                            : layoutStyle === "compact"
+                              ? "h-56 md:h-64 shrink-0 relative"
+                              : "h-48 md:h-52 lg:h-[220px]"
                       }`}
                     >
                       <ImageWithSkeleton
@@ -2295,7 +2312,13 @@ export default function App() {
                       )}
 
                       {/* Halal Badge Overlay */}
-                      <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10">
+                      <div
+                        className={
+                          layoutStyle === "compact"
+                            ? "absolute bottom-3 left-3 z-20"
+                            : "absolute top-3 left-3 sm:top-4 sm:left-4 z-10"
+                        }
+                      >
                         <HalalBadge
                           className="px-2 py-1 [&>span]:text-[8px] sm:[&>span]:text-[9px]"
                           showText={true}
@@ -2303,23 +2326,31 @@ export default function App() {
                       </div>
 
                       {/* Price Tag overlay */}
-                      <div className="absolute bottom-4 left-5 right-5 flex justify-between items-end">
-                        <div className="text-2xl font-serif font-bold text-white drop-shadow-md">
-                          {item.price}
+                      {layoutStyle !== "compact" && (
+                        <div className="absolute bottom-4 left-5 right-5 flex justify-between items-end">
+                          <div className="text-2xl font-serif font-bold text-white drop-shadow-md">
+                            {item.price}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Details section */}
                     <div
-                      className={`p-4 md:p-6 flex-1 flex flex-col bg-linear-to-b from-zinc-900 to-zinc-950/80 ${
-                        layoutStyle === "bento" && idx === 0
-                          ? "sm:relative sm:z-10 sm:mt-auto sm:bg-linear-to-t sm:from-zinc-950/95 sm:via-zinc-900/80 sm:to-transparent pt-12"
-                          : ""
+                      className={`p-3 md:p-4 flex flex-col bg-linear-to-b from-zinc-900/95 to-zinc-950/80 ${
+                        layoutStyle === "compact"
+                          ? "flex-1 flex flex-col px-3 md:px-4 pt-4 pb-3 text-white min-w-0"
+                          : layoutStyle === "bento" && idx === 0
+                            ? "sm:relative sm:z-10 sm:mt-auto sm:bg-linear-to-t sm:from-zinc-950/95 sm:via-zinc-900/80 sm:to-transparent pt-12 flex-1"
+                            : "flex-1"
                       }`}
                     >
                       <h3
-                        className="text-lg md:text-xl text-zinc-100 font-serif mb-1 leading-tight tracking-wide line-clamp-2"
+                        className={
+                          layoutStyle === "compact"
+                            ? "text-sm md:text-base text-white font-semibold leading-snug tracking-tight line-clamp-2 break-words"
+                            : "text-lg md:text-xl text-zinc-100 font-serif mb-1 leading-tight tracking-wide line-clamp-2"
+                        }
                         dir={
                           language === "ar" || language === "ma" ? "rtl" : "ltr"
                         }
@@ -2333,8 +2364,17 @@ export default function App() {
                           </span>
                         )}
                       </h3>
+                      {layoutStyle === "compact" && (
+                        <div className="text-base font-medium text-zinc-400 mt-1 whitespace-nowrap tabular-nums">
+                          {item.price}
+                        </div>
+                      )}
                       <p
-                        className="text-[10px] text-orange-500 uppercase tracking-widest mb-2 opacity-90 line-clamp-1"
+                        className={
+                          layoutStyle === "compact"
+                            ? "text-xs text-zinc-500 line-clamp-1 mt-1"
+                            : "text-[10px] text-orange-500 uppercase tracking-widest mb-2 opacity-90 line-clamp-1"
+                        }
                         dir={
                           language === "ar" || language === "ma" ? "rtl" : "ltr"
                         }
@@ -2342,39 +2382,57 @@ export default function App() {
                         {getSubLoc(item, language, "title")}
                       </p>
 
-                      {item.allergens && item.allergens.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {item.allergens.map((allergenId: string) => {
-                            const opt = ALLERGEN_OPTIONS.find(
-                              (o) => o.id === allergenId,
-                            );
-                            if (!opt) return null;
-                            return (
-                              <span
-                                key={allergenId}
-                                title={opt.label}
-                                className="text-xs bg-zinc-800/80 border border-zinc-700/50 rounded-md px-1 py-0.5 flex items-center justify-center cursor-help transition-colors hover:bg-zinc-700"
-                              >
-                                {opt.icon}
-                              </span>
-                            );
-                          })}
-                        </div>
+                      {layoutStyle !== "compact" &&
+                        item.allergens &&
+                        item.allergens.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {item.allergens.map((allergenId: string) => {
+                              const opt = ALLERGEN_OPTIONS.find(
+                                (o) => o.id === allergenId,
+                              );
+                              if (!opt) return null;
+                              return (
+                                <span
+                                  key={allergenId}
+                                  title={opt.label}
+                                  className="text-xs bg-zinc-800/80 border border-zinc-700/50 rounded-md px-1 py-0.5 flex items-center justify-center cursor-help transition-colors hover:bg-zinc-700"
+                                >
+                                  {opt.icon}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                      {layoutStyle !== "compact" && (
+                        <p
+                          className="text-zinc-400 text-sm leading-relaxed font-light line-clamp-3 mb-4"
+                          dir={
+                            language === "ar" || language === "ma"
+                              ? "rtl"
+                              : "ltr"
+                          }
+                        >
+                          {getLoc(item, language, "desc")}
+                        </p>
                       )}
 
-                      <p
-                        className="text-zinc-400 text-sm leading-relaxed font-light line-clamp-3 mb-4"
-                        dir={
-                          language === "ar" || language === "ma" ? "rtl" : "ltr"
+                      <div
+                        className={
+                          layoutStyle === "compact"
+                            ? "mt-auto pt-3 flex items-center justify-between"
+                            : "mt-auto pt-2 border-t border-zinc-800/80 flex items-center justify-between"
                         }
                       >
-                        {getLoc(item, language, "desc")}
-                      </p>
-
-                      <div className="mt-auto pt-2 border-t border-zinc-800/80 flex items-center justify-between">
                         {(isAdminAuthed || isDeviceAuthed || scanSession) &&
                           (cart[item.id] ? (
-                            <div className="flex items-center gap-2 md:gap-3 bg-zinc-800/50 rounded-xl p-1 md:p-1.5 border border-zinc-700 w-full justify-between">
+                            <div
+                              className={
+                                layoutStyle === "compact"
+                                  ? "flex items-center bg-white/10 rounded-full p-1 w-full justify-between"
+                                  : "flex items-center gap-2 md:gap-3 bg-zinc-800/50 rounded-xl p-1 md:p-1.5 border border-zinc-700 w-full justify-between"
+                              }
+                            >
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2421,7 +2479,11 @@ export default function App() {
                                 e.stopPropagation();
                                 tryAddToCart(item);
                               }}
-                              className="w-full h-10 md:h-12 flex items-center justify-center gap-2 px-3 md:px-4 rounded-xl bg-zinc-800/80 hover:bg-orange-600 text-zinc-300 hover:text-white text-xs md:text-sm font-semibold transition-colors border border-zinc-700 hover:border-orange-500 group-hover:border-zinc-500"
+                              className={
+                                layoutStyle === "compact"
+                                  ? "w-full h-9 flex items-center justify-center gap-1.5 rounded-full bg-white text-zinc-900 hover:bg-zinc-200 active:scale-95 text-sm font-medium transition-all"
+                                  : "w-full h-10 md:h-12 flex items-center justify-center gap-2 px-3 md:px-4 rounded-xl bg-zinc-800/80 hover:bg-orange-600 text-zinc-300 hover:text-white text-xs md:text-sm font-semibold transition-colors border border-zinc-700 hover:border-orange-500 group-hover:border-zinc-500"
+                              }
                             >
                               <ShoppingBag size={18} />
                               {language === "zh"

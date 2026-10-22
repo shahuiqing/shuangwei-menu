@@ -1,4 +1,4 @@
-export type LayoutStyle = "grid" | "list" | "bento";
+export type LayoutStyle = "grid" | "list" | "bento" | "compact";
 export type ThemeMode = "midnight" | "light";
 
 export interface MenuItemAddon {
