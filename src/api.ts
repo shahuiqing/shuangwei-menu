@@ -2493,9 +2493,10 @@ export const api = {
           welcomeMessage:
             existingSettings?.welcomeMessage || "Premium Charcoal BBQ",
           logoUrl: existingSettings?.logoUrl || "",
-          adminPasswordHash:
-            existingSettings?.adminPasswordHash ||
-            "$2b$10$9w21j6nlNxwRP1o7LdgJ.uhwLkakeoxaFy37CKt6AG/DccTR72Pcy",
+          adminPasswordHash: existingSettings?.adminPasswordHash || "",
+          // P0-7: 不再硬编码默认密码哈希（曾内联一个 "123456" 的 bcrypt 常量）。
+          // 首次部署时留空，UI 会引导部署者设置初始密码。
+          // 这避免了"4 份默认密码并存"和"setup 重跑重置密码"问题。
           devicePasswords: existingSettings?.devicePasswords || [],
           securityQuestion: existingSettings?.securityQuestion || "",
           securityAnswer: existingSettings?.securityAnswer || "",
