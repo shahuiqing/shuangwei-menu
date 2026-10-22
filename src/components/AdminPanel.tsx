@@ -678,7 +678,11 @@ export default function AdminPanel({
     const savedToken = localStorage.getItem("deviceAuthToken");
     const expiry = localStorage.getItem("deviceAuthTokenExpiry");
     if (savedToken && expiry && Date.now() < parseInt(expiry, 10)) {
-      const matched = devicePasswords?.find((d) => d.password === savedToken);
+      // token 格式为 "设备名:nonce"，按设备名匹配（不再存密码本身）
+      const tokenName = savedToken.includes(":")
+        ? savedToken.slice(0, savedToken.indexOf(":"))
+        : savedToken;
+      const matched = devicePasswords?.find((d) => d.name === tokenName);
       if (matched) setCurrentWaiter(matched);
     }
   }, [devicePasswords, isAuthed]);

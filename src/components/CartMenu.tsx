@@ -263,9 +263,11 @@ export default function CartMenu({
       expiry && // eslint-disable-next-line react-hooks/purity
       Date.now() < parseInt(expiry, 10)
     ) {
-      const matchedDevice = devicePasswords.find(
-        (d) => d.password === savedToken,
-      );
+      // token 格式为 "设备名:nonce"，按设备名匹配（不再存密码本身）
+      const tokenName = savedToken.includes(":")
+        ? savedToken.slice(0, savedToken.indexOf(":"))
+        : savedToken;
+      const matchedDevice = devicePasswords.find((d) => d.name === tokenName);
       if (matchedDevice) return matchedDevice;
     }
 

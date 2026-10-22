@@ -1189,13 +1189,24 @@ export default function App() {
   const [waiterPasswordInput, setWaiterPasswordInput] = useState("");
   const [waiterLoginError, setWaiterLoginError] = useState("");
 
-  const handleWaiterLogin = (e: FormEvent) => {
+  const handleWaiterLogin = async (e: FormEvent) => {
     e.preventDefault();
-    const matchedDevice = devicePasswords?.find(
-      (d) => d.password === waiterPasswordInput,
-    );
+    const { verifyPassword } = await import("./utils/password");
+    // 逐个时序安全比对（verifyPassword 兼容明文与 bcrypt），
+    // 避免用 === 直接比较密码造成时序侧信道。
+    let matchedDevice: { name: string; password: string } | undefined;
+    for (const d of devicePasswords || []) {
+      const ok = await verifyPassword(waiterPasswordInput, d.password);
+      if (ok) {
+        matchedDevice = d;
+        break;
+      }
+    }
     if (matchedDevice) {
-      safeSetItem("deviceAuthToken", matchedDevice.password);
+      // token 不再存密码本身（明文落入 localStorage 是 P1-5 的根因），
+      // 改存设备名 + 随机 nonce，验证时按 name 匹配。
+      const nonce = Math.random().toString(36).slice(2);
+      safeSetItem("deviceAuthToken", `${matchedDevice.name}:${nonce}`);
       safeSetItem("deviceAuthTokenExpiry", (Date.now() + 432000000).toString());
       setIsDeviceAuthed(true);
       setIsWaiterLoginOpen(false);
