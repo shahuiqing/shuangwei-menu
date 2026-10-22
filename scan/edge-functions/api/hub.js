@@ -2,10 +2,6 @@
 // 核心原则：降级而非拒绝——风险高时只隐藏群组入口，不弹任何提示，用户无感知
 
 // ===== base64url =====
-function b64urlEncode(str) {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 function b64urlDecode(s) {
   s = s.replace(/-/g, '+').replace(/_/g, '/');
   while (s.length % 4) s += '=';

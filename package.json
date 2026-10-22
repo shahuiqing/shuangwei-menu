@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node scripts/clean-dist.mjs && vite build",
+    "build": "node scripts/clean-dist.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "start": "vite preview",
     "lint": "tsc --noEmit && eslint . --max-warnings=0",
@@ -27,8 +27,6 @@
     "@edgeone/pages-blob": "^0.0.14",
     "@google/genai": "^2.8.0",
     "@supabase/supabase-js": "^2.110.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -41,10 +39,10 @@
     "react-dom": "^19.0.1",
     "vite": "^6.2.3",
     "ws": "^8.21.0",
-    "zod": "^4.4.3",
-    "zustand": "^5.0.15"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/bcryptjs": "^2.4.6",
@@ -55,6 +53,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "eslint": "^10.9.1",
