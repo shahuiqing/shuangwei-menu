@@ -53,7 +53,11 @@ export async function onRequest(context: {
       return json({ ok: String(password) === context.env.ADMIN_SECRET });
     }
 
-    return json({ ok: false, error: "owner password not configured" });
+    return json({
+      ok: false,
+      configured: false,
+      error: "owner password not configured",
+    });
   } catch (e: any) {
     console.error("[auth/verify-owner] error", e);
     return json({ ok: false, error: e.message }, 500);

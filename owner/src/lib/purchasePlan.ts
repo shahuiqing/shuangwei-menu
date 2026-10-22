@@ -52,13 +52,15 @@ const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
  * RPC 缺失时传 [] → 空 map，计划退化为「安全库存」口径。
  */
 export function dailyFromConsumption(
-  rows: { key: string; qty: number }[],
+  rows: { key: string; item_id?: string; qty: number }[],
   days: number,
 ): Map<string, number> {
   const d = Math.max(1, days);
   const out = new Map<string, number>();
   for (const r of rows) {
-    const k = String(r.key ?? "").trim();
+    const id = String(r.item_id ?? "").trim();
+    const name = String(r.key ?? "").trim();
+    const k = id || name;
     const qty = num(r.qty);
     if (!k || qty <= 0) continue;
     out.set(k, (out.get(k) || 0) + qty / d);
@@ -82,7 +84,10 @@ export function buildPurchasePlan(opts: {
   for (const it of opts.items || []) {
     const stock = num(it.stock);
     const safety = num(it.safety_stock);
-    const daily = Math.max(0, num(opts.daily?.get(String(it.name).trim())));
+    const daily = Math.max(
+      0,
+      num(opts.daily?.get(it.id) ?? opts.daily?.get(String(it.name).trim())),
+    );
     const target = safety + daily * coverage;
     const gap = target - stock;
     if (gap <= 0.001) continue; // 覆盖充足，无需采购

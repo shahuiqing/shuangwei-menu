@@ -236,16 +236,22 @@ export function buildMenuPoints(
   const avgQty = meanVal(base.map((b) => b.qty));
   const avgUnit = meanVal(base.map((b) => b.unit));
   const qualifies = (v: number, avg: number) => v > 0 && v >= avg;
-  return base.map((b) => ({
-    ...b,
-    quad: (qualifies(b.qty, avgQty)
-      ? qualifies(b.unit, avgUnit)
-        ? "star"
-        : "plowhorse"
-      : qualifies(b.unit, avgUnit)
-        ? "puzzle"
-        : "dog") as MatrixQuad,
-  }));
+  return base.map((b) => {
+    // 按毛利口径时，负毛利是独立类别「赔钱菜」，不应混入金牛/瘦狗
+    let quad: MatrixQuad;
+    if (metric === "profit" && b.unit < 0) {
+      quad = "loss";
+    } else {
+      quad = qualifies(b.qty, avgQty)
+        ? qualifies(b.unit, avgUnit)
+          ? "star"
+          : "plowhorse"
+        : qualifies(b.unit, avgUnit)
+          ? "puzzle"
+          : "dog";
+    }
+    return { ...b, quad };
+  });
 }
 
 /* ============ 消耗 / 后厨用料 ============ */

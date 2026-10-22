@@ -181,6 +181,10 @@ export async function adjustStock(
 ): Promise<boolean> {
   if (!supabase) return false;
   const next = num(item.stock) + num(delta);
+  if (next < 0) {
+    console.warn("[owner] adjustStock: 库存不可为负", item.name, next);
+    return false;
+  }
   const { error } = await supabase
     .from("inventory_items")
     .update({ stock: next, updated_at: new Date().toISOString() })
@@ -252,6 +256,10 @@ export async function saveBom(
   },
 ): Promise<boolean> {
   if (!supabase) return false;
+  if (num(bom.dosage) <= 0) {
+    console.warn("[owner] saveBom: dosage 必须 > 0");
+    return false;
+  }
   const payload = {
     id: bom.id || newId("BOM"),
     menu_item_name: bom.menu_item_name,
@@ -276,6 +284,19 @@ export async function deleteBom(id: string): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+/** 菜品改名后同步配方：把旧菜名下的配方项迁移到新菜名，避免成本/扣库失联 */
+export async function renameBom(
+  oldName: string,
+  newName: string,
+): Promise<void> {
+  if (!supabase || !oldName || !newName || oldName === newName) return;
+  const { error } = await supabase
+    .from("recipe_boms")
+    .update({ menu_item_name: newName })
+    .eq("menu_item_name", oldName);
+  if (error) console.warn("[owner] renameBom:", error.message);
 }
 
 /* ============ 采购 ============ */

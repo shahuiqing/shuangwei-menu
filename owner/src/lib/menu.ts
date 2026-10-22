@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { renameBom } from "./inventory";
 
 /* ============ 类型（与顾客端 settings.categories 对齐） ============ */
 
@@ -164,18 +165,29 @@ export async function updateDish(
   dishId: string,
   patch: Partial<MenuItem>,
 ): Promise<boolean> {
-  return mutate((cats) => ({
+  let oldTitle = "";
+  const ok = await mutate((cats) => ({
     cats: cats.map((c) =>
       c.id === catId
         ? {
             ...c,
-            items: (c.items || []).map((it) =>
-              it.id === dishId ? { ...it, ...patch } : it,
-            ),
+            items: (c.items || []).map((it) => {
+              if (it.id === dishId) {
+                const next = patch.title?.trim();
+                if (next && next !== it.title) oldTitle = it.title;
+                return { ...it, ...patch };
+              }
+              return it;
+            }),
           }
         : c,
     ),
   }));
+  // 改名后同步配方，避免成本/扣库按旧菜名失联
+  if (ok && oldTitle && patch.title?.trim()) {
+    await renameBom(oldTitle, patch.title.trim());
+  }
+  return ok;
 }
 
 export async function deleteDish(

@@ -410,7 +410,7 @@ export default function Waste({ version = 0 }: { version?: number }) {
                       {WASTE_CATEGORY[normalizeReason(t.reason)].label}
                     </span>
                     <span className="text-xs text-zinc-400">
-                      -{num(t.quantity)} {t.unit}
+                      {num(t.quantity)} {t.unit}
                     </span>
                     {t.notes && (
                       <span className="text-[11px] text-zinc-500 truncate max-w-[160px]">
@@ -450,7 +450,7 @@ export default function Waste({ version = 0 }: { version?: number }) {
                       </td>
                       <td className="px-3 py-2.5 text-white">{t.item_name}</td>
                       <td className="px-3 py-2.5 text-right text-zinc-300">
-                        -{num(t.quantity)} {t.unit}
+                        {num(t.quantity)} {t.unit}
                       </td>
                       <td className="px-3 py-2.5 text-right text-amber-400 font-semibold">
                         {fmtMoney(Math.abs(num(t.quantity)) * num(t.unit_cost))}

@@ -30,13 +30,11 @@ import {
 } from "../lib/menu";
 import {
   LANGS,
+  getLangNames,
   langCompletion,
   langCoverage,
   langCsv,
-  loadLangNames,
-  saveLangName,
   type DishLangNames,
-  type LangCode,
 } from "../lib/langNames";
 import { downloadText } from "../lib/localdb";
 
@@ -56,16 +54,16 @@ export default function Dishes({ version = 0 }: { version?: number }) {
     draft: Partial<MenuItem>;
   } | null>(null);
 
-  const [langMap, setLangMap] = useState<Record<string, DishLangNames>>({});
   const [langModal, setLangModal] = useState<{
+    catId: string;
     id: string;
     title: string;
+    draft: DishLangNames;
   } | null>(null);
 
   const load = async () => {
     setLoading(true);
     setCats(await fetchCategories());
-    setLangMap(loadLangNames());
     setLoading(false);
   };
 
@@ -129,13 +127,22 @@ export default function Dishes({ version = 0 }: { version?: number }) {
           stockRaw === "" || stockRaw === null || stockRaw === undefined
             ? null
             : Number(stockRaw);
+        if (stock !== null && !Number.isFinite(stock)) {
+          toast.error("库存必须是有效数字");
+          return false;
+        }
+        if (stock !== null && stock < 0) {
+          toast.error("库存不能为负");
+          return false;
+        }
         const payload: Partial<MenuItem> = {
           title: d.title.trim(),
           price: String(d.price ?? ""),
           description: d.description || "",
           image: d.image || "",
           stock,
-          isSoldOut: !!d.isSoldOut,
+          // 库存归零即视为售罄，避免「库存 0 却仍可卖」的矛盾
+          isSoldOut: stock === 0 ? true : !!d.isSoldOut,
           allergens: d.allergens || [],
         };
         return dishModal.dishId
@@ -146,21 +153,29 @@ export default function Dishes({ version = 0 }: { version?: number }) {
     ).then(() => setDishModal(null));
 
   const exportLang = () => {
-    const rows = cats.flatMap((c) =>
-      (c.items || []).map((it) => ({ id: it.id, title: it.title })),
-    );
+    const rows = cats.flatMap((c) => c.items || []);
     if (!rows.length) return toast.error("暂无菜品可导出");
     downloadText(
       `dish-lang-${new Date().toISOString().slice(0, 10)}.csv`,
-      langCsv(rows, langMap),
+      langCsv(rows),
       "text/csv;charset=utf-8",
     );
     toast.success(`已导出 ${rows.length} 个菜品的多语言名称`);
   };
 
-  const saveLang = (dishId: string, code: LangCode, v: string) => {
-    saveLangName(dishId, code, v);
-    setLangMap(loadLangNames());
+  const saveLang = async () => {
+    if (!langModal) return;
+    const patch: Partial<MenuItem> = {
+      enTitle: langModal.draft.en || "",
+      frTitle: langModal.draft.fr || "",
+      arTitle: langModal.draft.ar || "",
+      maTitle: langModal.draft.ma || "",
+    };
+    const ok = await updateDish(langModal.catId, langModal.id, patch);
+    if (!ok) return toast.error("保存失败（检查数据库权限）");
+    toast.success("多语言名称已保存并同步顾客端");
+    setLangModal(null);
+    load();
   };
 
   return (
@@ -199,8 +214,8 @@ export default function Dishes({ version = 0 }: { version?: number }) {
         <span className="text-amber-400">售罄 {stats.soldOut}</span>
         <span className="text-red-400">低库存 {stats.lowStock}</span>
         <span>
-          多语言已录 {langCoverage(langMap).dishes} 菜（四语齐全{" "}
-          {langCoverage(langMap).complete}）
+          多语言已录 {langCoverage(cats).dishes} 菜（四语齐全{" "}
+          {langCoverage(cats).complete}）
         </span>
         <button
           onClick={exportLang}
@@ -262,7 +277,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {items.map((it) => {
-                      const langDone = langCompletion(langMap[it.id] || {});
+                      const langDone = langCompletion(it);
                       return (
                         <div
                           key={it.id}
@@ -322,7 +337,12 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                             </button>
                             <button
                               onClick={() =>
-                                setLangModal({ id: it.id, title: it.title })
+                                setLangModal({
+                                  catId: c.id,
+                                  id: it.id,
+                                  title: it.title,
+                                  draft: getLangNames(it),
+                                })
                               }
                               className={`p-2.5 rounded-lg ${
                                 langDone === LANGS.length
@@ -497,7 +517,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
         open={!!langModal}
         title="多语言名称"
         subtitle={
-          langModal ? `${langModal.title} · 保存即生效（存本机）` : undefined
+          langModal ? `${langModal.title} · 保存后同步顾客端菜单` : undefined
         }
         onClose={() => setLangModal(null)}
       >
@@ -507,23 +527,34 @@ export default function Dishes({ version = 0 }: { version?: number }) {
               <SheetField
                 key={l.code}
                 label={l.label}
-                value={(langMap[langModal.id] || {})[l.code] || ""}
-                onChange={(v) => saveLang(langModal.id, l.code, v)}
-                placeholder={l.code === "zh" ? "中文菜名" : "选填"}
+                value={langModal.draft[l.code] || ""}
+                onChange={(v) =>
+                  setLangModal({
+                    ...langModal,
+                    draft: { ...langModal.draft, [l.code]: v },
+                  })
+                }
+                placeholder={l.label}
                 className="mb-3"
               />
             ))}
             <div className="flex items-center justify-between text-xs">
               <span className="text-zinc-400">
-                已录 {langCompletion(langMap[langModal.id] || {})}/
-                {LANGS.length} 种语言
+                已录{" "}
+                {
+                  LANGS.filter((l) => (langModal.draft[l.code] || "").trim())
+                    .length
+                }
+                /{LANGS.length} 种语言
               </span>
-              <span className="text-zinc-600">改动即时保存</span>
+              <span className="text-zinc-600">中文名即菜品名称，无需填写</span>
             </div>
-            <p className="text-[11px] text-zinc-600 mt-2">
-              换设备需重新填写（可在列表处「导出多语言 CSV」存档 /
-              之后同步顾客端菜单）。
-            </p>
+            <button
+              onClick={saveLang}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold active:scale-[0.98] transition-transform"
+            >
+              <Save size={16} /> 保存并同步
+            </button>
           </>
         )}
       </Sheet>

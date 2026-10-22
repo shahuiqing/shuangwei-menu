@@ -93,7 +93,12 @@ export function lateOrders(
     if (!threshold) continue;
     const id = String(o?.id || o?._id || "").trim();
     if (!id) continue;
-    const at = parseTs(o?.created_at ?? o?.createdAt ?? o?.created);
+    // 制作中超时应从「进入制作」起算，而非下单时间；缺 cookingAt 时回退 created_at
+    const base =
+      status === "cooking"
+        ? (o?.cookingAt ?? o?.created_at ?? o?.createdAt ?? o?.created)
+        : (o?.created_at ?? o?.createdAt ?? o?.created);
+    const at = parseTs(base);
     if (!at || at > now) continue;
     const elapsedMin = Math.floor((now - at) / 60000);
     if (elapsedMin < threshold) continue;

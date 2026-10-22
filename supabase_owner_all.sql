@@ -85,6 +85,8 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "discountAmount" NUMERIC(10,2
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "receivedAmount" NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "finalTotal"     NUMERIC(10,2);
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "completedAt"    TIMESTAMPTZ;
+-- 进入「制作中」的时刻（漏单提醒按制作时长起算，非下单时长）
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "cookingAt"      TIMESTAMPTZ;
 -- 结账时的食材成本快照（由 trg_order_cogs_snapshot 写入；旧订单为空则按当前配方估算）
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "cogsSnapshot"   NUMERIC(10,2);
 -- 订单标记：normal / refund / gift / staff / trial（老板端落库，跨设备一致）
@@ -434,10 +436,12 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   GROUP BY 1 ORDER BY 1;
 $$;
 
+DROP FUNCTION IF EXISTS public.owner_consumption(timestamptz, timestamptz, text);
 CREATE OR REPLACE FUNCTION public.owner_consumption(p_start timestamptz, p_end timestamptz, p_type text DEFAULT 'order_out')
-RETURNS TABLE(key text, qty numeric, cost numeric)
+RETURNS TABLE(key text, item_id text, qty numeric, cost numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
-  SELECT t.item_name, SUM(ABS(t.quantity))::numeric,
+  SELECT t.item_name, t.item_id,
+         SUM(ABS(t.quantity))::numeric,
          SUM(ABS(t.quantity) * COALESCE(t.unit_cost, 0))::numeric
   FROM public.inventory_transactions t
   WHERE t.type = p_type AND t.created_at >= p_start AND t.created_at < p_end
@@ -445,7 +449,7 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
       SELECT 1 FROM public.orders o
        WHERE o.id = t.reference
          AND COALESCE(o."orderTag", 'normal') = 'refund'))
-  GROUP BY 1 ORDER BY 3 DESC;
+  GROUP BY 1, 2 ORDER BY 4 DESC;
 $$;
 
 CREATE OR REPLACE FUNCTION public.owner_consumption_dish(p_start timestamptz, p_end timestamptz, p_type text DEFAULT 'order_out')
@@ -512,9 +516,12 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
 $$;
 
 -- 成本汇总（区间）：收入 / 快照 COGS / 损耗 / 平台订单收入
+-- 免费餐（赠送/员工餐/试菜）成本单列为 free_cogs，不计入销售 COGS，
+-- 保证「营收」「销售成本」「菜品毛利排行」口径一致、可勾稽。
 -- 前端优先用它，避免用「当前原料价」重算历史；函数缺失时前端自动回退旧口径。
+DROP FUNCTION IF EXISTS public.owner_cost_summary(timestamptz, timestamptz);
 CREATE OR REPLACE FUNCTION public.owner_cost_summary(p_start timestamptz, p_end timestamptz)
-RETURNS TABLE(revenue numeric, cogs numeric, waste numeric, external_revenue numeric)
+RETURNS TABLE(revenue numeric, cogs numeric, waste numeric, external_revenue numeric, free_cogs numeric)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   WITH item_cost AS (
     SELECT rb.menu_item_name, SUM(rb.dosage * COALESCE(ii.price, 0)) AS unit_cost
@@ -528,14 +535,17 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
                        AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
     COALESCE(SUM(COALESCE(o."cogsSnapshot", oc.cost, 0))
              FILTER (WHERE o.status = 'completed'
-                       AND COALESCE(o."orderTag", 'normal') <> 'refund'), 0)::numeric,
+                       AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
     (SELECT COALESCE(SUM(ABS(t.quantity) * COALESCE(t.unit_cost, 0)), 0)::numeric
        FROM public.inventory_transactions t
       WHERE t.type = 'waste' AND t.created_at >= p_start AND t.created_at < p_end),
     COALESCE(SUM(COALESCE(o."finalTotal", o.total, o.total_amount, 0))
              FILTER (WHERE o.status = 'completed'
                        AND COALESCE(o."isExternal", false)
-                       AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric
+                       AND COALESCE(o."orderTag", 'normal') NOT IN ('refund','gift','staff','trial')), 0)::numeric,
+    COALESCE(SUM(COALESCE(o."cogsSnapshot", oc.cost, 0))
+             FILTER (WHERE o.status = 'completed'
+                       AND COALESCE(o."orderTag", 'normal') IN ('gift','staff','trial')), 0)::numeric
   FROM public.orders o
   LEFT JOIN LATERAL (
     SELECT SUM(COALESCE((i->>'quantity')::numeric, 0) * COALESCE(ic.unit_cost, 0)) AS cost

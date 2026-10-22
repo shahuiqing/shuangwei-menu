@@ -43,10 +43,18 @@ export default function StaffView() {
   const add = () => setList((prev) => [...prev, { name: "", password: "" }]);
 
   const save = async () => {
-    // 校验：过滤空行；姓名/密码都必填；姓名不可重复
+    // 校验：过滤空行；姓名/密码都必填；姓名不可重复；密码长度下限
     const filled = list.filter((s) => s.name.trim() || s.password.trim());
     const invalid = filled.find((s) => !s.name.trim() || !s.password.trim());
     if (invalid) return toast.error("有员工缺少姓名或密码，请补全后再保存");
+    const shortPw = filled.find((s) => s.password.trim().length < 4);
+    if (shortPw)
+      return toast.error(`员工「${shortPw.name.trim()}」密码至少 4 位`);
+    if (
+      filled.length === 0 &&
+      !confirm("将清空全部员工，顾客端「服务员模式」将无法使用。确定继续？")
+    )
+      return;
     const names = filled.map((s) => s.name.trim());
     if (new Set(names).size !== names.length)
       return toast.error("存在重名的员工，请修改后保存");

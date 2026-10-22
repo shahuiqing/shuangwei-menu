@@ -1,72 +1,71 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   LANGS,
-  loadLangNames,
-  saveLangName,
   getLangNames,
   langCompletion,
   langCoverage,
   langCsv,
 } from "../langNames";
+import type { MenuItem, MenuCategory } from "../menu";
 
-const store = new Map<string, string>();
-beforeEach(() => {
-  store.clear();
-  (globalThis as any).localStorage = {
-    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
-    setItem: (k: string, v: string) => {
-      store.set(k, String(v));
-    },
-    removeItem: (k: string) => {
-      store.delete(k);
-    },
-    clear: () => store.clear(),
-    key: (i: number) => Array.from(store.keys())[i] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
+const dish = (patch: Partial<MenuItem> = {}): MenuItem => ({
+  id: "d1",
+  title: "红烧肉",
+  price: "75",
+  ...patch,
 });
 
 describe("菜品多语言名称", () => {
-  it("四种语言定义", () => {
-    expect(LANGS.map((l) => l.code)).toEqual(["zh", "en", "fr", "ar"]);
+  it("四种语言定义（不含中文，中文即菜品 title）", () => {
+    expect(LANGS.map((l) => l.code)).toEqual(["en", "fr", "ar", "ma"]);
   });
 
-  it("写入/清空/整条删除", () => {
-    saveLangName("d1", "en", "  Beef Noodles  ");
-    expect(getLangNames("d1").en).toBe("Beef Noodles");
-    saveLangName("d1", "zh", "牛肉面");
-    expect(langCompletion(getLangNames("d1"))).toBe(2);
-
-    saveLangName("d1", "en", "   ");
-    expect(getLangNames("d1").en).toBeUndefined();
-    expect(getLangNames("d1").zh).toBe("牛肉面");
-
-    saveLangName("d1", "zh", "");
-    expect(loadLangNames()["d1"]).toBeUndefined();
-    expect(getLangNames("d1")).toEqual({});
+  it("从菜品字段读取多语言名", () => {
+    const names = getLangNames(
+      dish({ enTitle: "Braised Pork", maTitle: "طاجين" }),
+    );
+    expect(names.en).toBe("Braised Pork");
+    expect(names.ma).toBe("طاجين");
+    expect(names.fr).toBe("");
   });
 
-  it("覆盖率统计", () => {
-    saveLangName("d1", "zh", "甲");
-    saveLangName("d1", "en", "A");
-    saveLangName("d1", "fr", "B");
-    saveLangName("d1", "ar", "ج");
-    saveLangName("d2", "zh", "乙");
-    expect(langCoverage()).toEqual({ dishes: 2, complete: 1 });
+  it("计数：只统计非空语言", () => {
+    expect(langCompletion(dish())).toBe(0);
+    expect(langCompletion(dish({ enTitle: "A", frTitle: "B" }))).toBe(2);
+    expect(langCompletion(dish({ enTitle: "  " }))).toBe(0);
+  });
+
+  it("覆盖率：四语齐全才计入 complete", () => {
+    const cats: MenuCategory[] = [
+      {
+        id: "c1",
+        name: "主菜",
+        items: [
+          dish({
+            id: "d1",
+            enTitle: "A",
+            frTitle: "B",
+            arTitle: "ج",
+            maTitle: "د",
+          }),
+          dish({ id: "d2", enTitle: "X" }),
+        ],
+      },
+    ];
+    const cov = langCoverage(cats);
+    expect(cov.dishes).toBe(2);
+    expect(cov.complete).toBe(1);
   });
 
   it("CSV 含表头、BOM 与空缺补位", () => {
-    saveLangName("d1", "zh", '红烧"肉"');
     const csv = langCsv([
-      { id: "d1", title: "红烧肉" },
-      { id: "d2", title: "青菜" },
+      dish({ id: "d1", title: '红烧"肉"', enTitle: "Braised Pork" }),
+      dish({ id: "d2", title: "青菜" }),
     ]);
     expect(csv.startsWith("\uFEFF")).toBe(true);
     const lines = csv.slice(1).split("\r\n");
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toContain("中文");
+    expect(lines[0]).toContain("菜品");
     expect(lines[1]).toContain('""肉""');
     expect(lines[2]).toContain('""');
   });

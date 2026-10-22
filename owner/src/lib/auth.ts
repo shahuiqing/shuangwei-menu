@@ -62,8 +62,12 @@ export async function verifyOwnerPassword(input: string): Promise<boolean> {
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
-      // 后端明确判定（true/false）都以后端为准
-      if (typeof data?.ok === "boolean") return data.ok;
+      // 后端「未配置密码」时应回退本机哈希，而不是当成「密码错误」
+      if (data?.configured === false) {
+        /* 回退本地 */
+      } else if (typeof data?.ok === "boolean") {
+        return data.ok;
+      }
     }
   } catch {
     // 后端不可达 → 回退本地
@@ -83,6 +87,35 @@ export function setOwnerPasswordLocal(pw: string): void {
   const first = !hasLocalPassword();
   localSetRaw(LOCAL_HASH_KEY, bcrypt.hashSync(pw, 10));
   logAction(first ? "设置密码" : "修改密码");
+}
+
+/**
+ * 修改密码：写本机哈希（离线可用）+ 尝试同步云端（靠旧密码鉴权，无需 ADMIN_SECRET）。
+ * 返回各端是否生效，供 UI 提示真实状态。
+ */
+export async function changeOwnerPassword(
+  oldPw: string,
+  newPw: string,
+): Promise<{ ok: boolean; local: boolean; cloud: boolean }> {
+  const v = String(newPw || "").trim();
+  if (v.length < MIN_PASSWORD_LEN)
+    return { ok: false, local: false, cloud: false };
+  setOwnerPasswordLocal(v);
+  let cloud = false;
+  try {
+    const res = await fetch("/api/auth/change-owner-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oldPassword: oldPw, newPassword: v }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      cloud = !!data?.ok;
+    }
+  } catch {
+    // 后端不可达 → 仅本机
+  }
+  return { ok: true, local: true, cloud };
 }
 
 /** 首次设置密码：长度校验 + 写入本机哈希（云端需另行执行 set-owner-password） */

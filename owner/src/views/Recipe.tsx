@@ -85,11 +85,13 @@ export default function Recipe({
 
   const submit = async (dish: string) => {
     if (!form.inventory_item_id) return toast.error("请选择原料");
+    const dosage = num(form.dosage);
+    if (dosage <= 0) return toast.error("用量必须大于 0");
     const item = invName.get(form.inventory_item_id);
     const ok = await saveBom({
       menu_item_name: dish,
       inventory_item_id: form.inventory_item_id,
-      dosage: num(form.dosage),
+      dosage,
       unit: item?.unit || "kg",
       station: form.station,
     });
@@ -134,13 +136,22 @@ export default function Recipe({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {dishes.map((d) => {
             const items = byDish.get(d.name) || [];
+            const hasRecipe = items.length > 0;
             const cost = costMap.get(d.name) || 0;
-            const margin = d.price ? ((d.price - cost) / d.price) * 100 : 0;
+            const margin = hasRecipe
+              ? d.price
+                ? ((d.price - cost) / d.price) * 100
+                : 0
+              : null;
             return (
               <ChartCard
                 key={d.name}
                 title={d.name}
-                subtitle={`售价 ${fmtMoney(d.price)} · 成本 ${fmtMoney(cost)} · 毛利 ${fmtMoney(d.price - cost)} (${margin.toFixed(0)}%)`}
+                subtitle={
+                  hasRecipe
+                    ? `售价 ${fmtMoney(d.price)} · 成本 ${fmtMoney(cost)} · 毛利 ${fmtMoney(d.price - cost)} (${margin!.toFixed(0)}%)`
+                    : `售价 ${fmtMoney(d.price)} · 未配配方（成本未知）`
+                }
                 action={
                   <button
                     onClick={() => {
@@ -177,6 +188,8 @@ export default function Recipe({
                     <div className="flex gap-2">
                       <input
                         type="number"
+                        min="0"
+                        step="any"
                         placeholder="用量"
                         value={form.dosage}
                         onChange={(e) =>

@@ -39,7 +39,11 @@ import {
   deleteBackfill,
   type BackfillEntry,
 } from "../lib/backfill";
-import { setOwnerPasswordLocal, verifyOwnerPassword } from "../lib/auth";
+import {
+  changeOwnerPassword,
+  verifyOwnerPassword,
+  MIN_PASSWORD_LEN,
+} from "../lib/auth";
 import {
   notifyEnabled,
   notifyPermission,
@@ -436,12 +440,16 @@ export default function Settings({
 
   const changePw = async () => {
     if (!(await verifyOwnerPassword(curPw))) return toast.error("当前密码错误");
-    if (!newPw.trim()) return toast.error("新密码不能为空");
-    setOwnerPasswordLocal(newPw.trim());
+    if (newPw.trim().length < MIN_PASSWORD_LEN)
+      return toast.error(`新密码至少 ${MIN_PASSWORD_LEN} 位`);
+    const r = await changeOwnerPassword(curPw, newPw.trim());
+    if (!r.ok) return toast.error(`新密码至少 ${MIN_PASSWORD_LEN} 位`);
     setCurPw("");
     setNewPw("");
     toast.success(
-      "密码已修改（本机降级）；如需云端生效请用 /api/auth/set-owner-password",
+      r.cloud
+        ? "密码已修改（本机 + 云端已同步）"
+        : "密码已修改（本机生效；云端未配置或不可达）",
     );
   };
 

@@ -84,16 +84,22 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
     [margins],
   );
 
+  const hasPrev = prevDishes.length > 0;
   const trends = useMemo(
     () =>
-      buildDishTrends(
-        dishes.map((d) => ({ name: d.name, qty: d.qty })),
-        prevDishes.map((d) => ({ name: d.name, qty: d.qty })),
-      ),
-    [dishes, prevDishes],
+      hasPrev
+        ? buildDishTrends(
+            dishes.map((d) => ({ name: d.name, qty: d.qty })),
+            prevDishes.map((d) => ({ name: d.name, qty: d.qty })),
+          )
+        : [],
+    [dishes, prevDishes, hasPrev],
   );
 
-  const quads: MatrixQuad[] = ["star", "plowhorse", "puzzle", "dog"];
+  const quads: MatrixQuad[] =
+    mode === "profit"
+      ? ["loss", "star", "plowhorse", "puzzle", "dog"]
+      : ["star", "plowhorse", "puzzle", "dog"];
   const unitLabel = mode === "revenue" ? "单价" : "单位毛利";
   const valueLabel = mode === "revenue" ? "营收" : "毛利";
 
@@ -295,6 +301,11 @@ export default function MenuAnalysis({ version = 0 }: { version?: number }) {
       <ChartCard title="菜品趋势" subtitle={`本期 vs 上期销量 · 阈值 ±20%`}>
         {loading ? (
           <EmptyState text="加载中…" />
+        ) : !hasPrev ? (
+          <EmptyState
+            text={range === "all" ? "全部范围无上期可比" : "暂无对比数据"}
+            hint="选择「近7天 / 近30天」可对比上期销量趋势"
+          />
         ) : trends.length === 0 ? (
           <EmptyState text="暂无数据" />
         ) : (

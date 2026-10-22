@@ -146,6 +146,8 @@ export interface CostSummary {
   cogs: number;
   waste: number;
   externalRevenue: number;
+  /** 赠送/员工餐/试菜的成本（不计入销售 COGS，单列费用） */
+  freeCogs: number;
 }
 
 /**
@@ -163,6 +165,7 @@ export async function costSummary(
         cogs: number;
         waste: number;
         external_revenue: number;
+        free_cogs?: number;
       }[]
     >("owner_cost_summary", { p_start: start, p_end: end }, []),
     fetchBackfill(),
@@ -175,6 +178,7 @@ export async function costSummary(
     cogs: Number(r.cogs || 0) + t.cogs,
     waste: Number(r.waste || 0),
     externalRevenue: Number(r.external_revenue || 0),
+    freeCogs: Number(r.free_cogs || 0),
   };
 }
 
@@ -334,6 +338,7 @@ export async function hourlySeries(
 
 export interface ConsStat {
   key: string;
+  item_id?: string;
   qty: number;
   cost: number;
 }
@@ -455,6 +460,7 @@ export async function updateOrderStatus(
   const now = new Date().toISOString();
   const patch: Record<string, unknown> = { status };
   if (status === "completed") patch.completedAt = now;
+  if (status === "cooking") patch.cookingAt = now;
   const { error } = await supabase.from("orders").update(patch).eq("id", id);
   if (error) {
     console.warn("[owner] updateOrderStatus:", error.message);

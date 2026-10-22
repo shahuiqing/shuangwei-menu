@@ -81,6 +81,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   const [rangeCogs, setRangeCogs] = useState<number | null>(null);
   const [waste, setWaste] = useState(0);
   const [externalRevenue, setExternalRevenue] = useState(0);
+  const [freeCogs, setFreeCogs] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -106,6 +107,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
       });
       setRangeCogs(cs ? cs.cogs : null);
       setExternalRevenue(cs?.externalRevenue || 0);
+      setFreeCogs(cs?.freeCogs || 0);
       setWaste(cs ? cs.waste : ws.reduce((s, w) => s + num(w.cost), 0));
       setLoading(false);
     })();
@@ -154,7 +156,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
   const breakEvenFixed =
     range === "all" ? dailyFixedCost(fixedCosts, new Date()) : dayFixed;
   const commission = externalRevenue * getCommissionRate();
-  const net = revenue - cogs - waste - rangeFixed - commission;
+  const net = revenue - cogs - freeCogs - waste - rangeFixed - commission;
   const breakEven = breakEvenRevenue(
     breakEvenFixed,
     revenue ? cogs / revenue : 0,
@@ -299,9 +301,9 @@ export default function CostReport({ version = 0 }: { version?: number }) {
       </div>
 
       <p className="text-[11px] text-zinc-500 leading-relaxed">
-        净利 = 营收 {fmtMoney(revenue)} − 食材 {fmtMoney(cogs)} − 损耗{" "}
-        {fmtMoney(waste)} − 固定 {fmtMoney(rangeFixed)} − 平台佣金{" "}
-        {fmtMoney(commission)}
+        净利 = 营收 {fmtMoney(revenue)} − 食材 {fmtMoney(cogs)} − 免费餐成本{" "}
+        {fmtMoney(freeCogs)} − 损耗 {fmtMoney(waste)} − 固定{" "}
+        {fmtMoney(rangeFixed)} − 平台佣金 {fmtMoney(commission)}
         {externalRevenue > 0
           ? `（平台营收 ${fmtMoney(externalRevenue)} × ${(getCommissionRate() * 100).toFixed(0)}%）`
           : "（无平台单）"}

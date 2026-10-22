@@ -1,86 +1,74 @@
-/* ============ 菜品多语言名称（前端 only，不动数据库） ============
- * 为顾客端扫码菜单维护 中/英/法/阿 菜名映射，按菜品 id 存本机
- * （统一本地存储层）。后续同步到云端菜单时以此为准，CSV 导出兜底。
+/* ============ 菜品多语言名称 ============
+ * 直接读写菜品对象上的真实字段 enTitle / frTitle / arTitle / maTitle，
+ * 与顾客端扫码菜单读取的字段完全一致（保存即同步云端 categories）。
+ * 中文名即菜品 title，无需额外维护。
  */
 
-import { localGet, localSet } from "./localdb";
+import type { MenuCategory, MenuItem } from "./menu";
 
-export type LangCode = "zh" | "en" | "fr" | "ar";
+export type LangCode = "en" | "fr" | "ar" | "ma";
 
-export const LANGS: { code: LangCode; label: string }[] = [
-  { code: "zh", label: "中文" },
-  { code: "en", label: "English" },
-  { code: "fr", label: "Français" },
-  { code: "ar", label: "العربية" },
+type LangField = "enTitle" | "frTitle" | "arTitle" | "maTitle";
+
+export const LANGS: { code: LangCode; label: string; field: LangField }[] = [
+  { code: "en", label: "English", field: "enTitle" },
+  { code: "fr", label: "Français", field: "frTitle" },
+  { code: "ar", label: "العربية", field: "arTitle" },
+  { code: "ma", label: "الدارجة", field: "maTitle" },
 ];
 
 export interface DishLangNames {
-  zh?: string;
   en?: string;
   fr?: string;
   ar?: string;
+  ma?: string;
 }
 
-const KEY = "owner:dish:lang";
-
-export function loadLangNames(): Record<string, DishLangNames> {
-  const o = localGet<unknown>(KEY);
-  return o && typeof o === "object" && !Array.isArray(o)
-    ? (o as Record<string, DishLangNames>)
-    : {};
-}
-
-export function getLangNames(dishId: string): DishLangNames {
-  return loadLangNames()[dishId] || {};
-}
-
-/** 写一个语言的名称；清空即删除该语言（全空则整条删除） */
-export function saveLangName(
-  dishId: string,
-  lang: LangCode,
-  value: string,
-): void {
-  const map = loadLangNames();
-  const v = value.trim();
-  const cur: DishLangNames = { ...(map[dishId] || {}) };
-  if (v) cur[lang] = v;
-  else delete cur[lang];
-  if (Object.keys(cur).length) map[dishId] = cur;
-  else delete map[dishId];
-  localSet(KEY, map);
-}
-
-/** 已填语言数（0-4） */
-export function langCompletion(n: DishLangNames): number {
-  return LANGS.filter((l) => (n[l.code] || "").trim()).length;
-}
-
-export function langCoverage(map = loadLangNames()): {
-  dishes: number;
-  complete: number;
-} {
-  const ids = Object.keys(map);
+export function getLangNames(item: MenuItem | undefined): DishLangNames {
   return {
-    dishes: ids.length,
-    complete: ids.filter((id) => langCompletion(map[id] || {}) === LANGS.length)
-      .length,
+    en: item?.enTitle || "",
+    fr: item?.frTitle || "",
+    ar: item?.arTitle || "",
+    ma: item?.maTitle || "",
   };
 }
 
+/** 已填语言数（0-4） */
+export function langCompletion(item: MenuItem | undefined): number {
+  return LANGS.filter((l) => (item?.[l.field] || "").trim()).length;
+}
+
+export function langCoverage(cats: MenuCategory[]): {
+  dishes: number;
+  complete: number;
+} {
+  let dishes = 0;
+  let complete = 0;
+  cats.forEach((c) =>
+    (c.items || []).forEach((it) => {
+      dishes++;
+      if (langCompletion(it) === LANGS.length) complete++;
+    }),
+  );
+  return { dishes, complete };
+}
+
 /** 导出 CSV（UTF-8 BOM，Excel 直接打开）：含全部菜品，未录的留空 */
-export function langCsv(
-  dishes: { id: string; title: string }[],
-  map = loadLangNames(),
-): string {
+export function langCsv(dishes: MenuItem[]): string {
   const esc = (s: string) => `"${String(s || "").replace(/"/g, '""')}"`;
-  const head = ["id", "中文", "English", "Français", "العربية"]
+  const head = ["菜品", "English", "Français", "العربية", "الدارجة"]
     .map(esc)
     .join(",");
-  const rows = dishes.map((d) => {
-    const n: DishLangNames = map[d.id] || {};
-    return [d.id, d.title, n.zh || "", n.en || "", n.fr || "", n.ar || ""]
+  const rows = dishes.map((d) =>
+    [
+      d.title,
+      d.enTitle || "",
+      d.frTitle || "",
+      d.arTitle || "",
+      d.maTitle || "",
+    ]
       .map(esc)
-      .join(",");
-  });
+      .join(","),
+  );
   return "\uFEFF" + [head, ...rows].join("\r\n");
 }

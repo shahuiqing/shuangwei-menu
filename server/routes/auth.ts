@@ -107,7 +107,11 @@ router.post("/verify-owner", rateLimit(60_000, 10), async (req, res) => {
     }
     if (process.env.ADMIN_SECRET)
       return res.json({ ok: password === process.env.ADMIN_SECRET });
-    return res.json({ ok: false, error: "owner password not configured" });
+    return res.json({
+      ok: false,
+      configured: false,
+      error: "owner password not configured",
+    });
   } catch (e: any) {
     console.error("[auth] verify-owner error", e);
     res.status(500).json({ ok: false, error: e.message });
@@ -132,5 +136,61 @@ router.post("/set-owner-password", requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
+// POST /api/auth/change-owner-password { oldPassword, newPassword } -> { ok }
+// 老板端改密：验旧密码（云端哈希 / ADMIN_SECRET）后写新 bcrypt 哈希。
+// 不依赖 ADMIN_SECRET，靠「旧密码正确」鉴权；云端未配置时视为首次云端设密。
+router.post(
+  "/change-owner-password",
+  rateLimit(60_000, 10),
+  async (req, res) => {
+    const { oldPassword, newPassword } = req.body as {
+      oldPassword?: string;
+      newPassword?: string;
+    };
+    if (!newPassword || String(newPassword).length < 6)
+      return res.status(400).json({ ok: false, error: "password too short" });
+    try {
+      let verified = false;
+      if (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL) {
+        try {
+          const { data } = await (supabase as any)
+            .from("settings")
+            .select("ownerPasswordHash")
+            .eq("id", "global")
+            .maybeSingle();
+          const hash = data?.ownerPasswordHash || "";
+          if (hash && hash.startsWith("$2")) {
+            verified = await bcrypt.compare(String(oldPassword || ""), hash);
+          } else {
+            // 云端尚未配置 owner 密码：首次云端设密
+            verified = true;
+          }
+        } catch {
+          verified = false;
+        }
+      } else {
+        verified = true;
+      }
+      if (!verified && process.env.ADMIN_SECRET) {
+        verified = String(oldPassword || "") === process.env.ADMIN_SECRET;
+      }
+      if (!verified)
+        return res
+          .status(401)
+          .json({ ok: false, error: "old password incorrect" });
+      const hash = await bcrypt.hash(String(newPassword), 10);
+      const { error } = await (supabase as any)
+        .from("settings")
+        .update({ ownerPasswordHash: hash })
+        .eq("id", "global");
+      if (error)
+        return res.status(500).json({ ok: false, error: error.message });
+      return res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 export default router;

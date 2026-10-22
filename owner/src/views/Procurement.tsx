@@ -596,10 +596,24 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   const alerts = useMemo(() => buildPriceAlerts(list), [list]);
   const byItem = useMemo(() => alertMap(alerts), [alerts]);
   const flagged = useMemo(() => flaggedAlerts(alerts), [alerts]);
-  const daily = useMemo(
-    () => dailyFromConsumption(cons, CONSUMPTION_WINDOW_DAYS),
-    [cons],
-  );
+  const daily = useMemo(() => {
+    // 新店/停业日：按「最早采购以来实际天数」折算日均消耗，避免固定 ÷30 低估
+    const now = Date.now();
+    let earliest = now;
+    for (const p of list) {
+      const at = p.purchased_at
+        ? new Date(p.purchased_at).getTime()
+        : p.created_at
+          ? new Date(p.created_at).getTime()
+          : 0;
+      if (at && at < earliest) earliest = at;
+    }
+    const trackedDays = Math.max(
+      1,
+      Math.min(CONSUMPTION_WINDOW_DAYS, Math.ceil((now - earliest) / 86400000)),
+    );
+    return dailyFromConsumption(cons, trackedDays);
+  }, [cons, list]);
   const plan = useMemo(
     () =>
       buildPurchasePlan({ items: inv, daily, alerts, coverageDays: coverage }),

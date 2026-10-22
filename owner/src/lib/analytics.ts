@@ -243,7 +243,7 @@ export function paymentStats(orders: any[]): { name: string; value: number }[] {
 }
 
 /* ---------- 菜单工程矩阵（四象限） ---------- */
-export type MatrixQuad = "star" | "plowhorse" | "puzzle" | "dog";
+export type MatrixQuad = "star" | "plowhorse" | "puzzle" | "dog" | "loss";
 
 export interface MatrixDish extends DishStat {
   quad: MatrixQuad;
@@ -281,16 +281,21 @@ export const QUAD_LABEL: Record<
   plowhorse: {
     title: "金牛",
     color: "#3b82f6",
-    hint: "畅销但价低，稳量提价",
+    hint: "畅销但毛利低，提价或降本",
   },
   puzzle: {
     title: "问题",
     color: "#a855f7",
-    hint: "高价但滞销，加强推荐",
+    hint: "高毛利但滞销，加强推荐",
   },
   dog: {
     title: "瘦狗",
     color: "#71717a",
-    hint: "既不畅销价又低，考虑下架",
+    hint: "低销量低毛利，考虑下架",
+  },
+  loss: {
+    title: "赔钱菜",
+    color: "#ef4444",
+    hint: "每单亏钱，立即停售或提价/降本",
   },
 };

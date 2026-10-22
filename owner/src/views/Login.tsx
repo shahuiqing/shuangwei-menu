@@ -4,7 +4,7 @@ import { Lock, ShieldCheck, Eye, EyeOff, AlertCircle } from "lucide-react";
 import {
   verifyOwnerPassword,
   markAuthed,
-  setOwnerPasswordLocal,
+  changeOwnerPassword,
   needsPasswordSetup,
   setupOwnerPassword,
   MIN_PASSWORD_LEN,
@@ -65,11 +65,17 @@ export default function Login({ onDone }: { onDone: () => void }) {
       setErr("当前密码错误 / Current password incorrect");
       return;
     }
-    if (!newPw.trim()) {
-      setErr("新密码不能为空");
+    if (newPw.trim().length < MIN_PASSWORD_LEN) {
+      setErr(
+        `新密码至少 ${MIN_PASSWORD_LEN} 位 / At least ${MIN_PASSWORD_LEN} chars`,
+      );
       return;
     }
-    setOwnerPasswordLocal(newPw.trim());
+    const r = await changeOwnerPassword(pw, newPw.trim());
+    if (!r.ok) {
+      setErr(`新密码至少 ${MIN_PASSWORD_LEN} 位`);
+      return;
+    }
     markAuthed();
     onDone();
   };

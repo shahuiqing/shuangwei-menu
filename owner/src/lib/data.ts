@@ -60,7 +60,10 @@ export async function fetchStaff(): Promise<Staff[]> {
 
 export async function saveStaff(list: Staff[]): Promise<boolean> {
   if (!supabase) return false;
-  const clean = (list || []).filter((s) => s.name.trim() && s.password.trim());
+  // 去空格、过滤空行，避免姓名/密码带前导空格写入
+  const clean = (list || [])
+    .filter((s) => s.name.trim() && s.password.trim())
+    .map((s) => ({ name: s.name.trim(), password: s.password.trim() }));
   const { error } = await supabase
     .from("settings")
     .update({ devicePasswordsHash: clean, devicePasswords: clean })

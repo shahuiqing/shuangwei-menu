@@ -13,6 +13,9 @@ const item = (p: Partial<InventoryItem>): InventoryItem => ({
   ...p,
 });
 
+const batches = (...b: { at: string; qty: number }[]) =>
+  new Map<string, { at: string; qty: number }[]>([["I1", b]]);
+
 describe("computeExpiry", () => {
   const now = new Date("2026-10-05T00:00:00Z");
 
@@ -29,7 +32,7 @@ describe("computeExpiry", () => {
   it("已过期（剩余天数为负）", () => {
     const rows = computeExpiry(
       [item({ shelf_life_days: 3 })],
-      new Map([["I1", "2026-09-30T00:00:00Z"]]), // 3 天后 10-03，已过 2 天
+      batches({ at: "2026-09-30T00:00:00Z", qty: 10 }), // 3 天后 10-03，已过 2 天
       now,
     );
     expect(rows[0].status).toBe("expired");
@@ -39,7 +42,7 @@ describe("computeExpiry", () => {
   it("临期（剩余天数 <= 阈值 3）", () => {
     const rows = computeExpiry(
       [item({ shelf_life_days: 7 })],
-      new Map([["I1", "2026-10-01T00:00:00Z"]]), // 10-08 到期，剩 3 天
+      batches({ at: "2026-10-01T00:00:00Z", qty: 10 }), // 10-08 到期，剩 3 天
       now,
     );
     expect(rows[0].status).toBe("expiring");
@@ -49,11 +52,23 @@ describe("computeExpiry", () => {
   it("正常（剩余天数 > 阈值）", () => {
     const rows = computeExpiry(
       [item({ shelf_life_days: 30 })],
-      new Map([["I1", "2026-10-01T00:00:00Z"]]),
+      batches({ at: "2026-10-01T00:00:00Z", qty: 10 }),
       now,
     );
     expect(rows[0].status).toBe("ok");
     expect(rows[0].daysLeft).toBeGreaterThan(3);
+  });
+
+  it("FIFO：旧批不被后到的新货刷新保质期", () => {
+    const rows = computeExpiry(
+      [item({ shelf_life_days: 7, stock: 5 })],
+      batches(
+        { at: "2026-09-20T00:00:00Z", qty: 10 }, // 09-27 到期（已过期），仍占 3 单位库存
+        { at: "2026-10-04T00:00:00Z", qty: 2 }, // 10-11 到期
+      ),
+      now,
+    );
+    expect(rows[0].status).toBe("expired");
   });
 
   it("expiryAlerts 分类过期与临期", () => {
@@ -65,9 +80,9 @@ describe("computeExpiry", () => {
         item({ id: "D" }),
       ],
       new Map([
-        ["A", "2026-09-30T00:00:00Z"], // 过期
-        ["B", "2026-10-03T00:00:00Z"], // 10-08 到期，剩 3 天
-        ["C", "2026-10-01T00:00:00Z"], // ok
+        ["A", [{ at: "2026-09-30T00:00:00Z", qty: 10 }]], // 过期
+        ["B", [{ at: "2026-10-03T00:00:00Z", qty: 10 }]], // 10-08 到期，剩 3 天
+        ["C", [{ at: "2026-10-01T00:00:00Z", qty: 10 }]], // ok
       ]),
       now,
     );

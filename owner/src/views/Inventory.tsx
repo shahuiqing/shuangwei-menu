@@ -110,13 +110,20 @@ export default function Inventory({ version = 0 }: { version?: number }) {
       fetchTransactions(500, "waste", start.toISOString()),
       fetchPurchases(),
     ]);
-    const latest = new Map<string, string>();
+    const byItem = new Map<string, { at: string; qty: number }[]>();
     for (const p of purchases) {
       const id = p.item_id;
       const at = p.purchased_at || p.created_at || "";
-      if (id && at && !latest.has(id)) latest.set(id, at);
+      const qty = num(p.quantity);
+      if (id && at && qty > 0) {
+        const arr = byItem.get(id) || [];
+        arr.push({ at, qty });
+        byItem.set(id, arr);
+      }
     }
-    const exp = computeExpiry(items, latest, new Date());
+    for (const arr of byItem.values())
+      arr.sort((a, b) => (a.at < b.at ? -1 : 1));
+    const exp = computeExpiry(items, byItem, new Date());
     setExpiryMap(new Map(exp.map((e) => [e.itemId, e])));
     setList(items);
     setTodayWaste(todayWasteAmount(txns));
@@ -197,6 +204,10 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     if (!adjusting) return;
     const d = num(delta);
     if (!d) return toast.error("请输入调整数量（正数入库 / 负数出库）");
+    if (num(adjusting.stock) + d < 0)
+      return toast.error(
+        `出库不能超过现存 ${num(adjusting.stock)} ${adjusting.unit}`,
+      );
     const ok = await adjustStock(
       adjusting,
       d,
@@ -235,12 +246,22 @@ export default function Inventory({ version = 0 }: { version?: number }) {
   const submitTake = async () => {
     const adj = pendingAdjustments(take);
     if (!adj.length) {
-      toast.success(
-        take.summary.counted ? "实盘与账面一致，无需调整" : "请先填写实盘数量",
-      );
       if (take.summary.counted) {
+        // 无差异盘点也要落记录、更新提醒与置信度，避免「盘了却提示从未盘」
+        markStocktake();
+        pushStocktake({
+          items: take.summary.counted,
+          diffs: 0,
+          netValue: 0,
+          stockValue: stocktakeValue(take),
+        });
+        setStocktakes(loadStocktakeHistory());
+        logAction("盘点提交", `${take.summary.counted} 项 · 无差异`);
+        toast.success("实盘与账面一致，已记录本次盘点");
         setStocktaking(false);
         setCounts({});
+      } else {
+        toast.success("请先填写实盘数量");
       }
       return;
     }
