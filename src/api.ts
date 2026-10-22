@@ -1831,9 +1831,14 @@ export const api = {
               "menuDeletedItemIds",
               JSON.stringify(payload.deletedItemIds),
             );
-          await kvCache.set("app_settings", payload, 600);
+          // ⚠️ 不要把失败的 payload 写入 KV 缓存。
+          // getSettings 的第一优先级是 KV，命中就直接返回、不再查 DB；
+          // 若把这条「云端写入失败的旧 payload」写进 KV，后续所有读取都会
+          // 拿到它、把 DB 里的真实最新数据掩盖掉，UI 还误以为保存成功。
+          // 仅做 KV 失效，让下次读取回退到 DB 拿权威值。
+          await kvCache.invalidate("app_settings");
         } catch {}
-        throw e; // 抛出让 UI 弹出“本地已保存，云端失败”提示
+        throw e; // 抛出让 UI 弹出"本地已保存，云端失败"提示
       }
     }
 

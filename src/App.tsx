@@ -54,6 +54,12 @@ import type { MenuCategory, Promotion, MenuItem } from "./types/menu";
 import { getLoc, getSubLoc, Language } from "./utils/loc";
 import { makeLineKey, parseLineKey, applyCartDelta } from "./utils/cartLine";
 import { deriveDeletedItemIds, type DeletedId } from "./utils/deletedItems";
+import {
+  touchLocalDraft,
+  clearLocalDraft,
+  getLocalDraftTs,
+  categoriesDiffer,
+} from "./utils/localDraft";
 
 const AUTO_PLAY_INTERVAL = 12000; // 12 seconds per category page
 
@@ -500,8 +506,50 @@ export default function App() {
       try {
         const data = await api.getSettings();
         if (data && Object.keys(data).length > 0) {
-          setIsSynced(true);
-          processSettingsData(data);
+          // 冲突检测：本地有未同步的草稿时，提示用户选择，不无脑覆盖。
+          // 此前直接 processSettingsData(data)，若老板离线改过菜单，
+          // 本地编辑会被云端数据无声丢弃。
+          const draftTs = getLocalDraftTs();
+          if (draftTs > 0) {
+            const localCategoriesStr = localStorage.getItem("menuCategories");
+            let localCategories: unknown = null;
+            try {
+              localCategories = localCategoriesStr
+                ? JSON.parse(localCategoriesStr)
+                : null;
+            } catch {}
+            const hasConflict =
+              Array.isArray(localCategories) &&
+              categoriesDiffer(localCategories, data.categories);
+            if (hasConflict) {
+              const useLocal = confirm(
+                "检测到本地有未同步的菜单改动（可能是离线编辑或上次保存失败）。\n\n" +
+                  "• 确定 = 保留本地改动（稍后请手动保存到云端）\n" +
+                  "• 取消 = 使用云端数据覆盖本地\n\n" +
+                  "Detected unsynced local menu changes. " +
+                  "OK = keep local, Cancel = use cloud.",
+              );
+              if (useLocal) {
+                // 保留本地：用本地数据初始化，不改云端，保留草稿标记
+                processSettingsData({
+                  categories: localCategories,
+                  ...(data as object),
+                });
+                setIsSynced(true);
+              } else {
+                // 用云端覆盖本地，清除草稿标记
+                processSettingsData(data);
+                clearLocalDraft();
+                setIsSynced(true);
+              }
+            } else {
+              setIsSynced(true);
+              processSettingsData(data);
+            }
+          } else {
+            setIsSynced(true);
+            processSettingsData(data);
+          }
         } else {
           console.log(
             "[API] Document does not exist, creating default settings...",
@@ -637,6 +685,7 @@ export default function App() {
         e,
       );
     }
+    touchLocalDraft(); // 标记本地有未同步的编辑，防止启动时被云端无脑覆盖
 
     // Automatically synchronize deleted default item IDs
     const updatedDeletedItemIds = [...deletedItemIds];
@@ -681,27 +730,32 @@ export default function App() {
     } catch (e) {
       console.warn("localStorage quota exceeded", e);
     }
+    touchLocalDraft();
     // autosave disabled
   };
 
   const handleUpdateBgUrl = (newBgUrl: string) => {
     setBgUrl(newBgUrl);
     safeSetItem("menuBgUrl", newBgUrl);
+    touchLocalDraft();
   };
 
   const handleUpdateRestaurantName = (newName: string) => {
     setRestaurantName(newName);
     safeSetItem("menuRestaurantName", newName);
+    touchLocalDraft();
   };
 
   const handleUpdateWelcomeMessage = (newMessage: string) => {
     setWelcomeMessage(newMessage);
     safeSetItem("menuWelcomeMessage", newMessage);
+    touchLocalDraft();
   };
 
   const handleUpdateLogoUrl = (newLogoUrl: string) => {
     setLogoUrl(newLogoUrl);
     safeSetItem("menuLogoUrl", newLogoUrl);
+    touchLocalDraft();
   };
 
   const handleUpdateAdminPassword = async (newPassword: string) => {
@@ -718,6 +772,7 @@ export default function App() {
       // fallback 兼容期仍存哈希（明文已不再写入）
       safeSetItem("adminHash", newPassword);
     }
+    touchLocalDraft();
   };
 
   const handleUpdateDevicePasswords = (
@@ -725,6 +780,7 @@ export default function App() {
   ) => {
     setDevicePasswords(passwords);
     safeSetItem("menuDevicePasswords", JSON.stringify(passwords));
+    touchLocalDraft();
   };
 
   const handleUpdateSecurity = (question: string, answer: string) => {
@@ -732,11 +788,13 @@ export default function App() {
     setSecurityAnswer(answer);
     safeSetItem("menuSecurityQuestion", question);
     safeSetItem("menuSecurityAnswer", answer);
+    touchLocalDraft();
   };
 
   const handleUpdateSoundEnabled = (enabled: boolean) => {
     setSoundEnabled(enabled);
     safeSetItem("menuSoundEnabled", String(enabled));
+    touchLocalDraft();
   };
 
   const handleUpdateLayoutStyle = (
@@ -744,6 +802,7 @@ export default function App() {
   ) => {
     setLayoutStyle(style);
     safeSetItem("menuLayoutStyle", style);
+    touchLocalDraft();
     // 同步到云端，否则刷新后会被云端旧值（grid）覆盖
     handleSaveToCloud({ layoutStyle: style, silent: true });
   };
@@ -751,6 +810,7 @@ export default function App() {
   const handleUpdateTheme = (newTheme: "midnight" | "light") => {
     setTheme(newTheme);
     safeSetItem("menuThemeMode", newTheme);
+    touchLocalDraft();
     if (newTheme === "light") {
       document.documentElement.setAttribute("data-theme", "light");
     } else {
@@ -883,6 +943,8 @@ export default function App() {
       if (!overrides?.silent) {
         alert("✅ 成功保存到云端 (Saved to cloud successfully)");
       }
+      // 云端保存成功，清除本地草稿标记
+      clearLocalDraft();
     } catch (err) {
       alert(
         "❌ 保存到云端失败 (Cloud sync failed): " +
