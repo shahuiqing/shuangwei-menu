@@ -51,6 +51,7 @@ import {
 import {
   INITIAL_MENU_CATEGORIES,
   mergeAndOrderCategories,
+  stripMainDrinksDeletedIds,
 } from "./initialData";
 import type { MenuCategory, Promotion, MenuItem } from "./types/menu";
 
@@ -396,6 +397,19 @@ export default function App() {
         safeSetItem("menuDeletedItemIds", JSON.stringify(data.deletedItemIds));
       }
 
+      // 修复「主食 & 饮品」分类因重复分类 bug 被误删后无法恢复的问题：
+      // 清理其软删除标记，分类才会在合并时重新出现（幂等，清理后不再变化）。
+      let recoveredMainDrinks = false;
+      {
+        const cleaned = stripMainDrinksDeletedIds(currentDeletedIds);
+        if (cleaned.length !== currentDeletedIds.length) {
+          currentDeletedIds = cleaned;
+          recoveredMainDrinks = true;
+          setDeletedItemIds(cleaned);
+          safeSetItem("menuDeletedItemIds", JSON.stringify(cleaned));
+        }
+      }
+
       if (data.categories && Array.isArray(data.categories)) {
         const migratedCategories = mergeAndOrderCategories(
           data.categories,
@@ -404,6 +418,17 @@ export default function App() {
         );
         setCategories(migratedCategories);
         safeSetItem("menuCategories", JSON.stringify(migratedCategories));
+
+        if (recoveredMainDrinks) {
+          // 仅更新 categories 与 deletedItemIds 两列，避免覆盖其他设置；
+          // 失败也不阻塞（本地已恢复，下次加载会重试）。
+          api
+            .updateSettings({
+              categories: migratedCategories,
+              deletedItemIds: currentDeletedIds,
+            })
+            .catch(() => {});
+        }
       }
       if (data.promotions && Array.isArray(data.promotions)) {
         setPromotions(data.promotions);

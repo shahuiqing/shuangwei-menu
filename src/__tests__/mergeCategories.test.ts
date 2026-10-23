@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   mergeAndOrderCategories,
   INITIAL_MENU_CATEGORIES,
+  stripMainDrinksDeletedIds,
 } from "../initialData";
 
 const initial = [
@@ -155,5 +156,57 @@ describe("mergeAndOrderCategories", () => {
     expect(item.addons).toEqual([
       { id: "kimbap-large", name: "大份", enName: "Large Portion", price: 25 },
     ]);
+  });
+
+  it("does not duplicate 主食 & 饮品 when legacy categories coexist with it", () => {
+    const existing = [
+      {
+        id: "cat-main-drinks",
+        name: "主食 & 饮品",
+        items: [{ id: "dk1", title: "冰镇可乐" }],
+      },
+      {
+        id: "cat-staples",
+        name: "主食 & 沙拉",
+        items: [{ id: "main-salade-fraiche", title: "鲜绿田园沙拉" }],
+      },
+      {
+        id: "all-drinks-menu",
+        name: "饮品分类",
+        items: [{ id: "dk1", title: "冰镇可乐" }],
+      },
+    ];
+    const r = mergeAndOrderCategories(existing, INITIAL_MENU_CATEGORIES, []);
+    const mains = r.filter((c) => c.id === "cat-main-drinks");
+    expect(mains).toHaveLength(1);
+    expect(r.find((c) => c.id === "cat-staples")).toBeUndefined();
+    expect(r.find((c) => c.id === "all-drinks-menu")).toBeUndefined();
+  });
+});
+
+describe("stripMainDrinksDeletedIds", () => {
+  it("removes 主食 & 饮品 category and its built-in items from deleted ids", () => {
+    const ids = [
+      "cat-main-drinks",
+      "主食 & 饮品",
+      "main-rice-bowl",
+      "拌饭",
+      "main-dumpling-dry",
+      "干饺",
+      "some-other-id",
+    ];
+    const cleaned = stripMainDrinksDeletedIds(ids);
+    expect(cleaned).not.toContain("cat-main-drinks");
+    expect(cleaned).not.toContain("主食 & 饮品");
+    expect(cleaned).not.toContain("main-rice-bowl");
+    expect(cleaned).not.toContain("拌饭");
+    expect(cleaned).not.toContain("main-dumpling-dry");
+    expect(cleaned).not.toContain("干饺");
+    expect(cleaned).toContain("some-other-id");
+  });
+
+  it("is a no-op when nothing to strip", () => {
+    const ids = ["some-other-id", "another"];
+    expect(stripMainDrinksDeletedIds(ids)).toEqual(ids);
   });
 });

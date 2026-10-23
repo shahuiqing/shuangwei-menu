@@ -1727,10 +1727,14 @@ export function mergeAndOrderCategories(
     );
     if (legacy.length === 0) return cats;
     const mergedItems = legacy.flatMap((c) => c.items || []);
+    // 若「主食 & 饮品」分类已存在，旧分类的菜品已在其中，直接丢弃旧分类，
+    // 避免再生成一个 id 相同的重复分类（重复分类被误删后会被软删除永久隐藏）。
+    const hasMain = cats.some((c) => c && c.id === MERGED_CAT_ID);
     const out: any[] = [];
     let placed = false;
     for (const c of cats) {
       if (c && LEGACY_MERGED_CAT_IDS.includes(c.id)) {
+        if (hasMain) continue;
         if (!placed) {
           out.push({
             id: MERGED_CAT_ID,
@@ -1940,4 +1944,35 @@ export function mergeAndOrderCategories(
   });
 
   return resultCats;
+}
+
+/**
+ * 剔除「主食 & 饮品」分类及其内置菜品在 deletedItemIds 中的软删除标记。
+ *
+ * 背景：历史上 migrateLegacyCategories 会在已存在合并分类的情况下再生成一个
+ * id 相同的重复分类，老板删除该重复分类时，handleDeleteCategory 会把分类 id 与
+ * 全部菜品 id/title 记入 deletedItemIds，导致合并分类永久无法恢复。
+ * 修复重复分类 bug 后，仍需清掉已写入的软删除标记，分类才会重新出现。
+ * 幂等：标记已清理时结果与原数组一致。
+ */
+export function stripMainDrinksDeletedIds(deletedItemIds: string[]): string[] {
+  const cat = INITIAL_MENU_CATEGORIES.find((c) => c.id === "cat-main-drinks");
+  if (!cat) return deletedItemIds;
+  const protectedIds = new Set<string>();
+  const add = (v: unknown) => {
+    if (v === undefined || v === null) return;
+    const s = String(v).trim().toLowerCase();
+    if (s) protectedIds.add(s);
+  };
+  add(cat.id);
+  add(cat.name);
+  add((cat as { title?: string }).title);
+  (cat.items || []).forEach((i: any) => {
+    add(i.id);
+    add(i.title);
+    add(i.name);
+  });
+  return (deletedItemIds || []).filter(
+    (id) => !protectedIds.has(String(id).trim().toLowerCase()),
+  );
 }
