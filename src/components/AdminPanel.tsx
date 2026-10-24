@@ -513,7 +513,7 @@ export default function AdminPanel({
             }
 
             if (
-              order.unprintedAdditions &&
+              Array.isArray(order.unprintedAdditions) &&
               order.unprintedAdditions.length > 0
             ) {
               order.unprintedAdditions.forEach((addition: any) => {

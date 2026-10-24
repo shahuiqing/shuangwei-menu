@@ -37,6 +37,7 @@ import {
 } from "./utils/adminAuth";
 import { lazy, Suspense } from "react";
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import CartMenu from "./components/CartMenu";
 import DiagnosticModal from "./components/DiagnosticModal";
 import { playPageTurnSound } from "./utils/audio";
@@ -3264,44 +3265,78 @@ export default function App() {
             </div>
           }
         >
-          <AdminPanel
-            categories={categories}
-            setCategories={handleUpdateCategories}
-            deletedItemIds={deletedItemIds}
-            setDeletedItemIds={setDeletedItemIds}
-            promotions={promotions}
-            setPromotions={handleUpdatePromotions}
-            restaurantName={restaurantName}
-            setRestaurantName={handleUpdateRestaurantName}
-            welcomeMessage={welcomeMessage}
-            setWelcomeMessage={handleUpdateWelcomeMessage}
-            bgUrl={bgUrl}
-            setBgUrl={handleUpdateBgUrl}
-            logoUrl={logoUrl}
-            setLogoUrl={handleUpdateLogoUrl}
-            layoutStyle={layoutStyle}
-            setLayoutStyle={handleUpdateLayoutStyle}
-            theme={theme}
-            setTheme={handleUpdateTheme}
-            adminPassword={adminPassword}
-            setAdminPassword={handleUpdateAdminPassword}
-            devicePasswords={devicePasswords}
-            setDevicePasswords={handleUpdateDevicePasswords}
-            securityQuestion={securityQuestion}
-            securityAnswer={securityAnswer}
-            setSecurity={handleUpdateSecurity}
-            soundEnabled={soundEnabled}
-            setSoundEnabled={handleUpdateSoundEnabled}
-            isAuthed={isAdminAuthed}
-            setIsAuthed={setIsAdminAuthed}
-            onDeviceAuthed={() => setIsDeviceAuthed(true)}
-            isSynced={isSynced}
-            onSaveToCloud={handleSaveToCloud}
-            onRestoreBackup={handleRestoreBackup}
-            receiptSettings={receiptSettings}
-            setReceiptSettings={setReceiptSettings}
-            onClose={() => setIsSettingsOpen(false)}
-          />
+          <ErrorBoundary
+            fallback={(error, reset) => (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4 font-sans">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 text-center shadow-2xl">
+                  <p className="text-lg font-bold text-white mb-2">
+                    后台界面加载出错
+                  </p>
+                  <p className="text-sm text-zinc-400 mb-4 break-all">
+                    {error?.message || "未知错误"}
+                  </p>
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      type="button"
+                      onClick={reset}
+                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-semibold rounded-xl transition-colors"
+                    >
+                      重试
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        reset();
+                        setIsSettingsOpen(false);
+                      }}
+                      className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                    >
+                      关闭
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          >
+            <AdminPanel
+              categories={categories}
+              setCategories={handleUpdateCategories}
+              deletedItemIds={deletedItemIds}
+              setDeletedItemIds={setDeletedItemIds}
+              promotions={promotions}
+              setPromotions={handleUpdatePromotions}
+              restaurantName={restaurantName}
+              setRestaurantName={handleUpdateRestaurantName}
+              welcomeMessage={welcomeMessage}
+              setWelcomeMessage={handleUpdateWelcomeMessage}
+              bgUrl={bgUrl}
+              setBgUrl={handleUpdateBgUrl}
+              logoUrl={logoUrl}
+              setLogoUrl={handleUpdateLogoUrl}
+              layoutStyle={layoutStyle}
+              setLayoutStyle={handleUpdateLayoutStyle}
+              theme={theme}
+              setTheme={handleUpdateTheme}
+              adminPassword={adminPassword}
+              setAdminPassword={handleUpdateAdminPassword}
+              devicePasswords={devicePasswords}
+              setDevicePasswords={handleUpdateDevicePasswords}
+              securityQuestion={securityQuestion}
+              securityAnswer={securityAnswer}
+              setSecurity={handleUpdateSecurity}
+              soundEnabled={soundEnabled}
+              setSoundEnabled={handleUpdateSoundEnabled}
+              isAuthed={isAdminAuthed}
+              setIsAuthed={setIsAdminAuthed}
+              onDeviceAuthed={() => setIsDeviceAuthed(true)}
+              isSynced={isSynced}
+              onSaveToCloud={handleSaveToCloud}
+              onRestoreBackup={handleRestoreBackup}
+              receiptSettings={receiptSettings}
+              setReceiptSettings={setReceiptSettings}
+              onClose={() => setIsSettingsOpen(false)}
+            />
+          </ErrorBoundary>
         </Suspense>
       )}
 
