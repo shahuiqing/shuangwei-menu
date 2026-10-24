@@ -1358,15 +1358,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ لحم ضأن",
         maTitle: "بروشيت لحم ضأن",
         price: "MAD10",
-        description: "原味羊肉串，炭火烤制，外焦里嫩。",
+        description: "原味羊肉串，炭火烤制，外焦里嫩。（价格为一串价格）",
         enDescription:
-          "Plain lamb skewer, charcoal-grilled, crisp outside and tender inside.",
+          "Plain lamb skewer, charcoal-grilled, crisp outside and tender inside. (Price is per skewer)",
         frDescription:
-          "Brochette d'agneau, grillée au charbon, croustillante à l'extérieur et tendre à l'intérieur.",
+          "Brochette d'agneau, grillée au charbon, croustillante à l'extérieur et tendre à l'intérieur. (Prix par brochette)",
         arDescription:
-          "سيخ لحم ضأن مشوي على الفحم، مقرمش من الخارج وطري من الداخل.",
+          "سيخ لحم ضأن مشوي على الفحم، مقرمش من الخارج وطري من الداخل. (السعر لكل سيخ)",
         maDescription:
-          "بروشيت لحم ضأن مشوي، قاعد على الفحم، قشرو مقرمش والداخل طري.",
+          "بروشيت لحم ضأن مشوي، قاعد على الفحم، قشرو مقرمش والداخل طري. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1377,12 +1377,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ لحم ضأن بالكمون",
         maTitle: "بروشيت لحم ضأن بالكمون",
         price: "MAD10",
-        description: "撒满孜然与辣椒粉，香气四溢。",
-        enDescription: "Coated with cumin and chili, aromatic and bold.",
+        description: "撒满孜然与辣椒粉，香气四溢。（价格为一串价格）",
+        enDescription:
+          "Coated with cumin and chili, aromatic and bold. (Price is per skewer)",
         frDescription:
-          "Enrobée de cumin et de piment, aromatique et audacieuse.",
-        arDescription: "مغطى بالكمون والفلفل الحار، عطري وجريء.",
-        maDescription: "مغشي بالكمون والفلفل، عطري وجريء.",
+          "Enrobée de cumin et de piment, aromatique et audacieuse. (Prix par brochette)",
+        arDescription:
+          "مغطى بالكمون والفلفل الحار، عطري وجريء. (السعر لكل سيخ)",
+        maDescription:
+          "مغشي بالكمون والفلفل، عطري وجريء. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1393,13 +1396,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ لحم بقر كوري",
         maTitle: "بروشيت لحم بقر كوري",
         price: "MAD10",
-        description: "韩式甜辣酱腌制，甜香微辣。",
+        description: "韩式甜辣酱腌制，甜香微辣。（价格为一串价格）",
         enDescription:
-          "Marinated in Korean sweet chili sauce, sweet and mildly spicy.",
+          "Marinated in Korean sweet chili sauce, sweet and mildly spicy. (Price is per skewer)",
         frDescription:
-          "Marinée dans une sauce coréenne sucrée et piquante, douce et légèrement épicée.",
-        arDescription: "متبل بصلصة كورية حلوة وحارة، حلو وخفيف الحرارة.",
-        maDescription: "مرقد فصوص كورية حلوة وحارة، حلو وخفيف الحرورة.",
+          "Marinée dans une sauce coréenne sucrée et piquante, douce et légèrement épicée. (Prix par brochette)",
+        arDescription:
+          "متبل بصلصة كورية حلوة وحارة، حلو وخفيف الحرارة. (السعر لكل سيخ)",
+        maDescription:
+          "مرقد فصوص كورية حلوة وحارة، حلو وخفيف الحرورة. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1410,11 +1415,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ لحم بقر صيني",
         maTitle: "بروشيت لحم بقر صيني",
         price: "MAD10",
-        description: "中式秘制酱料，经典烧烤风味。",
-        enDescription: "Chinese secret marinade, classic barbecue flavor.",
-        frDescription: "Marinade secrète chinoise, saveur barbecue classique.",
-        arDescription: "تتبيلة صينية سرية، نكهة شواء كلاسيكية.",
-        maDescription: "مريناد صيني سري، نكهة الشواية كلاسيكية.",
+        description: "中式秘制酱料，经典烧烤风味。（价格为一串价格）",
+        enDescription:
+          "Chinese secret marinade, classic barbecue flavor. (Price is per skewer)",
+        frDescription:
+          "Marinade secrète chinoise, saveur barbecue classique. (Prix par brochette)",
+        arDescription: "تتبيلة صينية سرية، نكهة شواء كلاسيكية. (السعر لكل سيخ)",
+        maDescription:
+          "مريناد صيني سري، نكهة الشواية كلاسيكية. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1425,11 +1433,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ لحم بقر بالفلفل الأسود",
         maTitle: "بروشيت لحم بقر بالفلفل الأسود",
         price: "MAD10",
-        description: "现磨黑胡椒调味，香辣提鲜。",
-        enDescription: "Seasoned with freshly ground black pepper.",
-        frDescription: "Assaisonnée de poivre noir fraîchement moulu.",
-        arDescription: "متبل بالفلفل الأسود المطحون طازجاً.",
-        maDescription: "منسم بالفلفل الأسود المطحون طازج.",
+        description: "现磨黑胡椒调味，香辣提鲜。（价格为一串价格）",
+        enDescription:
+          "Seasoned with freshly ground black pepper. (Price is per skewer)",
+        frDescription:
+          "Assaisonnée de poivre noir fraîchement moulu. (Prix par brochette)",
+        arDescription: "متبل بالفلفل الأسود المطحون طازجاً. (السعر لكل سيخ)",
+        maDescription:
+          "منسم بالفلفل الأسود المطحون طازج. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1440,11 +1451,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ ضلوع بقر",
         maTitle: "بروشيت ضلوع البقر",
         price: "MAD10",
-        description: "选用牛肋条，口感厚实鲜嫩。",
-        enDescription: "Made with beef short rib, rich and tender.",
-        frDescription: "Fait de plat de côtes de bœuf, riche et tendre.",
-        arDescription: "مصنوع من ضلوع البقر، غني وطري.",
-        maDescription: "مصنوع من ضلوع البقر، غني وطري.",
+        description: "选用牛肋条，口感厚实鲜嫩。（价格为一串价格）",
+        enDescription:
+          "Made with beef short rib, rich and tender. (Price is per skewer)",
+        frDescription:
+          "Fait de plat de côtes de bœuf, riche et tendre. (Prix par brochette)",
+        arDescription: "مصنوع من ضلوع البقر، غني وطري. (السعر لكل سيخ)",
+        maDescription:
+          "مصنوع من ضلوع البقر، غني وطري. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1455,11 +1469,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ لحم بقر بالثوم",
         maTitle: "بروشيت لحم بقر بالثوم",
         price: "MAD10",
-        description: "浓郁蒜香，烤至金黄。",
-        enDescription: "Rich garlic aroma, grilled to golden perfection.",
-        frDescription: "Arôme d'ail riche, grillé à la perfection.",
-        arDescription: "رائحة ثوم غنية، مشوي إلى الكمال.",
-        maDescription: "ريحة الثوم غنية، مشوي بالكمال.",
+        description: "浓郁蒜香，烤至金黄。（价格为一串价格）",
+        enDescription:
+          "Rich garlic aroma, grilled to golden perfection. (Price is per skewer)",
+        frDescription:
+          "Arôme d'ail riche, grillé à la perfection. (Prix par brochette)",
+        arDescription: "رائحة ثوم غنية، مشوي إلى الكمال. (السعر لكل سيخ)",
+        maDescription:
+          "ريحة الثوم غنية، مشوي بالكمال. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1470,11 +1487,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ دجاج ترياكي",
         maTitle: "بروشيت دجاج ترياكي",
         price: "MAD10",
-        description: "日式照烧酱汁，甜咸适中。",
-        enDescription: "Japanese teriyaki glaze, balanced sweet and savory.",
-        frDescription: "Glaçage teriyaki japonais, équilibré sucré-salé.",
-        arDescription: "تزجيج ترياكي ياباني، متوازن بين الحلو والمالح.",
-        maDescription: "زجاج ترياكي ياباني، متوازن بين الحلو والمالح.",
+        description: "日式照烧酱汁，甜咸适中。（价格为一串价格）",
+        enDescription:
+          "Japanese teriyaki glaze, balanced sweet and savory. (Price is per skewer)",
+        frDescription:
+          "Glaçage teriyaki japonais, équilibré sucré-salé. (Prix par brochette)",
+        arDescription:
+          "تزجيج ترياكي ياباني، متوازن بين الحلو والمالح. (السعر لكل سيخ)",
+        maDescription:
+          "زجاج ترياكي ياباني، متوازن بين الحلو والمالح. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1485,11 +1506,13 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ دجاج أورليانز",
         maTitle: "بروشيت دجاج أورليان",
         price: "MAD10",
-        description: "奥尔良风味腌制，鲜香嫩滑。",
-        enDescription: "Orleans-style marinade, juicy and fragrant.",
-        frDescription: "Marinade façon Orléans, juteuse et parfumée.",
-        arDescription: "تتبيلة أورليانز، طرية وعطرة.",
-        maDescription: "مريناد أورليان، طري وعطر.",
+        description: "奥尔良风味腌制，鲜香嫩滑。（价格为一串价格）",
+        enDescription:
+          "Orleans-style marinade, juicy and fragrant. (Price is per skewer)",
+        frDescription:
+          "Marinade façon Orléans, juteuse et parfumée. (Prix par brochette)",
+        arDescription: "تتبيلة أورليانز، طرية وعطرة. (السعر لكل سيخ)",
+        maDescription: "مريناد أورليان، طري وعطر. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1500,13 +1523,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ أجنحة دجاج",
         maTitle: "بروشيت جنحين الدجاج",
         price: "MAD10",
-        description: "整只鸡翅串烤，皮脆肉嫩。",
+        description: "整只鸡翅串烤，皮脆肉嫩。（价格为一串价格）",
         enDescription:
-          "Whole chicken wings on skewers, crispy skin and tender meat.",
+          "Whole chicken wings on skewers, crispy skin and tender meat. (Price is per skewer)",
         frDescription:
-          "Ailes de poulet entières, peau croustillante et viande tendre.",
-        arDescription: "أجنحة دجاج كاملة، جلد مقرمش ولحم طري.",
-        maDescription: "جنحين الدجاج كاملين، القشرة مقرمشة واللحم طري.",
+          "Ailes de poulet entières, peau croustillante et viande tendre. (Prix par brochette)",
+        arDescription: "أجنحة دجاج كاملة، جلد مقرمش ولحم طري. (السعر لكل سيخ)",
+        maDescription:
+          "جنحين الدجاج كاملين، القشرة مقرمشة واللحم طري. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1517,11 +1541,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ أصابع السلطعون",
         maTitle: "بروشيت أصابع السلطعون",
         price: "MAD10",
-        description: "香烤蟹肉棒，鲜甜爽口。",
-        enDescription: "Grilled crab sticks, sweet and fresh.",
-        frDescription: "Bâtonnets de crabe grillés, sucrés et frais.",
-        arDescription: "أصابع سلطعون مشوية، حلوة وطازجة.",
-        maDescription: "أصابع السلطعون مشوية، حلوة وطازجة.",
+        description: "香烤蟹肉棒，鲜甜爽口。（价格为一串价格）",
+        enDescription:
+          "Grilled crab sticks, sweet and fresh. (Price is per skewer)",
+        frDescription:
+          "Bâtonnets de crabe grillés, sucrés et frais. (Prix par brochette)",
+        arDescription: "أصابع سلطعون مشوية، حلوة وطازجة. (السعر لكل سيخ)",
+        maDescription:
+          "أصابع السلطعون مشوية، حلوة وطازجة. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1532,12 +1559,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ روبيان مشوي",
         maTitle: "بروشيت جمبري",
         price: "MAD10",
-        description: "大虾去壳烤制，弹牙鲜美。",
-        enDescription: "Peeled and grilled prawns, springy and flavorful.",
+        description: "大虾去壳烤制，弹牙鲜美。（价格为一串价格）",
+        enDescription:
+          "Peeled and grilled prawns, springy and flavorful. (Price is per skewer)",
         frDescription:
-          "Crevettes décortiquées grillées, fermes et savoureuses.",
-        arDescription: "روبيان مقشر مشوي، متماسك ولذيذ.",
-        maDescription: "جمبري مقشر مشوي، متماسك ولذيذ.",
+          "Crevettes décortiquées grillées, fermes et savoureuses. (Prix par brochette)",
+        arDescription: "روبيان مقشر مشوي، متماسك ولذيذ. (السعر لكل سيخ)",
+        maDescription:
+          "جمبري مقشر مشوي، متماسك ولذيذ. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1548,11 +1577,14 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ حبار مشوي",
         maTitle: "بروشيت كالامار",
         price: "MAD10",
-        description: "鲜嫩鱿鱼，烤出焦香。",
-        enDescription: "Fresh squid, grilled to a smoky finish.",
-        frDescription: "Calmar frais, grillé avec une finition fumée.",
-        arDescription: "حبار طازج، مشوي بنكهة مدخنة.",
-        maDescription: "كالامار طازج، مشوي بنكهة مدخنة.",
+        description: "鲜嫩鱿鱼，烤出焦香。（价格为一串价格）",
+        enDescription:
+          "Fresh squid, grilled to a smoky finish. (Price is per skewer)",
+        frDescription:
+          "Calmar frais, grillé avec une finition fumée. (Prix par brochette)",
+        arDescription: "حبار طازج، مشوي بنكهة مدخنة. (السعر لكل سيخ)",
+        maDescription:
+          "كالامار طازج، مشوي بنكهة مدخنة. (الثمن ديال بروشيت وحدة)",
         image: "",
       },
       {
@@ -1563,11 +1595,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ كوسة",
         maTitle: "بروشيت كرعة",
         price: "MAD10",
-        description: "清甜西葫芦，清爽解腻。",
-        enDescription: "Sweet zucchini, light and refreshing.",
-        frDescription: "Courgette sucrée, légère et rafraîchissante.",
-        arDescription: "كوسة حلوة، خفيفة ومنعشة.",
-        maDescription: "كرعة حلوة، خفيفة ومنعشة.",
+        description: "清甜西葫芦，清爽解腻。（三串为一组，价格为一组价格）",
+        enDescription:
+          "Sweet zucchini, light and refreshing. (3 skewers per portion, price is per portion)",
+        frDescription:
+          "Courgette sucrée, légère et rafraîchissante. (3 brochettes par portion, prix par portion)",
+        arDescription:
+          "كوسة حلوة، خفيفة ومنعشة. (3 أسياخ لكل حصة، السعر لكل حصة)",
+        maDescription:
+          "كرعة حلوة، خفيفة ومنعشة. (3 بروشيت فالحصة، الثمن ديال الحصة)",
         image: "",
       },
       {
@@ -1578,11 +1614,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ بطاطس",
         maTitle: "بروشيت بطاطا",
         price: "MAD10",
-        description: "外皮焦香，内里软糯。",
-        enDescription: "Crisp outside, soft inside.",
-        frDescription: "Croustillante à l'extérieur, moelleuse à l'intérieur.",
-        arDescription: "مقرمشة من الخارج وناعمة من الداخل.",
-        maDescription: "مقرمشة من برا وناعمة من جوا.",
+        description: "外皮焦香，内里软糯。（三串为一组，价格为一组价格）",
+        enDescription:
+          "Crisp outside, soft inside. (3 skewers per portion, price is per portion)",
+        frDescription:
+          "Croustillante à l'extérieur, moelleuse à l'intérieur. (3 brochettes par portion, prix par portion)",
+        arDescription:
+          "مقرمشة من الخارج وناعمة من الداخل. (3 أسياخ لكل حصة، السعر لكل حصة)",
+        maDescription:
+          "مقرمشة من برا وناعمة من جوا. (3 بروشيت فالحصة، الثمن ديال الحصة)",
         image: "",
       },
       {
@@ -1593,11 +1633,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ بطاطا حلوة",
         maTitle: "بروشيت بطاطا حلوة",
         price: "MAD10",
-        description: "香甜软糯，天然好滋味。",
-        enDescription: "Naturally sweet and soft.",
-        frDescription: "Naturellement sucrée et moelleuse.",
-        arDescription: "حلوة وناعمة بشكل طبيعي.",
-        maDescription: "حلوة وناعمة بشكل طبيعي.",
+        description: "香甜软糯，天然好滋味。（三串为一组，价格为一组价格）",
+        enDescription:
+          "Naturally sweet and soft. (3 skewers per portion, price is per portion)",
+        frDescription:
+          "Naturellement sucrée et moelleuse. (3 brochettes par portion, prix par portion)",
+        arDescription:
+          "حلوة وناعمة بشكل طبيعي. (3 أسياخ لكل حصة، السعر لكل حصة)",
+        maDescription:
+          "حلوة وناعمة بشكل طبيعي. (3 بروشيت فالحصة، الثمن ديال الحصة)",
         image: "",
       },
       {
@@ -1608,11 +1652,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ فطر",
         maTitle: "بروشيت شومبينيو",
         price: "MAD10",
-        description: "蘑菇鲜香，汁水饱满。",
-        enDescription: "Juicy mushrooms with a rich umami flavor.",
-        frDescription: "Champignons juteux à la riche saveur umami.",
-        arDescription: "فطر طري بنكهة أومامي غنية.",
-        maDescription: "شومبينيو طري بنكهة أومامي غنية.",
+        description: "蘑菇鲜香，汁水饱满。（三串为一组，价格为一组价格）",
+        enDescription:
+          "Juicy mushrooms with a rich umami flavor. (3 skewers per portion, price is per portion)",
+        frDescription:
+          "Champignons juteux à la riche saveur umami. (3 brochettes par portion, prix par portion)",
+        arDescription:
+          "فطر طري بنكهة أومامي غنية. (3 أسياخ لكل حصة، السعر لكل حصة)",
+        maDescription:
+          "شومبينيو طري بنكهة أومامي غنية. (3 بروشيت فالحصة، الثمن ديال الحصة)",
         image: "",
       },
       {
@@ -1623,11 +1671,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ فطر أذن الخشب",
         maTitle: "بروشيت فطر الخشب",
         price: "MAD10",
-        description: "爽脆木耳，烧烤风味十足。",
-        enDescription: "Crisp wood ear fungus with a smoky char.",
-        frDescription: "Oreilles de Judas croustillantes au léger goût fumé.",
-        arDescription: "فطر أذن الخشب مقرمش بنكهة مدخنة خفيفة.",
-        maDescription: "فطر الخشب مقرمش بنكهة مدخنة خفيفة.",
+        description: "爽脆木耳，烧烤风味十足。（三串为一组，价格为一组价格）",
+        enDescription:
+          "Crisp wood ear fungus with a smoky char. (3 skewers per portion, price is per portion)",
+        frDescription:
+          "Oreilles de Judas croustillantes au léger goût fumé. (3 brochettes par portion, prix par portion)",
+        arDescription:
+          "فطر أذن الخشب مقرمش بنكهة مدخنة خفيفة. (3 أسياخ لكل حصة، السعر لكل حصة)",
+        maDescription:
+          "فطر الخشب مقرمش بنكهة مدخنة خفيفة. (3 بروشيت فالحصة، الثمن ديال الحصة)",
         image: "",
       },
       {
@@ -1638,11 +1690,15 @@ export const INITIAL_MENU_CATEGORIES: any[] = [
         arTitle: "سيخ باذنجان",
         maTitle: "بروشيت باذنجان",
         price: "MAD10",
-        description: "茄子软滑，蘸酱更美味。",
-        enDescription: "Silky eggplant, delicious with sauce.",
-        frDescription: "Aubergine soyeuse, délicieuse avec la sauce.",
-        arDescription: "باذنجان ناعم، لذيذ مع الصلصة.",
-        maDescription: "باذنجان ناعم، لذيذ مع الصلصة.",
+        description: "茄子软滑，蘸酱更美味。（三串为一组，价格为一组价格）",
+        enDescription:
+          "Silky eggplant, delicious with sauce. (3 skewers per portion, price is per portion)",
+        frDescription:
+          "Aubergine soyeuse, délicieuse avec la sauce. (3 brochettes par portion, prix par portion)",
+        arDescription:
+          "باذنجان ناعم، لذيذ مع الصلصة. (3 أسياخ لكل حصة، السعر لكل حصة)",
+        maDescription:
+          "باذنجان ناعم، لذيذ مع الصلصة. (3 بروشيت فالحصة، الثمن ديال الحصة)",
         image: "",
       },
       {
@@ -1788,10 +1844,17 @@ export function mergeAndOrderCategories(
     }));
   }
 
+  // 归一化匹配：小写 + 去掉全部空白。历史标记里存在「紫菜包饭 / 寿司」与
+  // 「紫菜包饭/寿司」「紫菜包饭 / 寿司 」等空格不一致的写法，只 trim 两端会导致
+  // 同名菜因空格不同而匹配不上 → 已删除的菜反复复活。
+  const norm = (v: unknown) =>
+    String(v ?? "")
+      .toLowerCase()
+      .replace(/\s+/g, "");
   const deletedSet = new Set(
     (Array.isArray(deletedItemIds) ? deletedItemIds : [])
       .filter(Boolean)
-      .map((id) => String(id).trim().toLowerCase()),
+      .map(norm),
   );
 
   // REMOVED_TITLES 只作用于系统默认菜品（避免误删用户自定义的同名菜品）
@@ -1799,23 +1862,17 @@ export function mergeAndOrderCategories(
     if (!item) return true;
     if (item.id && REMOVED_IDS.has(String(item.id))) return true;
     if (isInitial && item.title && REMOVED_TITLES.has(item.title)) return true;
-    if (item.id && deletedSet.has(String(item.id).trim().toLowerCase()))
-      return true;
-    if (item.title && deletedSet.has(String(item.title).trim().toLowerCase()))
-      return true;
-    if (item.name && deletedSet.has(String(item.name).trim().toLowerCase()))
-      return true;
+    if (item.id && deletedSet.has(norm(item.id))) return true;
+    if (item.title && deletedSet.has(norm(item.title))) return true;
+    if (item.name && deletedSet.has(norm(item.name))) return true;
     return false;
   };
 
   const isCatRemoved = (cat: any) => {
     if (!cat) return true;
-    if (cat.id && deletedSet.has(String(cat.id).trim().toLowerCase()))
-      return true;
-    if (cat.name && deletedSet.has(String(cat.name).trim().toLowerCase()))
-      return true;
-    if (cat.title && deletedSet.has(String(cat.title).trim().toLowerCase()))
-      return true;
+    if (cat.id && deletedSet.has(norm(cat.id))) return true;
+    if (cat.name && deletedSet.has(norm(cat.name))) return true;
+    if (cat.title && deletedSet.has(norm(cat.title))) return true;
     return false;
   };
 

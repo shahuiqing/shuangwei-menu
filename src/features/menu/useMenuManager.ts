@@ -15,8 +15,12 @@ function clearDeleted(
   list: string[] | undefined,
   keys: (string | undefined | null)[],
 ) {
-  const kill = new Set(keys.filter(Boolean).map((k) => String(k)));
-  return (Array.isArray(list) ? list : []).filter((x) => !kill.has(String(x)));
+  const norm = (v: unknown) =>
+    String(v ?? "")
+      .toLowerCase()
+      .replace(/\s+/g, "");
+  const kill = new Set(keys.filter(Boolean).map(norm));
+  return (Array.isArray(list) ? list : []).filter((x) => !kill.has(norm(x)));
 }
 
 interface MenuManagerDeps {
@@ -669,15 +673,9 @@ export function useMenuManager(deps: MenuManagerDeps) {
                 deletedItemIds: newDeletedIds,
                 silent: true,
               });
-            api.triggerBroadcast("dish_deleted", {
-              categoryId: idToRemove,
-              catTitle,
-              deletedItemIds: newDeletedIds,
-              timestamp: new Date().toISOString(),
-            });
-            api.triggerBroadcast("settings_changed", {
-              deletedItemIds: newDeletedIds,
-            });
+            // 不再立即广播：updateSettings 保存成功后自会广播 settings_changed，
+            // postgres_changes 也会把删除同步到其它设备。立即广播会在保存尚未完成时
+            // 触发重取，拿到「还没删掉」的旧数据，把刚删的菜又刷回来。
             if (selectedCategory === idToRemove)
               setSelectedCategory(updatedCategories[0]?.id || "");
             setConfirmDialog(null);
@@ -742,15 +740,7 @@ export function useMenuManager(deps: MenuManagerDeps) {
                 deletedItemIds: newDeletedIds,
                 silent: true,
               });
-            api.triggerBroadcast("dish_deleted", {
-              dishId,
-              dishTitle,
-              deletedItemIds: newDeletedIds,
-              timestamp: new Date().toISOString(),
-            });
-            api.triggerBroadcast("settings_changed", {
-              deletedItemIds: newDeletedIds,
-            });
+            // 不立即广播（见删除分类处注释）：避免保存未完成就重取旧数据导致复活
             setConfirmDialog(null);
           },
         });
