@@ -452,25 +452,21 @@ export function useMenuManager(deps: MenuManagerDeps) {
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
-        contents: `You are an expert culinary translator and Michelin-star restaurant menu copywriter specializing in high-end international dining.
-        Your task is to translate and culturally adapt the following Chinese dish name and description into English, French, Standard Arabic, and Moroccan Arabic (Darija).
+        contents: `You are a professional menu translator. Translate the Chinese dish name and description into English, French, Standard Arabic, and Moroccan Arabic (Darija).
 
         Context:
         - Restaurant Name: ${restaurantName || "Premium Restaurant"}
         - Dish Category: ${currentCategoryName}
-        - Dining Style: Elegant, authentic, and high-quality
 
-        Translation Guidelines:
-        - English & French: Use evocative, poetic, and mouth-watering adjectives. Focus on the sensory experience, cooking techniques, and ingredient quality (e.g., "slow-braised", "crispy", "infused with", "velvety"). Avoid clunky literal translations.
-        - Standard Arabic: Use sophisticated, formal culinary Arabic (Fusha) that appeals to fine dining customers. Ensure the terminology sounds luxurious.
-        - Moroccan Arabic (Darija): Write in Arabic script using native Moroccan colloquial expressions that sound authentic, welcoming, and appetizing to locals, while maintaining a premium feel.
-        - General: Prioritize elegance and appetizing appeal over 1-to-1 literal translation, while preserving the core ingredients and flavor profiles.
-        
+        Translation Rules:
+        - Titles (enTitle / frTitle / arTitle / maTitle): Translate the dish name LITERALLY and CONCISELY. Do NOT add any adjectives, prefixes, suffixes, flavor words, or marketing embellishment that are not already in the original name. Keep simple items simple — for example "矿泉水" is "Mineral Water" / "Eau Minérale" / "مياه معدنية" / "ما معدني", never "Refreshing Premium Natural Mineral Water". Translate exactly what is written, nothing more.
+        - Descriptions (enDescription / frDescription / arDescription / maDescription): Translate the original description faithfully and naturally. Do NOT invent ingredients, cooking methods, textures, or sensory details that the original does not mention. If the original Description is "N/A" or empty, return an empty string "" for every description field.
+
         Original Dish Details:
         Title: ${newDish.title ? newDish.title : "N/A"}
         Description: ${newDish.description ? newDish.description : "N/A"}
-        
-        Return ONLY a JSON response in the specified schema format. Ensure the translated descriptions are rich and descriptive.`,
+
+        Return ONLY a JSON response in the specified schema format.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
