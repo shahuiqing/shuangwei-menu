@@ -733,6 +733,84 @@ GRANT ALL ON public.owner_fixed_cost TO anon, authenticated;
 ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS shelf_life_days integer;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.6 菜单快照（数据库侧备份 + 一键快速恢复）
+--     每次「备份菜单」把当前 settings.categories + deletedItemIds 存一份到库里，
+--     出问题后一键恢复，不依赖本机 localStorage，换设备也不丢。保留最近 30 份。
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.menu_snapshots (
+  id               text primary key,
+  name             text not null default '菜单快照',
+  created_at       timestamptz not null default now(),
+  categories       jsonb not null default '[]'::jsonb,
+  deleted_item_ids jsonb not null default '[]'::jsonb,
+  item_count       integer not null default 0
+);
+
+CREATE OR REPLACE FUNCTION public.owner_menu_snapshot(p_name text DEFAULT '菜单快照')
+RETURNS text
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_id    text;
+  v_cats  jsonb;
+  v_del   jsonb;
+  v_count integer;
+BEGIN
+  SELECT COALESCE(categories, '[]'::jsonb), COALESCE("deletedItemIds", '[]'::jsonb)
+    INTO v_cats, v_del
+    FROM public.settings WHERE id = 'global';
+  v_cats := COALESCE(v_cats, '[]'::jsonb);
+  v_del  := COALESCE(v_del, '[]'::jsonb);
+  SELECT COALESCE(SUM(jsonb_array_length(c->'items')), 0)::integer
+    INTO v_count
+    FROM jsonb_array_elements(v_cats) c;
+  v_id := 'snap-' || to_char(now(), 'YYYYMMDDHH24MISSMS') || '-' || floor(random()*9000+1000)::text;
+  INSERT INTO public.menu_snapshots (id, name, categories, deleted_item_ids, item_count)
+  VALUES (v_id, COALESCE(NULLIF(p_name, ''), '菜单快照'), v_cats, v_del, v_count);
+  DELETE FROM public.menu_snapshots
+   WHERE id NOT IN (SELECT id FROM public.menu_snapshots ORDER BY created_at DESC LIMIT 30);
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.owner_menu_snapshot_list()
+RETURNS TABLE(id text, name text, created_at timestamptz, item_count integer)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT id, name, created_at, item_count FROM public.menu_snapshots ORDER BY created_at DESC LIMIT 50;
+$$;
+
+CREATE OR REPLACE FUNCTION public.owner_menu_restore(p_id text)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_cats jsonb;
+  v_del  jsonb;
+BEGIN
+  SELECT categories, deleted_item_ids INTO v_cats, v_del
+    FROM public.menu_snapshots WHERE id = p_id;
+  IF NOT FOUND THEN RETURN false; END IF;
+  UPDATE public.settings
+     SET categories = COALESCE(v_cats, '[]'::jsonb),
+         "deletedItemIds" = COALESCE(v_del, '[]'::jsonb)
+   WHERE id = 'global';
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.owner_menu_snapshot_delete(p_id text)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  DELETE FROM public.menu_snapshots WHERE id = p_id;
+  RETURN FOUND;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.owner_menu_snapshot(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.owner_menu_snapshot_list() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.owner_menu_restore(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.owner_menu_snapshot_delete(text) TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';
