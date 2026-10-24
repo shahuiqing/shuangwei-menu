@@ -1947,12 +1947,15 @@ export function mergeAndOrderCategories(
 }
 
 /**
- * 剔除「主食 & 饮品」分类及其内置菜品在 deletedItemIds 中的软删除标记。
+ * 剔除「主食 & 饮品」分类在 deletedItemIds 中的软删除标记。
  *
  * 背景：历史上 migrateLegacyCategories 会在已存在合并分类的情况下再生成一个
  * id 相同的重复分类，老板删除该重复分类时，handleDeleteCategory 会把分类 id 与
  * 全部菜品 id/title 记入 deletedItemIds，导致合并分类永久无法恢复。
- * 修复重复分类 bug 后，仍需清掉已写入的软删除标记，分类才会重新出现。
+ * 修复重复分类 bug 后，仍需清掉分类 id/name 标记，分类才会重新出现。
+ *
+ * 注意：只保护「分类」本身，**不再保护其内置菜品**——否则老板主动删除
+ * 主食&饮品里的菜（拌饭/干饺/煎饺/沙拉/饮品等）会因标记被反复清除而永远删不掉。
  * 幂等：标记已清理时结果与原数组一致。
  */
 export function stripMainDrinksDeletedIds(deletedItemIds: string[]): string[] {
@@ -1967,11 +1970,6 @@ export function stripMainDrinksDeletedIds(deletedItemIds: string[]): string[] {
   add(cat.id);
   add(cat.name);
   add((cat as { title?: string }).title);
-  (cat.items || []).forEach((i: any) => {
-    add(i.id);
-    add(i.title);
-    add(i.name);
-  });
   return (deletedItemIds || []).filter(
     (id) => !protectedIds.has(String(id).trim().toLowerCase()),
   );

@@ -185,7 +185,7 @@ describe("mergeAndOrderCategories", () => {
 });
 
 describe("stripMainDrinksDeletedIds", () => {
-  it("removes 主食 & 饮品 category and its built-in items from deleted ids", () => {
+  it("removes 主食 & 饮品 category marker but keeps item markers (so dishes stay deletable)", () => {
     const ids = [
       "cat-main-drinks",
       "主食 & 饮品",
@@ -198,10 +198,10 @@ describe("stripMainDrinksDeletedIds", () => {
     const cleaned = stripMainDrinksDeletedIds(ids);
     expect(cleaned).not.toContain("cat-main-drinks");
     expect(cleaned).not.toContain("主食 & 饮品");
-    expect(cleaned).not.toContain("main-rice-bowl");
-    expect(cleaned).not.toContain("拌饭");
-    expect(cleaned).not.toContain("main-dumpling-dry");
-    expect(cleaned).not.toContain("干饺");
+    expect(cleaned).toContain("main-rice-bowl");
+    expect(cleaned).toContain("拌饭");
+    expect(cleaned).toContain("main-dumpling-dry");
+    expect(cleaned).toContain("干饺");
     expect(cleaned).toContain("some-other-id");
   });
 
