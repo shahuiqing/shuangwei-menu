@@ -252,7 +252,7 @@ export default function AdminPanel({
       "手动重置点 " + new Date().toLocaleString(),
     );
     if (name === null) return;
-    checkpointService.save(name, {
+    const cp = checkpointService.save(name, {
       categories,
       promotions,
       restaurantName,
@@ -265,7 +265,13 @@ export default function AdminPanel({
       receiptSettings,
       deletedItemIds: deletedItemIds || [],
     });
-    alert("✅ 已保存重置点（存于本机，不依赖数据库）");
+    if (cp) {
+      alert("✅ 已保存重置点（存于本机，不依赖数据库）");
+    } else {
+      alert(
+        "❌ 重置点保存失败：本机存储空间不足。\n请先「导出 JSON 备份」留存，或删除旧重置点；把菜品图片上传到云端存储也可大幅减小体积。",
+      );
+    }
   };
 
   const handleRestoreCheckpoint = (cp: any) => {

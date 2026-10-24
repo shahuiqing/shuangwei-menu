@@ -37,6 +37,18 @@ const MAX_AUTO = 3;
 type Listener = () => void;
 const listeners: Listener[] = [];
 
+/** 深拷贝剥离 base64 图片，避免快照体积撑爆 localStorage 配额导致全部重置点丢失 */
+function stripBase64(node: any): any {
+  if (Array.isArray(node)) return node.map(stripBase64);
+  if (node && typeof node === "object") {
+    const out: any = {};
+    for (const k of Object.keys(node)) out[k] = stripBase64(node[k]);
+    return out;
+  }
+  if (typeof node === "string" && node.startsWith("data:image/")) return "";
+  return node;
+}
+
 function readAll(): Checkpoint[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -48,13 +60,15 @@ function readAll(): Checkpoint[] {
   }
 }
 
-function writeAll(list: Checkpoint[]) {
+function writeAll(list: Checkpoint[]): boolean {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch (e) {
     console.warn("[checkpoint] 保存重置点失败（可能超出存储配额）", e);
+    return false;
   }
   listeners.forEach((cb) => cb());
+  return true;
 }
 
 function sortDesc(list: Checkpoint[]): Checkpoint[] {
@@ -83,27 +97,27 @@ export const checkpointService = {
     return checkpointService.list()[0] || null;
   },
 
-  save(name: string, data: CheckpointData): Checkpoint {
+  save(name: string, data: CheckpointData): Checkpoint | null {
     const cp: Checkpoint = {
       id: "cp-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
       name: name || "手动重置点",
       createdAt: new Date().toISOString(),
       auto: false,
-      data,
+      data: stripBase64(data),
     };
-    writeAll(trim([...readAll(), cp]));
-    return cp;
+    const ok = writeAll(trim([...readAll(), cp]));
+    return ok ? cp : null;
   },
 
-  autoSave(data: CheckpointData): void {
+  autoSave(data: CheckpointData): boolean {
     const cp: Checkpoint = {
       id: "auto-" + Date.now(),
       name: "自动重置点（最近一次成功保存）",
       createdAt: new Date().toISOString(),
       auto: true,
-      data,
+      data: stripBase64(data),
     };
-    writeAll(trim([...readAll(), cp]));
+    return writeAll(trim([...readAll(), cp]));
   },
 
   remove(id: string): void {

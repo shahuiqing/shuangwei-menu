@@ -140,6 +140,11 @@ export function DataSecurityTab({
         <p className="text-xs text-zinc-400 mb-4">
           每次成功保存到云端后会自动生成一个「自动重置点」。重要操作前可手动备份；数据异常或数据库不可用时，可一键恢复到任意重置点（存于本机，不依赖数据库）。
         </p>
+        <p className="text-[11px] text-zinc-500 mb-4">
+          说明：重置点只保存菜单结构、价格与云端图片链接，不包含本机未上传的
+          Base64
+          图片（以免撑爆浏览器本地存储导致重置点丢失）。图片请尽量上传到云端存储。
+        </p>
         <div className="flex flex-wrap gap-3 mb-4">
           <button
             type="button"
