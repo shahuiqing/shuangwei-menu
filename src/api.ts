@@ -421,6 +421,15 @@ let syncChannelRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let isRealtimeConnected = false;
 export const getIsRealtimeConnected = () => isRealtimeConnected;
 
+// 广播自检：即使 channel 处于 SUBSCRIBED 状态，某些电脑（如收银机）的 WebSocket
+// 接收端仍可能被浏览器/安全软件拦掉，导致「能发不能收」。这里记录最近一次收到
+// 广播的时间，超过阈值即判定「广播不健康」，让下方轮询兜底接管同步。
+let broadcastLastReceived = 0;
+export const isBroadcastHealthy = () => {
+  if (!isRealtimeConnected) return false;
+  return Date.now() - broadcastLastReceived < 45000; // 45 秒内收到过广播视为健康
+};
+
 export const ensureSyncChannel = () => {
   if (supabase && isSupabaseConfigured && !globalSyncChannel) {
     globalSyncChannel = supabase.channel("restaurant-sync", {
@@ -661,10 +670,15 @@ export const ensureSyncChannel = () => {
         const p = evtPayload?.payload || evtPayload;
         adminNotificationListeners.forEach((l) => l(p));
       })
+      .on("broadcast", { event: "__realtime_ping__" }, () => {
+        broadcastLastReceived = Date.now();
+      })
       .subscribe((status: string) => {
         console.log(`Supabase unified sync channel status: ${status}`);
         if (status === "SUBSCRIBED") {
           isRealtimeConnected = true;
+          // 订阅成功先视为广播健康，随后由每 20s 的 ping 持续校验
+          broadcastLastReceived = Date.now();
           if (syncChannelRetryTimer) {
             clearTimeout(syncChannelRetryTimer);
             syncChannelRetryTimer = null;
@@ -690,6 +704,15 @@ export const ensureSyncChannel = () => {
 
 // Start connection immediately on module load
 ensureSyncChannel();
+
+// 广播自检心跳：每 20 秒给自己发一条 ping（self:true 会回环收到）。
+// 若某台设备（如收银机）的 WebSocket 接收被拦，就收不到自己的 ping，
+// broadcastLastReceived 保持陈旧 → isBroadcastHealthy() 变 false → 触发轮询兜底。
+setInterval(() => {
+  if (isRealtimeConnected) {
+    triggerBroadcast("__realtime_ping__", { at: Date.now() });
+  }
+}, 20000);
 
 // 自动检测并补全 Supabase 生产环境数据库空表
 setTimeout(() => {
@@ -867,7 +890,12 @@ export const api = {
     // Active polling fallback (ONLY polls if Supabase is unhealthy or unconfigured to sync local tabs)
     // Avoids polling the database if Supabase is connected and healthy
     const pollInterval = setInterval(() => {
-      if (!isSupabaseConfigured || !isSupabaseHealthy || !isRealtimeConnected) {
+      if (
+        !isSupabaseConfigured ||
+        !isSupabaseHealthy ||
+        !isRealtimeConnected ||
+        !isBroadcastHealthy()
+      ) {
         api
           .getSettings()
           .then(handleData)
@@ -988,7 +1016,7 @@ export const api = {
       // 3. 只有当 WebSocket 断线 (isRealtimeConnected === false) 时，才启动 10 秒兜底轮询
       if (document.hidden) return;
 
-      if (!isRealtimeConnected) {
+      if (!isRealtimeConnected || !isBroadcastHealthy()) {
         fetchAndTrigger();
       } else {
         const now = Date.now();
@@ -2263,7 +2291,12 @@ export const api = {
     // Active polling fallback (ONLY polls if Supabase is unhealthy or unconfigured to sync local tabs)
     // Avoids polling the database if Supabase is connected and healthy
     const pollInterval = setInterval(() => {
-      if (!isSupabaseConfigured || !isSupabaseHealthy || !isRealtimeConnected) {
+      if (
+        !isSupabaseConfigured ||
+        !isSupabaseHealthy ||
+        !isRealtimeConnected ||
+        !isBroadcastHealthy()
+      ) {
         fetchAndTrigger();
       }
     }, 5000);
