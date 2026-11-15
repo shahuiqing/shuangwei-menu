@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ShoppingCart,
   RefreshCw,
@@ -7,13 +7,17 @@ import {
   PackageCheck,
   Layers,
   Flame,
+  Link2,
 } from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
+import { fetchInventory, type InventoryItem } from "../lib/inventory";
+import { matchRequestToItem } from "../lib/purchasePlan";
 import {
   fetchPurchaseRequests,
   reviewPurchaseRequest,
   markPurchasePurchased,
+  linkPurchaseRequestItem,
   PURCHASE_STATUS_LABEL,
   type PurchaseRequest,
   type PurchaseStatus,
@@ -27,9 +31,7 @@ const ST_CLS: Record<PurchaseStatus, string> = {
 };
 
 /** 采购汇总：同名称+单位合并数量 */
-export function summarize(
-  list: PurchaseRequest[],
-): {
+export function summarize(list: PurchaseRequest[]): {
   key: string;
   name: string;
   unit: string;
@@ -68,6 +70,7 @@ export function summarize(
 export default function PurchaseRequests() {
   const [tab, setTab] = useState<"pending" | "summary" | "records">("pending");
   const [list, setList] = useState<PurchaseRequest[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<"all" | PurchaseStatus>(
     "all",
@@ -75,13 +78,35 @@ export default function PurchaseRequests() {
 
   const load = async () => {
     setLoading(true);
-    setList(await fetchPurchaseRequests());
+    const [l, inv] = await Promise.all([
+      fetchPurchaseRequests(),
+      fetchInventory(),
+    ]);
+    setList(l);
+    setItems(inv);
     setLoading(false);
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  /** 申报 → 库存物品匹配：手动关联优先，否则按名称自动匹配 */
+  const matchOf = (r: PurchaseRequest) => {
+    const linked = r.inventory_item_id?.trim();
+    if (linked && items.some((i) => i.id === linked))
+      return { id: linked, linked: true as const };
+    const auto = matchRequestToItem(r.item_name, items);
+    return auto ? { id: auto, linked: false as const } : null;
+  };
+
+  const linkTo = async (r: PurchaseRequest, itemId: string) => {
+    if (!itemId) return;
+    if (await linkPurchaseRequestItem(r.id, itemId)) {
+      toast.success(`「${r.item_name}」已关联库存物品，进入采购计划`);
+      load();
+    } else toast.error("关联失败");
+  };
 
   const pending = list.filter((r) => r.status === "pending");
   const approvedUnbought = list.filter((r) => r.status === "approved");
@@ -112,7 +137,44 @@ export default function PurchaseRequests() {
     } else toast.error("操作失败");
   };
 
-  const card = (r: PurchaseRequest, actions: "review" | "buy" | null) => (
+  /** 汇总行上的匹配状态：已进采购计划 / 待确认可手动关联 */
+  const matchNode = (r: PurchaseRequest) => {
+    const m = matchOf(r);
+    if (m) {
+      const item = items.find((i) => i.id === m.id);
+      return (
+        <span className="inline-flex text-[11px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400">
+          ✓ 已进采购计划 · {item?.name || m.id}
+          {m.linked ? "（手动关联）" : ""}
+        </span>
+      );
+    }
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
+          <Link2 size={11} /> 待确认：未匹配库存物品
+        </span>
+        <select
+          value=""
+          onChange={(e) => linkTo(r, e.target.value)}
+          className="bg-zinc-900 border border-white/5 rounded-lg px-2 py-1 text-[11px] text-white"
+        >
+          <option value="">关联库存物品…</option>
+          {items.map((it) => (
+            <option key={it.id} value={it.id}>
+              {it.name}（{it.unit}）
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
+  const card = (
+    r: PurchaseRequest,
+    actions: "review" | "buy" | null,
+    extra?: ReactNode,
+  ) => (
     <div key={r.id} className="bg-zinc-950 rounded-xl px-3.5 py-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <span
@@ -141,6 +203,10 @@ export default function PurchaseRequests() {
           {r.expected_date ? ` · 期望 ${r.expected_date} 到货` : ""}
         </span>
       </div>
+      {extra}
+      {r.status === "purchased" && r.purchase_id && (
+        <div className="text-[11px] text-zinc-500">入库单：{r.purchase_id}</div>
+      )}
       {(r.note ||
         r.photos.length > 0 ||
         (r.status === "rejected" && r.reject_reason)) && (
@@ -275,9 +341,10 @@ export default function PurchaseRequests() {
               </div>
               <div className="mt-3 space-y-2">
                 <div className="text-xs text-zinc-500">
-                  逐条采购完成后标记：
+                  已关联库存物品的申报会自动进入「采购」页的采购计划，入库后自动标记已采购；
+                  直接手工买的可在此标记：
                 </div>
-                {approvedUnbought.map((r) => card(r, "buy"))}
+                {approvedUnbought.map((r) => card(r, "buy", matchNode(r)))}
               </div>
             </>
           )}

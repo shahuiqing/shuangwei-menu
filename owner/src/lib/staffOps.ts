@@ -215,6 +215,10 @@ export interface PurchaseRequest {
   photos: string[];
   status: PurchaseStatus;
   reject_reason: string;
+  /** 入库溯源:被哪张入库单消化(空=尚未入库) */
+  purchase_id?: string;
+  /** 关联的库存物品(自动匹配或老板手动关联;空=待确认) */
+  inventory_item_id?: string;
   created_at: string;
 }
 
@@ -1022,6 +1026,45 @@ export async function markPurchasePurchased(id: string): Promise<boolean> {
     .update({ status: "purchased", purchased_at: new Date().toISOString() })
     .eq("id", id);
   return warn("markPurchasePurchased", error);
+}
+
+/**
+ * 申报闭环:入库成功后批量把 approved 申报置为 purchased。
+ * purchaseId 记录消化这批申报的入库单(溯源,可空)。
+ */
+export async function markPurchaseRequestsFulfilled(
+  requestIds: string[],
+  purchaseId = "",
+): Promise<number> {
+  if (!supabase || requestIds.length === 0) return 0;
+  const { data, error } = await supabase
+    .from("purchase_requests")
+    .update({
+      status: "purchased",
+      purchased_at: new Date().toISOString(),
+      purchase_id: purchaseId,
+    })
+    .in("id", requestIds)
+    .eq("status", "approved")
+    .select("id");
+  if (error) {
+    warn("markPurchaseRequestsFulfilled", error);
+    return 0;
+  }
+  return data?.length || 0;
+}
+
+/** 手动把申报关联到库存物品（待确认 → 可进采购计划） */
+export async function linkPurchaseRequestItem(
+  id: string,
+  itemId: string,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("purchase_requests")
+    .update({ inventory_item_id: itemId })
+    .eq("id", id);
+  return warn("linkPurchaseRequestItem", error);
 }
 
 // ───────────────────────── 员工端（登录/提交） ─────────────────────────

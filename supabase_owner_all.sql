@@ -927,6 +927,11 @@ CREATE TABLE IF NOT EXISTS public.purchase_requests (
 ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS zone VARCHAR(50) DEFAULT '';
 ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS last_counted_at TIMESTAMPTZ;
 
+-- 采购申报闭环:记录申报被哪张入库单消化(溯源)
+ALTER TABLE public.purchase_requests ADD COLUMN IF NOT EXISTS purchase_id VARCHAR(100) DEFAULT '';
+-- 采购申报闭环:申报关联的库存物品(自动匹配或老板手动关联)
+ALTER TABLE public.purchase_requests ADD COLUMN IF NOT EXISTS inventory_item_id VARCHAR(50) DEFAULT '';
+
 -- RLS：与既有 anon_all_* 策略保持一致
 DO $$
 DECLARE t TEXT;

@@ -72,7 +72,14 @@ import {
   CONSUMPTION_WINDOW_DAYS,
   COVERAGE_DAYS,
   dailyFromConsumption,
+  mergeRequestsIntoPlan,
+  requestsByItem,
 } from "../lib/purchasePlan";
+import {
+  fetchPurchaseRequests,
+  markPurchaseRequestsFulfilled,
+  type PurchaseRequest,
+} from "../lib/staffOps";
 import {
   compareInsight,
   rivalItems,
@@ -558,21 +565,25 @@ export default function Procurement({ version = 0 }: { version?: number }) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [draft, setDraft] = useState<ReceiptDraft | null>(null);
   const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
+  /** 员工采购申报（已审批的并入采购计划） */
+  const [reqs, setReqs] = useState<PurchaseRequest[]>([]);
 
   const load = async () => {
     setLoading(true);
     const end = new Date();
     const start = new Date(end.getTime() - CONSUMPTION_WINDOW_DAYS * 86400000);
-    const [p, i, b, c] = await Promise.all([
+    const [p, i, b, c, rq] = await Promise.all([
       fetchPurchases(),
       fetchInventory(),
       fetchBoms(),
       consumptionByItem(start.toISOString(), end.toISOString()),
+      fetchPurchaseRequests(),
     ]);
     setList(p);
     setInv(i);
     setBoms(b);
     setCons(c);
+    setReqs(rq);
     setLoading(false);
   };
 
@@ -614,10 +625,29 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     );
     return dailyFromConsumption(cons, trackedDays);
   }, [cons, list]);
+  /** 已审批未入库的申报 */
+  const approvedReqs = useMemo(
+    () => reqs.filter((r) => r.status === "approved"),
+    [reqs],
+  );
+  /** 申报 → 库存物品 聚合（匹配不到的进 unmatched，页面提示待确认） */
+  const reqByItem = useMemo(
+    () => requestsByItem(approvedReqs, inv),
+    [approvedReqs, inv],
+  );
   const plan = useMemo(
     () =>
-      buildPurchasePlan({ items: inv, daily, alerts, coverageDays: coverage }),
-    [inv, daily, alerts, coverage],
+      mergeRequestsIntoPlan(
+        buildPurchasePlan({
+          items: inv,
+          daily,
+          alerts,
+          coverageDays: coverage,
+        }),
+        reqByItem.byItem,
+        inv,
+      ),
+    [inv, daily, alerts, coverage, reqByItem],
   );
 
   // 供应商比价（≥2 家供应商的原料）
@@ -731,19 +761,45 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     setOpen(true);
   };
 
+  /**
+   * 入库后回写员工申报：买够申报量才标记已采购，
+   * 买少了保留 approved 状态，等下次补货。
+   */
+  const fulfillMatchedRequests = async (
+    itemId: string,
+    purchasedQty: number,
+    purchaseId: string,
+  ): Promise<number> => {
+    const info = reqByItem.byItem.get(itemId);
+    if (!info || info.requestIds.length === 0) return 0;
+    if (purchasedQty + 1e-9 < info.qty) return 0;
+    return markPurchaseRequestsFulfilled(info.requestIds, purchaseId);
+  };
+
   /** 按计划一次性生成采购记录并入库（逐条走既有 RPC，失败不阻断） */
   const bulkBuy = async () => {
     if (bulk || !plan.rows.length) return;
+    const reqCount = plan.rows.reduce(
+      (n, r) => n + (r.requestIds?.length || 0),
+      0,
+    );
     if (
       !confirm(
-        `按计划采购 ${plan.rows.length} 项原料，合计约 ${fmtMoney(plan.totalCost)}？\n将生成采购记录并入库。`,
+        `按计划采购 ${plan.rows.length} 项原料，合计约 ${fmtMoney(plan.totalCost)}？${
+          reqCount > 0
+            ? `\n其中 ${reqCount} 条员工申报将自动标记为已采购。`
+            : ""
+        }\n将生成采购记录并入库。`,
       )
     )
       return;
     setBulk(true);
     let ok = 0;
+    let fulfilled = 0;
     for (const r of plan.rows) {
+      const pid = newPurchaseId();
       const done = await createPurchase({
+        id: pid,
         supplier: "",
         inventory_item_id: r.id,
         item_name: r.name,
@@ -752,10 +808,19 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         unit_price: r.refPrice,
         notes: `采购计划 · 覆盖 ${plan.coverageDays} 天`,
       });
-      if (done) ok += 1;
+      if (done) {
+        ok += 1;
+        if (r.requestIds?.length)
+          fulfilled += await fulfillMatchedRequests(r.id, r.gap, pid);
+      }
     }
     setBulk(false);
-    if (ok) toast.success(`已生成 ${ok} 条采购记录并入库`);
+    if (ok)
+      toast.success(
+        `已生成 ${ok} 条采购记录并入库${
+          fulfilled > 0 ? `，${fulfilled} 条员工申报已标记已采购` : ""
+        }`,
+      );
     else toast.error("生成失败，请稍后重试");
     await load();
   };
@@ -914,6 +979,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       .filter(Boolean)
       .join(" · ");
     let ok = 0;
+    let fulfilled = 0;
     for (const p of payloads) {
       const pid = newPurchaseId();
       const done = await createPurchase({
@@ -934,12 +1000,17 @@ export default function Procurement({ version = 0 }: { version?: number }) {
             pid,
             images.map((im) => im.id),
           );
+        // 匹配到员工申报且买够数量 → 自动标记已采购
+        if (!String(p.itemId).startsWith("INV-"))
+          fulfilled += await fulfillMatchedRequests(p.itemId, p.qty, pid);
       }
     }
     setAiSaving(false);
     if (!ok) return toast.error("入库失败（检查库存/采购表权限）");
     toast.success(
-      `已入库 ${ok} 项${ok < payloads.length ? `，${payloads.length - ok} 项失败` : ""}`,
+      `已入库 ${ok} 项${ok < payloads.length ? `，${payloads.length - ok} 项失败` : ""}${
+        fulfilled > 0 ? `；${fulfilled} 条员工申报已标记已采购` : ""
+      }`,
     );
     images.forEach((im) => URL.revokeObjectURL(im.url));
     setImages([]);
@@ -993,7 +1064,15 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         images.map((im) => im.id),
       );
     images.forEach((im) => URL.revokeObjectURL(im.url));
-    toast.success("采购已入库");
+    // 匹配到员工申报且买够数量 → 自动标记已采购
+    const fulfilled = isExisting
+      ? await fulfillMatchedRequests(id, qty, pid)
+      : 0;
+    toast.success(
+      fulfilled > 0
+        ? `采购已入库，${fulfilled} 条员工申报已标记已采购`
+        : "采购已入库",
+    );
     setOpen(false);
     setForm({
       ...form,
@@ -1132,7 +1211,11 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       {plan.rows.length > 0 && (
         <ChartCard
           title="采购计划"
-          subtitle={`安全库存 + 近 ${CONSUMPTION_WINDOW_DAYS} 天日均消耗 × ${plan.coverageDays} 天 − 现存`}
+          subtitle={`安全库存 + 近 ${CONSUMPTION_WINDOW_DAYS} 天日均消耗 × ${plan.coverageDays} 天 − 现存${
+            approvedReqs.length > 0
+              ? ` · 已并入 ${approvedReqs.length} 条员工申报`
+              : ""
+          }`}
           action={<CalendarDays size={18} className="text-amber-400" />}
         >
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -1177,6 +1260,16 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                       {r.priority === "urgent" ? "缺货" : "低于安全"}
                     </span>
                   )}
+                  {!!r.requestQty && (
+                    <span className="inline-flex ml-2 align-middle text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400">
+                      员工申报 {num(r.requestQty)}
+                      {r.unit}
+                      {r.requestStaff?.length
+                        ? ` · ${r.requestStaff.join("、")}`
+                        : ""}
+                      {r.requestUrgent ? " 🔥" : ""}
+                    </span>
+                  )}
                   <div className="text-zinc-500 text-xs mt-0.5">
                     现存 {num(r.stock)}
                     {r.unit} · 日均 {num(r.dailyAvg)}
@@ -1202,6 +1295,26 @@ export default function Procurement({ version = 0 }: { version?: number }) {
                   </button>
                 </div>
               </div>
+            ))}
+          </div>
+        </ChartCard>
+      )}
+
+      {reqByItem.unmatched.length > 0 && (
+        <ChartCard
+          title="申报待确认"
+          subtitle="这些申报没匹配到库存物品，去「采购申报」页手动关联库存物品"
+          action={<AlertTriangle size={18} className="text-amber-400" />}
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {reqByItem.unmatched.map((r) => (
+              <span
+                key={r.id}
+                className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300"
+              >
+                {r.item_name} · {r.quantity}
+                {r.unit}（{r.staff_name}）
+              </span>
             ))}
           </div>
         </ChartCard>
