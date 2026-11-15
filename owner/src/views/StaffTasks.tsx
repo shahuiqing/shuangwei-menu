@@ -99,7 +99,7 @@ const TEMPLATE_PRESETS: Omit<TaskTemplate, "id">[] = [
   },
 ];
 
-export default function StaffTasks() {
+export default function StaffTasks({ version = 0 }: { version?: number }) {
   const [tab, setTab] = useState<"dispatch" | "board">("dispatch");
   const [staff, setStaff] = useState<
     Awaited<ReturnType<typeof fetchStaffMembers>>
@@ -138,7 +138,7 @@ export default function StaffTasks() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const loadTpl = (id: string) => {
     setTplId(id);

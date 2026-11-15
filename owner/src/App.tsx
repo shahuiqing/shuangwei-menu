@@ -97,9 +97,30 @@ export default function App() {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [version, setVersion] = useState(0);
+  /** 每页独立刷新信号：一笔订单只刷当前页，不再打穿所有页面 */
+  const [versions, setVersions] = useState<Partial<Record<OwnerTab, number>>>(
+    {},
+  );
+  /** 已访问过的页面（保活：切回不卸载重挂、不重新拉数据） */
+  const [visited, setVisited] = useState<OwnerTab[]>(["dashboard"]);
   const [live, setLive] = useState(false);
   const bumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tabRef = useRef<OwnerTab>(tab);
+  tabRef.current = tab;
+
+  const bumpTab = useCallback((id: OwnerTab) => {
+    setVersions((v) => ({ ...v, [id]: (v[id] || 0) + 1 }));
+  }, []);
+
+  /** 切换页面：加入保活列表 + 切回时刷新一次 */
+  const switchTab = useCallback(
+    (id: OwnerTab) => {
+      setTab(id);
+      setVisited((v) => (v.includes(id) ? v : [...v, id]));
+      bumpTab(id);
+    },
+    [bumpTab],
+  );
   /** 已通知/已加载过的订单 id（避免刷新补发旧单） */
   const seenOrders = useRef<Set<string>>(new Set());
   /** 已提醒过的超时订单（id:status，每单每状态只提醒一次） */
@@ -134,11 +155,11 @@ export default function App() {
     if (!authed || !isConfigured) return;
     const on = () => {
       load();
-      setVersion((v) => v + 1);
+      bumpTab(tabRef.current);
     };
     window.addEventListener("online", on);
     return () => window.removeEventListener("online", on);
-  }, [authed, load, isConfigured]);
+  }, [authed, load, isConfigured, bumpTab]);
 
   // 漏单提醒：每分钟检查超时订单，去重后弹系统通知（需手动开启通知）
   useEffect(() => {
@@ -174,7 +195,7 @@ export default function App() {
     if (!authed || !isConfigured) return;
     const scheduleBump = () => {
       if (bumpTimer.current) clearTimeout(bumpTimer.current);
-      bumpTimer.current = setTimeout(() => setVersion((v) => v + 1), 20000);
+      bumpTimer.current = setTimeout(() => bumpTab(tabRef.current), 20000);
     };
     const unsub = subscribeOwner({
       onOrder: (c) => {
@@ -249,11 +270,70 @@ export default function App() {
 
   const storeName = settings?.restaurantName || STORE_NAME;
 
+  const vOf = (id: OwnerTab) => versions[id] || 0;
+
+  /** 按 tab 渲染对应页面（保活：每个页面只挂载一次） */
+  const renderTab = (id: OwnerTab) => {
+    switch (id) {
+      case "dashboard":
+        return (
+          <Dashboard
+            recentOrders={recentOrders}
+            settings={settings}
+            version={vOf(id)}
+            onTab={switchTab}
+          />
+        );
+      case "orders":
+        return <Orders version={vOf(id)} settings={settings} />;
+      case "reports":
+        return <Reports settings={settings} version={vOf(id)} />;
+      case "dishes":
+        return <Dishes version={vOf(id)} />;
+      case "menu":
+        return <MenuAnalysis version={vOf(id)} />;
+      case "procurement":
+        return <Procurement version={vOf(id)} />;
+      case "inventory":
+        return <Inventory version={vOf(id)} />;
+      case "trace":
+        return <Trace version={vOf(id)} />;
+      case "waste":
+        return <Waste version={vOf(id)} />;
+      case "recipe":
+        return <Recipe settings={settings} version={vOf(id)} />;
+      case "cost":
+        return <CostReport version={vOf(id)} />;
+      case "consumption":
+        return <Consumption version={vOf(id)} />;
+      case "staff":
+        return <StaffView version={vOf(id)} />;
+      case "dispatch":
+        return <StaffTasks version={vOf(id)} />;
+      case "stocktake":
+        return <Stocktake version={vOf(id)} />;
+      case "requests":
+        return <PurchaseRequests version={vOf(id)} />;
+      case "settings":
+        return <Settings settings={settings} onSaved={load} />;
+      case "tasks":
+        return <Tasks recentOrders={recentOrders} version={vOf(id)} />;
+      case "assistant":
+        return (
+          <Assistant
+            recentOrders={recentOrders}
+            settings={settings}
+            version={vOf(id)}
+          />
+        );
+    }
+  };
+
   return (
     <>
       <Layout
         tab={tab}
-        setTab={setTab}
+        setTab={switchTab}
         storeName={storeName}
         loading={loading}
         lastUpdated={lastUpdated}
@@ -297,59 +377,22 @@ export default function App() {
           </div>
         )}
 
-        <div key={tab} className="page-enter">
-          <ErrorBoundary>
-            <Suspense
-              fallback={
-                <div className="p-2">
-                  <SkeletonRows rows={4} />
-                </div>
-              }
-            >
-              {tab === "dashboard" && (
-                <Dashboard
-                  recentOrders={recentOrders}
-                  settings={settings}
-                  version={version}
-                  onTab={setTab}
-                />
-              )}
-              {tab === "orders" && (
-                <Orders version={version} settings={settings} />
-              )}
-              {tab === "reports" && (
-                <Reports settings={settings} version={version} />
-              )}
-              {tab === "dishes" && <Dishes version={version} />}
-              {tab === "menu" && <MenuAnalysis version={version} />}
-              {tab === "procurement" && <Procurement version={version} />}
-              {tab === "inventory" && <Inventory version={version} />}
-              {tab === "trace" && <Trace version={version} />}
-              {tab === "waste" && <Waste version={version} />}
-              {tab === "recipe" && (
-                <Recipe settings={settings} version={version} />
-              )}
-              {tab === "cost" && <CostReport version={version} />}
-              {tab === "consumption" && <Consumption version={version} />}
-              {tab === "staff" && <StaffView />}
-              {tab === "dispatch" && <StaffTasks />}
-              {tab === "stocktake" && <Stocktake />}
-              {tab === "requests" && <PurchaseRequests />}
-              {tab === "settings" && (
-                <Settings settings={settings} onSaved={load} />
-              )}
-              {tab === "tasks" && (
-                <Tasks recentOrders={recentOrders} version={version} />
-              )}
-              {tab === "assistant" && (
-                <Assistant
-                  recentOrders={recentOrders}
-                  settings={settings}
-                  version={version}
-                />
-              )}
-            </Suspense>
-          </ErrorBoundary>
+        <div>
+          {visited.map((id) => (
+            <div key={id} className={id === tab ? "page-enter" : "hidden"}>
+              <ErrorBoundary>
+                <Suspense
+                  fallback={
+                    <div className="p-2">
+                      <SkeletonRows rows={4} />
+                    </div>
+                  }
+                >
+                  {renderTab(id)}
+                </Suspense>
+              </ErrorBoundary>
+            </div>
+          ))}
         </div>
       </Layout>
       <ToastHost />

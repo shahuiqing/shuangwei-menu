@@ -67,7 +67,11 @@ export function summarize(list: PurchaseRequest[]): {
   return [...map.entries()].map(([key, v]) => ({ key, ...v }));
 }
 
-export default function PurchaseRequests() {
+export default function PurchaseRequests({
+  version = 0,
+}: {
+  version?: number;
+}) {
   const [tab, setTab] = useState<"pending" | "summary" | "records">("pending");
   const [list, setList] = useState<PurchaseRequest[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -89,7 +93,7 @@ export default function PurchaseRequests() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   /** 申报 → 库存物品匹配：手动关联优先，否则按名称自动匹配 */
   const matchOf = (r: PurchaseRequest) => {

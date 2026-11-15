@@ -66,7 +66,7 @@ const STK_LABEL: Record<string, string> = {
 
 const todayStr = () => todayKey(); // YYYY-MM-DD（营业日口径，与员工端一致）
 
-export default function Stocktake() {
+export default function Stocktake({ version = 0 }: { version?: number }) {
   const [rule, setRule] = useState<StocktakeRule | null>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [tasks, setTasks] = useState<StocktakeTask[]>([]);
@@ -110,7 +110,7 @@ export default function Stocktake() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const saveRule = async () => {
     if (!rule) return;

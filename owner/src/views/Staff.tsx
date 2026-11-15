@@ -42,7 +42,7 @@ const emptyDraft = (): Draft => ({
   password: "",
 });
 
-export default function StaffView() {
+export default function StaffView({ version = 0 }: { version?: number }) {
   const [list, setList] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export default function StaffView() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [version]);
 
   const patch = (id: string, p: Partial<Draft>) =>
     setList((prev) => prev.map((s) => (s.id === id ? { ...s, ...p } : s)));
