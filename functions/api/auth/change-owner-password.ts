@@ -45,6 +45,23 @@ export async function onRequest(context: {
     let verified = false;
     let hashConfigured = false;
 
+    // 优先：数据库内修改（哈希在 owner_secrets，不再写回 settings）
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const sb = createClient(supabaseUrl, supabaseKey);
+        const { data: rpcRes } = await sb.rpc("owner_change_password", {
+          p_old: String(oldPassword || ""),
+          p_new: String(newPassword),
+        });
+        if (rpcRes && rpcRes.ok) return json({ ok: true });
+        if (rpcRes && rpcRes.error === "old password incorrect") {
+          return json({ ok: false, error: "old password incorrect" }, 401);
+        }
+      } catch (e) {
+        console.error("[auth/change-owner-password] rpc error", e);
+      }
+    }
+
     if (supabaseUrl && supabaseKey) {
       try {
         const supabase = createClient(supabaseUrl, supabaseKey);

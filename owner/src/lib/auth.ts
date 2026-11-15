@@ -8,6 +8,7 @@
 import bcrypt from "bcryptjs";
 import { localRaw, localRemove, localSetRaw } from "./localdb";
 import { logAction } from "./auditLog";
+import { supabase } from "./supabase";
 
 const SESSION_KEY = "ownerAuthedUntil";
 const LOCAL_HASH_KEY = "ownerPasswordHash";
@@ -16,6 +17,24 @@ const ENV_PASSWORD = String(import.meta.env.VITE_OWNER_PASSWORD || "");
 const SESSION_MS = 3 * 24 * 60 * 60 * 1000; // 3 天
 
 const VERIFY_URL = "/api/auth/verify-owner";
+
+interface SecretRes {
+  ok?: boolean;
+  configured?: boolean;
+  error?: string;
+}
+
+/** 调用数据库安全函数（哈希在库内，前端拿不到） */
+async function rpcSecret<T>(fn: string, args: Record<string, unknown>) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc(fn, args);
+    if (error) return null;
+    return data as T | null;
+  } catch {
+    return null;
+  }
+}
 
 /** 最短密码长度 */
 export const MIN_PASSWORD_LEN = 6;
@@ -54,6 +73,23 @@ function getLocalHash(): string {
  */
 export async function verifyOwnerPassword(input: string): Promise<boolean> {
   if (!input) return false;
+  // 1) 数据库内校验（推荐：哈希不出库，改浏览器存储也无法绕过）
+  const rpcRes = await rpcSecret<SecretRes>("owner_verify_password", {
+    p_password: input,
+  });
+  if (rpcRes && rpcRes.configured === true) return !!rpcRes.ok;
+
+  // 2) 云端未配置 / RPC 不可用 → 本机哈希（离线也能登录）
+  const local = getLocalHash();
+  if (local) {
+    try {
+      return bcrypt.compareSync(input, local);
+    } catch {
+      return false;
+    }
+  }
+
+  // 3) 本机也没有密码 → 兼容旧 Edge 通道（ADMIN_SECRET / 旧部署）
   try {
     const res = await fetch(VERIFY_URL, {
       method: "POST",
@@ -62,23 +98,12 @@ export async function verifyOwnerPassword(input: string): Promise<boolean> {
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
-      // 后端「未配置密码」时应回退本机哈希，而不是当成「密码错误」
-      if (data?.configured === false) {
-        /* 回退本地 */
-      } else if (typeof data?.ok === "boolean") {
-        return data.ok;
-      }
+      if (typeof data?.ok === "boolean") return data.ok;
     }
   } catch {
-    // 后端不可达 → 回退本地
+    // 后端不可达
   }
-  const local = getLocalHash();
-  if (!local) return false; // 未设置过密码：不再有默认密码兜底
-  try {
-    return bcrypt.compareSync(input, local);
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 /** 本地降级修改密码（仅当后端不可用/本地模式时使用） */
@@ -102,6 +127,26 @@ export async function changeOwnerPassword(
     return { ok: false, local: false, cloud: false };
   setOwnerPasswordLocal(v);
   let cloud = false;
+
+  // 1) 数据库内修改（校验旧密码）
+  const rpcRes = await rpcSecret<SecretRes>("owner_change_password", {
+    p_old: oldPw,
+    p_new: v,
+  });
+  if (rpcRes) {
+    if (rpcRes.ok) {
+      cloud = true;
+    } else if (rpcRes.error === "owner password not configured") {
+      // 云端还没有密码：把新密码作为首次云端密码写入
+      const boot = await rpcSecret<SecretRes>("owner_set_owner_password", {
+        p_password: v,
+      });
+      cloud = !!boot?.ok;
+    }
+    return { ok: true, local: true, cloud };
+  }
+
+  // 2) RPC 不可用 → 回退 Edge 通道（旧部署兼容）
   try {
     const res = await fetch("/api/auth/change-owner-password", {
       method: "POST",
@@ -118,11 +163,13 @@ export async function changeOwnerPassword(
   return { ok: true, local: true, cloud };
 }
 
-/** 首次设置密码：长度校验 + 写入本机哈希（云端需另行执行 set-owner-password） */
+/** 首次设置密码：写入本机哈希，并尝试同步云端（云端已有密码时忽略） */
 export function setupOwnerPassword(pw: string): boolean {
   const v = String(pw || "").trim();
   if (v.length < MIN_PASSWORD_LEN) return false;
   setOwnerPasswordLocal(v);
+  // 异步首次同步云端，不阻塞 UI；失败留待下次修改密码时再同步
+  void rpcSecret<SecretRes>("owner_set_owner_password", { p_password: v });
   return hasLocalPassword();
 }
 

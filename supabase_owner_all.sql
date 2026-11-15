@@ -1119,8 +1119,11 @@ BEGIN
   IF length(coalesce(p_password, '')) < 4 THEN
     RETURN jsonb_build_object('ok', false, 'error', 'password too short');
   END IF;
-  SELECT "ownerPasswordHash" INTO owner_h
-  FROM public.settings WHERE id = 'global';
+  -- 优先读受保护的 owner_secrets；未迁移的旧库回退 settings
+  SELECT password_hash INTO owner_h FROM public.owner_secrets WHERE id = 'global';
+  IF COALESCE(owner_h, '') = '' THEN
+    SELECT "ownerPasswordHash" INTO owner_h FROM public.settings WHERE id = 'global';
+  END IF;
   IF COALESCE(owner_h, '') = '' OR substr(owner_h, 1, 2) <> '$2' THEN
     RETURN jsonb_build_object('ok', false, 'error', 'owner password not configured');
   END IF;
@@ -1188,6 +1191,112 @@ BEGIN
     EXECUTE format('UPDATE public.settings SET %I = NULL WHERE id = %L', col, 'global');
   END LOOP;
 END $$;
+
+-- 6) 老板密码哈希迁移到受保护表（anon 不可读，也不出现在设置接口里）
+CREATE TABLE IF NOT EXISTS public.owner_secrets (
+  id TEXT PRIMARY KEY DEFAULT 'global',
+  password_hash TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+INSERT INTO public.owner_secrets (id) VALUES ('global')
+  ON CONFLICT (id) DO NOTHING;
+
+DO $$
+DECLARE h text;
+BEGIN
+  PERFORM set_config('search_path', 'public, extensions', true);
+  SELECT "ownerPasswordHash" INTO h FROM public.settings WHERE id = 'global';
+  IF COALESCE(h, '') <> '' THEN
+    UPDATE public.owner_secrets
+    SET password_hash = h, updated_at = now()
+    WHERE id = 'global' AND COALESCE(password_hash, '') = '';
+    UPDATE public.settings SET "ownerPasswordHash" = '' WHERE id = 'global';
+  END IF;
+END $$;
+
+ALTER TABLE public.owner_secrets ENABLE ROW LEVEL SECURITY;
+-- 不给 anon/authenticated 任何权限、也不建 policy：只有 SECURITY DEFINER 函数能访问
+REVOKE ALL ON public.owner_secrets FROM anon, authenticated;
+
+-- 6.1 校验老板密码（云端哈希，库内比对）
+CREATE OR REPLACE FUNCTION public.owner_verify_password(p_password text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE h text;
+BEGIN
+  SELECT password_hash INTO h FROM public.owner_secrets WHERE id = 'global';
+  IF COALESCE(h, '') = '' OR substr(h, 1, 2) <> '$2' THEN
+    RETURN jsonb_build_object('ok', false, 'configured', false);
+  END IF;
+  RETURN jsonb_build_object(
+    'ok', crypt(p_password, h) = h,
+    'configured', true
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.owner_verify_password(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_verify_password(text) TO anon, authenticated;
+
+-- 6.2 首次设置/同步老板密码（仅当云端还没有哈希时可用）
+CREATE OR REPLACE FUNCTION public.owner_set_owner_password(p_password text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE h text;
+BEGIN
+  IF length(coalesce(p_password, '')) < 6 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'password too short');
+  END IF;
+  SELECT password_hash INTO h FROM public.owner_secrets WHERE id = 'global';
+  IF COALESCE(h, '') <> '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'already configured');
+  END IF;
+  UPDATE public.owner_secrets
+  SET password_hash = crypt(p_password, gen_salt('bf', 10)),
+      updated_at = now()
+  WHERE id = 'global';
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.owner_set_owner_password(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_set_owner_password(text) TO anon, authenticated;
+
+-- 6.3 修改老板密码（必须提供旧密码）
+CREATE OR REPLACE FUNCTION public.owner_change_password(p_old text, p_new text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE h text;
+BEGIN
+  IF length(coalesce(p_new, '')) < 6 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'password too short');
+  END IF;
+  SELECT password_hash INTO h FROM public.owner_secrets WHERE id = 'global';
+  IF COALESCE(h, '') = '' OR substr(h, 1, 2) <> '$2' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'owner password not configured');
+  END IF;
+  IF crypt(p_old, h) <> h THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'old password incorrect');
+  END IF;
+  UPDATE public.owner_secrets
+  SET password_hash = crypt(p_new, gen_salt('bf', 10)),
+      updated_at = now()
+  WHERE id = 'global';
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.owner_change_password(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_change_password(text, text) TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）

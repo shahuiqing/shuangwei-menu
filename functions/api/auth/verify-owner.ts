@@ -40,6 +40,13 @@ export async function onRequest(context: {
     if (supabaseUrl && supabaseKey) {
       try {
         const supabase = createClient(supabaseUrl, supabaseKey);
+        // 优先：数据库内校验（哈希在受保护的 owner_secrets，前端不可读）
+        const { data: rpcRes } = await supabase.rpc("owner_verify_password", {
+          p_password: String(password),
+        });
+        if (rpcRes && rpcRes.configured === true) {
+          return json({ ok: !!rpcRes.ok });
+        }
         const { data } = await supabase
           .from("settings")
           .select("ownerPasswordHash")
