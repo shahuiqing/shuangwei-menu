@@ -34,6 +34,11 @@ export function businessDayKey(t: number | Date): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+/** 当前营业日 key（全站“今天”的唯一口径） */
+export function todayKey(t: number | Date = Date.now()): string {
+  return businessDayKey(t);
+}
+
 /** 该时刻是否落在某个营业日内 */
 export function withinBusinessDay(
   t: number | Date,

@@ -18,6 +18,7 @@ import { Segmented } from "../components/Segmented";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
+import { todayKey } from "../lib/businessDay";
 import { lateOrders, useLateConfig } from "../lib/lateOrders";
 import {
   orderItems,
@@ -129,7 +130,7 @@ function exportCsv(rows: any[]) {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `orders_${todayKey()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

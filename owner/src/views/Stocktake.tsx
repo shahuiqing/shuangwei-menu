@@ -15,6 +15,7 @@ import {
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
 import { fetchInventory, type InventoryItem } from "../lib/inventory";
+import { todayKey } from "../lib/businessDay";
 import {
   fetchStocktakeRule,
   saveStocktakeRule,
@@ -63,7 +64,7 @@ const STK_LABEL: Record<string, string> = {
   cancelled: "已取消",
 };
 
-const todayStr = () => new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD（本地时区）
+const todayStr = () => todayKey(); // YYYY-MM-DD（营业日口径，与员工端一致）
 
 export default function Stocktake() {
   const [rule, setRule] = useState<StocktakeRule | null>(null);

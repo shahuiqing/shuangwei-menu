@@ -420,7 +420,7 @@ export default function Settings({
 
   const exportBackup = () => {
     downloadText(
-      `shuangwei-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      `shuangwei-backup-${businessDayKey(Date.now())}.json`,
       exportLocalData(),
     );
     logAction("导出本地数据");

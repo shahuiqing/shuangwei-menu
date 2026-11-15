@@ -37,6 +37,7 @@ import {
   type PurchaseStatus,
 } from "../lib/staffOps";
 import { isConfigured } from "../lib/supabase";
+import { todayKey } from "../lib/businessDay";
 import {
   t,
   getLang,
@@ -70,7 +71,7 @@ const STK_CLS: Record<string, string> = {
   cancelled: "bg-zinc-700/40 text-zinc-500",
 };
 
-const todayStr = () => new Date().toLocaleDateString("sv-SE");
+const todayStr = () => todayKey();
 
 const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString(localeOf(), { hour12: false });

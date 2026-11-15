@@ -27,7 +27,7 @@ export function pushStocktake(r: {
   items: number;
   diffs: number;
   netValue: number;
-  stockValue: number;
+  stockValue?: number;
 }): StocktakeRecord {
   const rec: StocktakeRecord = {
     at: Date.now(),
@@ -35,7 +35,7 @@ export function pushStocktake(r: {
     items: r.items,
     diffs: r.diffs,
     netValue: r.netValue,
-    stockValue: r.stockValue,
+    stockValue: r.stockValue ?? 0,
   };
   const list = loadStocktakeHistory();
   list.unshift(rec);

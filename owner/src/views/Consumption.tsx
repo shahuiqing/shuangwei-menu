@@ -18,6 +18,7 @@ import {
 import { Segmented } from "../components/Segmented";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
+import { todayKey } from "../lib/businessDay";
 import { num } from "../lib/inventory";
 import type { RangeKey } from "../lib/analytics";
 import {
@@ -107,7 +108,7 @@ export default function Consumption({ version = 0 }: { version?: number }) {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `consumption_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `consumption_${todayKey()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast.success("已导出消耗报表");

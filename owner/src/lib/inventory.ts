@@ -214,6 +214,26 @@ export async function adjustStock(
 }
 
 /**
+ * 批量标记物品最后盘点时间（全量盘点用）。
+ * 与员工抽盘审核通过的 last_counted_at 口径一致。
+ */
+export async function touchLastCounted(
+  ids: string[],
+  at = new Date().toISOString(),
+): Promise<boolean> {
+  if (!supabase || ids.length === 0) return true;
+  const { error } = await supabase
+    .from("inventory_items")
+    .update({ last_counted_at: at })
+    .in("id", ids);
+  if (error) {
+    console.warn("[owner] touchLastCounted:", error.message);
+    return false;
+  }
+  return true;
+}
+
+/**
  * 报损登记：库存扣减 + 写 waste 流水（按原料现价记成本）
  * @param qty 报损数量（正数，内部转为负 delta）
  */

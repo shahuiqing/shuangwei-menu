@@ -986,7 +986,36 @@ export async function reviewStocktakeTask(
     .from("inventory_items")
     .update({ last_counted_at: now })
     .eq("id", task.item_id);
+  // 同步到全局盘点提醒/历史（与「库存管理」全量盘点同一口径）
+  if (task.actual_qty !== null) {
+    const [
+      { markStocktake, lastStocktakeDay },
+      { pushStocktake },
+      { todayKey },
+    ] = await Promise.all([
+      import("./stocktakeReminder"),
+      import("./stocktakeHistory"),
+      import("./businessDay"),
+    ]);
+    // 同一天多次审核只算一次盘点事件（避免置信度虚高）
+    if (lastStocktakeDay() !== todayKey()) markStocktake();
+    const price = item ? num2(item.price) : 0;
+    const diffQty =
+      task.book_qty === null ? 0 : task.actual_qty - task.book_qty;
+    pushStocktake({
+      items: 1,
+      diffs: Math.abs(diffQty) > 1e-9 ? 1 : 0,
+      netValue: Math.round(diffQty * price * 100) / 100,
+      stockValue: Math.round(task.actual_qty * price * 100) / 100,
+    });
+  }
   return true;
+}
+
+/** 本地数字兜底（避免 staffOps 顶层再依赖 inventory 的 num） */
+function num2(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // ───────────────────────── 采购申报 ─────────────────────────

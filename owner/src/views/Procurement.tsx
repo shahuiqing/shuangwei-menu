@@ -24,7 +24,8 @@ import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
-import { fmtDateTime, fmtMoney } from "../lib/format";
+import { fmtDateTime, fmtMoney, dayKey } from "../lib/format";
+import { todayKey } from "../lib/businessDay";
 import {
   alertMap,
   buildPriceAlerts,
@@ -550,7 +551,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     quantity: "",
     unit_price: "",
     notes: "",
-    purchased_at: new Date().toISOString().slice(0, 10),
+    purchased_at: todayKey(),
   });
   const [isNew, setIsNew] = useState(false);
   const [coverage, setCoverage] = useState(7);
@@ -591,13 +592,12 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     load();
   }, [version]);
 
-  const monthKey = new Date().toISOString().slice(0, 7);
+  const monthKey = dayKey(Date.now()).slice(0, 7);
   const stats = useMemo(() => {
     const total = list.reduce((s, p) => s + num(p.total_cost), 0);
     const month = list
       .filter(
-        (p) =>
-          String(p.purchased_at || p.created_at || "").slice(0, 7) === monthKey,
+        (p) => dayKey(p.purchased_at || p.created_at).slice(0, 7) === monthKey,
       )
       .reduce((s, p) => s + num(p.total_cost), 0);
     const suppliers = new Set(list.map((p) => p.supplier).filter(Boolean)).size;
@@ -1054,7 +1054,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       unit_price: pricePerMin,
       notes: form.notes,
       purchased_at: form.purchased_at
-        ? new Date(form.purchased_at).toISOString()
+        ? new Date(`${form.purchased_at}T12:00:00`).toISOString()
         : undefined,
     });
     if (!ok) return toast.error("采购入库失败（检查库存/采购表权限）");
@@ -1124,7 +1124,7 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `purchase_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `purchase_${todayKey()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast.success("已导出采购记录");

@@ -17,6 +17,7 @@ import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { fmtMoney } from "../lib/format";
+import { todayKey } from "../lib/businessDay";
 import {
   addCategory,
   addDish,
@@ -235,7 +236,7 @@ export default function Dishes({ version = 0 }: { version?: number }) {
     const rows = cats.flatMap((c) => c.items || []);
     if (!rows.length) return toast.error("暂无菜品可导出");
     downloadText(
-      `dish-lang-${new Date().toISOString().slice(0, 10)}.csv`,
+      `dish-lang-${todayKey()}.csv`,
       langCsv(rows),
       "text/csv;charset=utf-8",
     );

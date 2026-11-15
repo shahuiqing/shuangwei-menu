@@ -4,6 +4,7 @@ import {
   businessDayStart,
   businessDayEnd,
   businessDayKey,
+  todayKey,
   withinBusinessDay,
 } from "../businessDay";
 
@@ -20,6 +21,11 @@ describe("营业日分界（凌晨 3 点）", () => {
 
   it("3 点后归属当天", () => {
     expect(businessDayKey(d(3, 10))).toBe("2026-10-03");
+  });
+
+  it("todayKey 与 businessDayKey 同一口径（凌晨 1 点算前一天）", () => {
+    expect(todayKey(d(3, 1))).toBe("2026-10-02");
+    expect(todayKey(d(3, 12))).toBe("2026-10-03");
   });
 
   it("营业日跨度 24 小时", () => {

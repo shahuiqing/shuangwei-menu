@@ -29,6 +29,7 @@ import {
   num,
   recordWaste,
   saveInventoryItem,
+  touchLastCounted,
   type InventoryItem,
 } from "../lib/inventory";
 import { computeExpiry, type ExpiryInfo } from "../lib/expiry";
@@ -248,6 +249,9 @@ export default function Inventory({ version = 0 }: { version?: number }) {
     if (!adj.length) {
       if (take.summary.counted) {
         // 无差异盘点也要落记录、更新提醒与置信度，避免「盘了却提示从未盘」
+        await touchLastCounted(
+          take.rows.filter((r) => r.actual !== null).map((r) => r.id),
+        );
         markStocktake();
         pushStocktake({
           items: take.summary.counted,
@@ -291,6 +295,9 @@ export default function Inventory({ version = 0 }: { version?: number }) {
       toast.error(`部分失败：${ok}/${adj.length} 已调整，请复核`);
     else toast.error("盘点调整失败（检查库存表权限）");
     if (ok > 0) {
+      await touchLastCounted(
+        take.rows.filter((r) => r.actual !== null).map((r) => r.id),
+      );
       markStocktake();
       pushStocktake({
         items: take.summary.counted,
