@@ -1118,6 +1118,53 @@ $$;
 REVOKE ALL ON FUNCTION public.owner_set_staff_password(text, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.owner_set_staff_password(text, uuid, text) TO anon, authenticated;
 
+-- 5) 顾客端服务员密码：历史明文列迁移为 bcrypt 哈希后清空
+ALTER TABLE public.settings
+  ADD COLUMN IF NOT EXISTS "devicePasswordsHash" JSONB DEFAULT '[]'::jsonb;
+
+DO $$
+DECLARE
+  col text;
+  item jsonb;
+  out jsonb;
+  pw text;
+BEGIN
+  PERFORM set_config('search_path', 'public, extensions', true);
+  FOR col IN
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'settings'
+      AND lower(column_name) = 'devicepasswords'
+  LOOP
+    out := COALESCE(
+      (SELECT "devicePasswordsHash" FROM public.settings WHERE id = 'global'),
+      '[]'::jsonb
+    );
+    IF jsonb_typeof(out) <> 'array' THEN out := '[]'::jsonb; END IF;
+    FOR item IN EXECUTE format(
+      'SELECT jsonb_array_elements(%I::jsonb) FROM public.settings WHERE id = %L',
+      col, 'global'
+    ) LOOP
+      pw := COALESCE(item->>'password', item->>'hash', '');
+      IF COALESCE(item->>'name', '') <> '' AND pw <> ''
+         AND NOT EXISTS (
+           SELECT 1 FROM jsonb_array_elements(out) e
+           WHERE e->>'name' = item->>'name'
+         ) THEN
+        IF left(pw, 2) = '$2' THEN
+          out := out || jsonb_build_array(
+            jsonb_build_object('name', item->>'name', 'hash', pw));
+        ELSE
+          out := out || jsonb_build_array(
+            jsonb_build_object('name', item->>'name',
+                               'hash', crypt(pw, gen_salt('bf', 10))));
+        END IF;
+      END IF;
+    END LOOP;
+    UPDATE public.settings SET "devicePasswordsHash" = out WHERE id = 'global';
+    EXECUTE format('UPDATE public.settings SET %I = NULL WHERE id = %L', col, 'global');
+  END LOOP;
+END $$;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────

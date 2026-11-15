@@ -1,4 +1,5 @@
 import { safeGetItem, safeSetItem } from "../utils/storage";
+import { isHashedPassword } from "../utils/devicePasswords";
 import { checkpointService } from "../services/checkpoint";
 import { usbPrinter } from "../lib/usbPrinter";
 import { lanSync } from "../services/lanSync";
@@ -1800,7 +1801,13 @@ export default function AdminPanel({
                           />
                           <input
                             type="text"
-                            value={localDevicePasswords[index]?.password || ""}
+                            value={
+                              isHashedPassword(
+                                localDevicePasswords[index]?.password,
+                              )
+                                ? ""
+                                : localDevicePasswords[index]?.password || ""
+                            }
                             onChange={(e) => {
                               const newArr = [...localDevicePasswords];
                               if (!newArr[index])
@@ -1808,7 +1815,13 @@ export default function AdminPanel({
                               newArr[index].password = e.target.value;
                               setLocalDevicePasswords(newArr);
                             }}
-                            placeholder="服务员密码 (Password)"
+                            placeholder={
+                              isHashedPassword(
+                                localDevicePasswords[index]?.password,
+                              )
+                                ? "已设置（留空不改）"
+                                : "服务员密码 (Password)"
+                            }
                             className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
                           />
                         </div>

@@ -30,6 +30,11 @@ import {
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { getOptimizedImageUrl, isValidImageSrc } from "./utils/image";
+import {
+  hasPlaintextPasswords,
+  hashDevicePasswords,
+  normalizeHashedList,
+} from "./utils/devicePasswords";
 import { checkpointService } from "./services/checkpoint";
 import {
   isAdminAuthedSync,
@@ -462,23 +467,7 @@ export default function App() {
         setAdminPassword(String(data.adminPassword));
         safeSetItem("adminHash", String(data.adminPassword));
       }
-      if ((data as Record<string, unknown>).deviceHash !== undefined) {
-        setDevicePasswords(
-          (data as Record<string, unknown>).deviceHash as {
-            name: string;
-            password: string;
-          }[],
-        );
-        safeSetItem(
-          "deviceHash",
-          JSON.stringify((data as Record<string, unknown>).deviceHash),
-        );
-      } else if (data.devicePasswords !== undefined) {
-        setDevicePasswords(
-          data.devicePasswords as { name: string; password: string }[],
-        );
-        safeSetItem("deviceHash", JSON.stringify(data.devicePasswords));
-      }
+      applyDevicePasswordsFromCloud(data);
       if (data.securityQuestion !== undefined) {
         setSecurityQuestion(String(data.securityQuestion));
         safeSetItem("menuSecurityQuestion", String(data.securityQuestion));
@@ -804,11 +793,57 @@ export default function App() {
     touchLocalDraft();
   };
 
+  /** 云端数据 → 服务员密码（优先哈希列表，其次本地缓存，最后旧明文） */
+  const applyDevicePasswordsFromCloud = (data: any) => {
+    const hashes = data?.devicePasswordsHash;
+    if (Array.isArray(hashes) && hashes.length > 0) {
+      const list = normalizeHashedList(hashes);
+      setDevicePasswords(list);
+      safeSetItem("deviceHash", JSON.stringify(list));
+      return;
+    }
+    if (data?.deviceHash !== undefined) {
+      setDevicePasswords(
+        data.deviceHash as { name: string; password: string }[],
+      );
+      safeSetItem("deviceHash", JSON.stringify(data.deviceHash));
+      return;
+    }
+    if (data?.devicePasswords !== undefined) {
+      setDevicePasswords(
+        data.devicePasswords as { name: string; password: string }[],
+      );
+      safeSetItem("deviceHash", JSON.stringify(data.devicePasswords));
+    }
+  };
+
+  // 一次性迁移：历史明文服务员密码 → bcrypt（本地缓存只保留哈希）
+  useEffect(() => {
+    if (!hasPlaintextPasswords(devicePasswords)) return;
+    let alive = true;
+    (async () => {
+      const hashed = await hashDevicePasswords(devicePasswords);
+      if (!alive) return;
+      setDevicePasswords(hashed);
+      safeSetItem("menuDevicePasswords", JSON.stringify(hashed));
+      safeSetItem("deviceHash", JSON.stringify(hashed));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [devicePasswords]);
+
   const handleUpdateDevicePasswords = (
     passwords: { name: string; password: string }[],
   ) => {
-    setDevicePasswords(passwords);
-    safeSetItem("menuDevicePasswords", JSON.stringify(passwords));
+    const list = Array.isArray(passwords) ? passwords : [];
+    setDevicePasswords(list);
+    // 只保存 bcrypt 哈希；明文不落 localStorage
+    hashDevicePasswords(list).then((hashed) => {
+      setDevicePasswords(hashed);
+      safeSetItem("menuDevicePasswords", JSON.stringify(hashed));
+      safeSetItem("deviceHash", JSON.stringify(hashed));
+    });
     touchLocalDraft();
   };
 
@@ -896,15 +931,11 @@ export default function App() {
         );
       }
       if (overrides?.devicePasswords !== undefined) {
-        const raw = Array.isArray(overrides.devicePasswords)
-          ? overrides.devicePasswords
-          : [];
-        secretPatch.devicePasswordsHash = await Promise.all(
-          raw.map(async (d: { name: string; password: string }) => ({
-            name: d.name,
-            hash: await hashPassword(String(d.password)),
-          })),
-        );
+        const hashed = await hashDevicePasswords(overrides.devicePasswords);
+        secretPatch.devicePasswordsHash = hashed.map((d) => ({
+          name: d.name,
+          hash: d.password, // 已是 bcrypt，不会重复加密
+        }));
       }
       if (overrides?.securityAnswer !== undefined) {
         secretPatch.securityAnswerHash = await hashPassword(
@@ -1043,21 +1074,7 @@ export default function App() {
         setAdminPassword(data.adminPassword);
         safeSetItem("adminHash", data.adminPassword);
       }
-      if ((data as Record<string, unknown>).deviceHash !== undefined) {
-        setDevicePasswords(
-          (data as Record<string, unknown>).deviceHash as {
-            name: string;
-            password: string;
-          }[],
-        );
-        safeSetItem(
-          "deviceHash",
-          JSON.stringify((data as Record<string, unknown>).deviceHash),
-        );
-      } else if (data.devicePasswords !== undefined) {
-        setDevicePasswords(data.devicePasswords);
-        safeSetItem("deviceHash", JSON.stringify(data.devicePasswords));
-      }
+      applyDevicePasswordsFromCloud(data);
       if (
         data.securityQuestion !== undefined &&
         (data.securityAnswer !== undefined ||
