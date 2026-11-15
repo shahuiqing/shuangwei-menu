@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles, Send, Copy } from "lucide-react";
 import { ChartCard } from "../components/ui";
+import { Sheet, SheetField } from "../components/Sheet";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { STORE_NAME } from "../lib/supabase";
@@ -18,9 +19,15 @@ import { lateOrders, loadLateConfig } from "../lib/lateOrders";
 import { todayKey } from "../lib/businessDay";
 import {
   fetchPurchaseRequests,
+  fetchStaffMembers,
   fetchStaffTasks,
   fetchStocktakeTasks,
+  dispatchTasks,
   isOverdue,
+  ROLE_LABEL,
+  ROLES,
+  type Role,
+  type StaffMember,
 } from "../lib/staffOps";
 import { useOpsSignals } from "../lib/useOpsSignals";
 import { buildDailyBrief } from "../lib/brief";
@@ -96,6 +103,19 @@ export default function Assistant({
     | null
   >(null);
   const [reviewBusy, setReviewBusy] = useState(false);
+  /** 派工弹窗 */
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [dispatchItem, setDispatchItem] = useState<{
+    title: string;
+    desc: string;
+    checklist: string[];
+    tab: string;
+  } | null>(null);
+  const [pickedIds, setPickedIds] = useState<string[]>([]);
+  const [pickedRoles, setPickedRoles] = useState<Role[]>([]);
+  const [dueHours, setDueHours] = useState(8);
+  const [alsoTask, setAlsoTask] = useState(true);
+  const [dispatching, setDispatching] = useState(false);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -309,6 +329,60 @@ export default function Assistant({
       tab: kind,
     });
     toast.success("已加入任务中心，可在「任务中心」跟踪");
+  };
+
+  // 员工名单（派工用）
+  useEffect(() => {
+    let alive = true;
+    void fetchStaffMembers().then((list) => {
+      if (alive) setStaff(list.filter((s) => s.status === "active"));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [version]);
+
+  /** 打开派工弹窗（建议/复盘/网站检查共用） */
+  const openDispatch = (item: {
+    title: string;
+    desc: string;
+    checklist: string[];
+    tab: string;
+  }) => {
+    setDispatchItem(item);
+    setPickedIds([]);
+    setPickedRoles([]);
+    setDueHours(8);
+    setAlsoTask(true);
+  };
+
+  const submitDispatch = async () => {
+    if (!dispatchItem) return;
+    if (pickedIds.length === 0 && pickedRoles.length === 0)
+      return toast.error("请选择岗位或员工");
+    setDispatching(true);
+    const n = await dispatchTasks({
+      title: dispatchItem.title,
+      description: dispatchItem.desc,
+      checklist: dispatchItem.checklist.map((text) => ({ text })),
+      due_hours: dueHours,
+      roles: pickedIds.length > 0 ? undefined : pickedRoles,
+      assigneeIds: pickedIds.length > 0 ? pickedIds : undefined,
+    });
+    if (alsoTask)
+      addTask(
+        dispatchItem.title,
+        dispatchItem.desc,
+        dispatchItem.checklist,
+        dispatchItem.tab,
+      );
+    setDispatching(false);
+    if (n > 0) {
+      toast.success(`已派给 ${n} 人${alsoTask ? "，并加入你的任务中心" : ""}`);
+      setDispatchItem(null);
+    } else {
+      toast.error("派发失败：该岗位可能没有在职员工");
+    }
   };
 
   const copyBrief = () => {
@@ -573,11 +647,27 @@ export default function Assistant({
                   </div>
                   <ol className="space-y-1">
                     {review.report.next.map((x, i) => (
-                      <li key={i} className="flex gap-2 text-xs text-zinc-300">
+                      <li
+                        key={i}
+                        className="flex flex-wrap items-center gap-2 text-xs text-zinc-300"
+                      >
                         <span className="text-orange-400 font-bold">
                           {i + 1}.
                         </span>
-                        {x}
+                        <span className="flex-1">{x}</span>
+                        <button
+                          onClick={() =>
+                            openDispatch({
+                              title: x,
+                              desc: `${reviewPeriod === "week" ? "周报" : "月报"}·下期重点：${x}`,
+                              checklist: [],
+                              tab: "ai-review",
+                            })
+                          }
+                          className="text-[11px] text-sky-400 hover:text-sky-300"
+                        >
+                          派给员工
+                        </button>
                       </li>
                     ))}
                   </ol>
@@ -658,6 +748,22 @@ export default function Assistant({
                       className="text-[11px] text-zinc-500 hover:text-zinc-300"
                     >
                       加入任务
+                    </button>
+                    <button
+                      onClick={() =>
+                        openDispatch({
+                          title: it.title,
+                          desc: [
+                            it.finding,
+                            ...it.actions.map((a) => `· ${a}`),
+                          ].join("\n"),
+                          checklist: it.actions,
+                          tab: it.area,
+                        })
+                      }
+                      className="text-[11px] text-zinc-500 hover:text-sky-400"
+                    >
+                      派给员工
                     </button>
                     {onTab && (
                       <button
@@ -766,6 +872,21 @@ export default function Assistant({
                             className="ml-auto text-[11px] text-zinc-500 hover:text-zinc-300"
                           >
                             加入任务
+                          </button>
+                        )}
+                        {c.tab && (
+                          <button
+                            onClick={() =>
+                              openDispatch({
+                                title: c.title,
+                                desc: `${c.finding}\n建议：${c.recommendation}`,
+                                checklist: [c.recommendation],
+                                tab: "site-audit",
+                              })
+                            }
+                            className="text-[11px] text-zinc-500 hover:text-sky-400"
+                          >
+                            派给员工
                           </button>
                         )}
                         {onTab && c.tab && (
@@ -982,6 +1103,122 @@ export default function Assistant({
           )}
         </ChartCard>
       )}
+
+      {/* 派工弹窗：把建议/复盘重点变成员工任务 */}
+      <Sheet
+        open={!!dispatchItem}
+        title="派给员工"
+        subtitle={dispatchItem?.title}
+        onClose={() => setDispatchItem(null)}
+      >
+        {dispatchItem && (
+          <>
+            <SheetField
+              label="任务标题"
+              value={dispatchItem.title}
+              onChange={(v) => setDispatchItem({ ...dispatchItem, title: v })}
+            />
+
+            <div className="mt-3">
+              <div className="text-xs text-zinc-500 mb-1.5">按岗位派发</div>
+              <div className="flex flex-wrap gap-2">
+                {ROLES.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() =>
+                      setPickedRoles((prev) =>
+                        prev.includes(r)
+                          ? prev.filter((x) => x !== r)
+                          : [...prev, r],
+                      )
+                    }
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                      pickedRoles.includes(r)
+                        ? "bg-sky-500/15 text-sky-400 border-transparent"
+                        : "bg-zinc-950 border-white/5 text-zinc-500"
+                    }`}
+                  >
+                    {ROLE_LABEL[r]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-xs text-zinc-500 mb-1.5">
+                或指定员工（{staff.length} 人在职）
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {staff.length === 0 ? (
+                  <span className="text-xs text-zinc-600">
+                    还没有在职员工，先去「员工管理」添加
+                  </span>
+                ) : (
+                  staff.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() =>
+                        setPickedIds((prev) =>
+                          prev.includes(s.id)
+                            ? prev.filter((x) => x !== s.id)
+                            : [...prev, s.id],
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                        pickedIds.includes(s.id)
+                          ? "bg-orange-500/15 text-orange-400 border-transparent"
+                          : "bg-zinc-950 border-white/5 text-zinc-500"
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-zinc-500">截止</span>
+              <select
+                value={dueHours}
+                onChange={(e) => setDueHours(Number(e.target.value))}
+                className="bg-zinc-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+              >
+                {[4, 8, 12, 24].map((h) => (
+                  <option key={h} value={h}>
+                    {h} 小时内
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <label className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
+              <input
+                type="checkbox"
+                checked={alsoTask}
+                onChange={(e) => setAlsoTask(e.target.checked)}
+                className="accent-orange-500"
+              />
+              同时加入我的任务中心（跟进这条建议）
+            </label>
+
+            {dispatchItem.checklist.length > 0 && (
+              <div className="mt-3 text-[11px] text-zinc-600 leading-relaxed">
+                检查项：{dispatchItem.checklist.join(" / ")}
+              </div>
+            )}
+
+            <button
+              disabled={dispatching}
+              onClick={submitDispatch}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              <Send size={16} />
+              {dispatching ? "派发中…" : "确认派发"}
+            </button>
+          </>
+        )}
+      </Sheet>
     </div>
   );
 }
