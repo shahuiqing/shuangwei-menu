@@ -30,6 +30,7 @@ import {
   AREA_LABEL,
   type AdviceItem,
 } from "../lib/advisor";
+import { buildSitePlan, sitePlanPrompt } from "../lib/siteAudit";
 import { type OpsFacts } from "../lib/assistant";
 import {
   loadBusinessSnapshot,
@@ -76,6 +77,10 @@ export default function Assistant({
     | null
   >(null);
   const [advBusy, setAdvBusy] = useState(false);
+  const [sitePlan, setSitePlan] = useState<
+    { source: "rule"; lines: string[] } | { source: "ai"; text: string } | null
+  >(null);
+  const [siteBusy, setSiteBusy] = useState(false);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -329,6 +334,38 @@ export default function Assistant({
     }
   };
 
+  /** 网站改进计划：AI 优先，失败用规则版 */
+  const runSitePlan = async () => {
+    if (siteBusy || !snapshot?.site) return;
+    setSiteBusy(true);
+    if (hasLlm()) {
+      const { system, user } = sitePlanPrompt(snapshot.site);
+      const reply = await chatLLM(system, user);
+      if (reply) {
+        setSitePlan({ source: "ai", text: reply });
+        setSiteBusy(false);
+        return;
+      }
+      toast.info("AI 暂不可用，已用规则版改进计划");
+    }
+    setSitePlan({ source: "rule", lines: buildSitePlan(snapshot.site) });
+    setSiteBusy(false);
+  };
+
+  const copySitePlan = () => {
+    if (!sitePlan) return;
+    const text =
+      sitePlan.source === "ai" ? sitePlan.text : sitePlan.lines.join("\n");
+    try {
+      navigator.clipboard?.writeText(text).then(
+        () => toast.success("改进计划已复制"),
+        () => toast.error("复制失败"),
+      );
+    } catch {
+      toast.error("复制失败");
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <ChartCard
@@ -439,6 +476,132 @@ export default function Assistant({
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title="网站体检"
+        subtitle="分析顾客端菜单与品牌设置，指出影响下单的问题"
+        action={
+          <button
+            onClick={runSitePlan}
+            disabled={siteBusy || !snapshot?.site}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-50"
+          >
+            <Sparkles size={13} />
+            {siteBusy ? "生成中…" : sitePlan ? "重新生成计划" : "生成改进计划"}
+          </button>
+        }
+      >
+        {!snapshot?.site ? (
+          <div className="rounded-xl bg-zinc-950 px-4 py-4 text-sm text-zinc-500">
+            正在读取网站与菜单数据…
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-4 bg-zinc-950 rounded-xl px-4 py-3">
+              <div className="text-3xl font-bold text-orange-400 tnum">
+                {snapshot.site.score}
+              </div>
+              <div className="text-[11px] text-zinc-500 leading-relaxed">
+                网站评分（满分 100）
+                <br />
+                {snapshot.site.categories} 个分类 · {snapshot.site.dishes}{" "}
+                个菜品 · 缺图 {snapshot.site.missingImage} · 缺描述{" "}
+                {snapshot.site.missingDesc}
+              </div>
+            </div>
+
+            {snapshot.site.checks.length === 0 ? (
+              <div className="text-sm text-teal-400">
+                没有发现明显问题，菜单信息完整。
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {snapshot.site.checks.map((c) => {
+                  const sev =
+                    c.severity === "high"
+                      ? "bg-rose-500/15 text-rose-400"
+                      : c.severity === "medium"
+                        ? "bg-amber-500/15 text-amber-400"
+                        : "bg-zinc-800 text-zinc-400";
+                  return (
+                    <div
+                      key={c.id}
+                      className="bg-zinc-950 rounded-lg px-3 py-2.5 space-y-1"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${sev}`}
+                        >
+                          {c.severity === "high"
+                            ? "优先"
+                            : c.severity === "medium"
+                              ? "建议"
+                              : "可选"}
+                        </span>
+                        <span className="text-sm text-zinc-100 font-medium">
+                          {c.title}
+                        </span>
+                        {onTab && c.tab && (
+                          <button
+                            onClick={() => onTab(c.tab)}
+                            className="ml-auto text-[11px] text-orange-400 hover:text-orange-300"
+                          >
+                            去处理 →
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-xs text-zinc-500">{c.finding}</div>
+                      <div className="text-xs text-zinc-400">
+                        建议：{c.recommendation}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {sitePlan && (
+              <div className="rounded-xl bg-zinc-950 px-4 py-3.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      sitePlan.source === "ai"
+                        ? "bg-orange-500 text-white"
+                        : "bg-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    {sitePlan.source === "ai"
+                      ? "AI 改进计划"
+                      : "规则版改进计划"}
+                  </span>
+                  <button
+                    onClick={copySitePlan}
+                    className="ml-auto inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
+                  >
+                    <Copy size={12} /> 复制
+                  </button>
+                </div>
+                {sitePlan.source === "ai" ? (
+                  <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                    {sitePlan.text}
+                  </div>
+                ) : (
+                  <ol className="space-y-1.5">
+                    {sitePlan.lines.map((line, i) => (
+                      <li
+                        key={i}
+                        className="text-sm text-zinc-200 leading-relaxed"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
           </div>
         )}
       </ChartCard>

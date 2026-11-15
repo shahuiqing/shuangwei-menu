@@ -15,7 +15,8 @@ export type AdviceArea =
   | "purchase"
   | "stocktake"
   | "staff"
-  | "sales";
+  | "sales"
+  | "site";
 
 export type AdviceTab =
   | "inventory"
@@ -26,7 +27,9 @@ export type AdviceTab =
   | "stocktake"
   | "dispatch"
   | "requests"
-  | "orders";
+  | "orders"
+  | "dishes"
+  | "settings";
 
 export interface AdviceItem {
   area: AdviceArea;
@@ -48,6 +51,7 @@ export const AREA_LABEL: Record<AdviceArea, string> = {
   stocktake: "盘点",
   staff: "员工",
   sales: "销售",
+  site: "网站",
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -217,6 +221,23 @@ export function buildAdvice(
     });
   }
 
+  // ── 网站/菜单体验（来自顾客端体检） ──
+  if (s.site && s.site.checks.length > 0) {
+    const urgent = s.site.checks.filter((c) => c.severity === "high");
+    const top = (urgent.length ? urgent : s.site.checks).slice(0, 3);
+    out.push({
+      area: "site",
+      priority: urgent.length ? 3 : 6,
+      title: `网站体验评分 ${s.site.score}/100`,
+      finding:
+        top.map((c) => `${c.title}（${c.finding}）`).join("；") +
+        "，会直接影响顾客下单转化。",
+      actions: top.map((c) => c.recommendation),
+      impact: "菜单信息更完整，顾客更容易下单",
+      tab: top.some((c) => c.tab === "settings") ? "settings" : "dishes",
+    });
+  }
+
   // ── 盘点 ──
   if (s.stocktake.pendingToday > 0) {
     out.push({
@@ -296,7 +317,8 @@ export function advisorPrompt(s: BusinessSnapshot): {
   const system = [
     "你是餐厅老板的经营顾问。",
     "根据全店数据，输出一份经营建议报告。",
-    "格式要求：按板块分段（销售/菜单/成本/库存/采购/损耗/员工，只写有问题的板块），每段包含：",
+    "内容包括经营（销售/菜单/成本/库存/采购/损耗/员工）和顾客端网站/菜单体验（图片、描述、多语言、促销、售罄）。",
+    "格式要求：按板块分段，每段包含：",
     "① 一句结论（带具体数字）；② 2-3 条可执行动作（动词开头）；③ 一句预期影响。",
     "总共不超过 6 个板块、400 字；不要编造数据，不要重复罗列数字。",
     "只输出报告正文，不要开场白。",

@@ -21,6 +21,7 @@ import {
   fetchStocktakeTasks,
   isOverdue,
 } from "./staffOps";
+import { loadSiteAudit, type SiteAudit } from "./siteAudit";
 
 /**
  * 全店经营快照：给 AI 助手用的结构化上下文。
@@ -65,6 +66,8 @@ export interface BusinessSnapshot {
     overdueTasks: number;
     pendingRequests: number;
   };
+  /** 顾客端网站/菜单体检（可选，加载失败时不影响其他功能） */
+  site?: SiteAudit;
 }
 
 const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -89,6 +92,7 @@ export async function loadBusinessSnapshot(): Promise<BusinessSnapshot> {
     tasks,
     stk,
     reqs,
+    site,
   ] = await Promise.all([
     salesSummary(t.start, t.end),
     salesSummary(w.start, w.end),
@@ -101,6 +105,7 @@ export async function loadBusinessSnapshot(): Promise<BusinessSnapshot> {
     fetchStaffTasks(),
     fetchStocktakeTasks(todayKey()),
     fetchPurchaseRequests(),
+    loadSiteAudit(),
   ]);
 
   const margins = dishMargins(
@@ -248,6 +253,7 @@ export async function loadBusinessSnapshot(): Promise<BusinessSnapshot> {
       overdueTasks: pending.filter((x) => isOverdue(x.due_at)).length,
       pendingRequests: reqs.filter((r) => r.status === "pending").length,
     },
+    site,
   };
 }
 
@@ -329,6 +335,12 @@ export function snapshotToPrompt(s: BusinessSnapshot): string {
   lines.push(
     `员工：任务待完成 ${s.staff.pendingTasks}（逾期 ${s.staff.overdueTasks}），采购申报待审批 ${s.staff.pendingRequests} 条`,
   );
+  if (s.site) {
+    lines.push(
+      `顾客端网站：评分 ${s.site.score}/100，${s.site.categories} 个分类、${s.site.dishes} 个菜品；缺图片 ${s.site.missingImage}、缺描述 ${s.site.missingDesc}、缺法语 ${s.site.missingFr}、缺阿语 ${s.site.missingAr}、售罄 ${s.site.soldOut}`,
+    );
+    if (!s.site.hasActivePromotion) lines.push(`网站当前没有生效中的促销`);
+  }
   return lines.join("\n");
 }
 
@@ -376,6 +388,16 @@ export function answerWithoutLlm(
   const q = (question || "").toLowerCase();
   if (!q.trim())
     return "可以问我营业额、菜单、成本、库存、采购、损耗、盘点和员工任务。";
+
+  if (/网站|网页|首页|菜单页|图片|照片|多语言|翻译|促销|logo|店标/.test(q)) {
+    if (!s.site) return "网站体检数据暂未加载，稍后再试。";
+    const top = s.site.checks.filter((c) => c.severity !== "low").slice(0, 4);
+    return [
+      `网站评分 ${s.site.score}/100。`,
+      ...top.map((c) => `· ${c.title}：${c.finding} 建议：${c.recommendation}`),
+      "完整清单见「网站体检」卡片。",
+    ].join("\n");
+  }
 
   if (/菜单|菜品|哪些菜|下架|涨价|毛利/.test(q)) {
     const parts: string[] = [];
