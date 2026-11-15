@@ -20,6 +20,7 @@ import {
   Percent,
   BarChart3,
   ClipboardCheck,
+  Users,
 } from "lucide-react";
 import {
   AreaChart,
@@ -79,6 +80,13 @@ import { detectDishDrops } from "../lib/anomaly";
 import { dishMargins, sumCost } from "../lib/cost";
 import { loadTasks } from "../lib/tasks";
 import { buildTodos } from "../lib/todo";
+import {
+  fetchPurchaseRequests,
+  fetchStaffTasks,
+  fetchStocktakeTasks,
+  isOverdue,
+} from "../lib/staffOps";
+import { todayKey } from "../lib/businessDay";
 import { lateOrders, useLateConfig } from "../lib/lateOrders";
 import { buildSummary, summaryLines, type SummaryInput } from "../lib/summary";
 import { stocktakeDue, lastStocktakeAt } from "../lib/stocktakeReminder";
@@ -202,6 +210,14 @@ export default function Dashboard({
     ready: false,
   });
 
+  /** 员工协同事实（任务/盘点/申报） */
+  const [staffFacts, setStaffFacts] = useState({
+    pendingTasks: 0,
+    overdueTasks: 0,
+    pendingStocktakes: 0,
+    pendingRequests: 0,
+  });
+
   /** 待办中心：库存/采购价/损耗/待接单，与主数据分开拉取 */
   useEffect(() => {
     let alive = true;
@@ -210,19 +226,24 @@ export default function Dashboard({
       const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
       const tomorrow = new Date(Date.now() + 86400000).toISOString();
       const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
-      const [inv, pur, wt, pg, boms, wt14] = await Promise.all([
-        fetchInventory(),
-        fetchPurchases(300),
-        fetchTransactions(300, "waste", todayStart.toISOString()),
-        fetchOrdersPage({
-          start: monthAgo,
-          end: tomorrow,
-          status: "pending",
-          limit: 1,
-        }),
-        fetchBoms(),
-        fetchTransactions(2000, "waste", twoWeeksAgo),
-      ]);
+      const [inv, pur, wt, pg, boms, wt14, tasks, stk, prs] = await Promise.all(
+        [
+          fetchInventory(),
+          fetchPurchases(300),
+          fetchTransactions(300, "waste", todayStart.toISOString()),
+          fetchOrdersPage({
+            start: monthAgo,
+            end: tomorrow,
+            status: "pending",
+            limit: 1,
+          }),
+          fetchBoms(),
+          fetchTransactions(2000, "waste", twoWeeksAgo),
+          fetchStaffTasks(),
+          fetchStocktakeTasks(todayKey()),
+          fetchPurchaseRequests(),
+        ],
+      );
       if (!alive) return;
       setOps({
         low: lowStockItems(inv),
@@ -234,6 +255,15 @@ export default function Dashboard({
         boms,
         waste14: wt14,
         ready: true,
+      });
+      const pending = tasks.filter((t) => t.status === "pending");
+      setStaffFacts({
+        pendingTasks: pending.length,
+        overdueTasks: pending.filter((t) => isOverdue(t.due_at)).length,
+        pendingStocktakes: stk.filter(
+          (s) => s.status === "pending" || s.status === "drafted",
+        ).length,
+        pendingRequests: prs.filter((r) => r.status === "pending").length,
       });
     })();
     return () => {
@@ -715,6 +745,64 @@ export default function Dashboard({
               ))}
             </div>
           )}
+        </ChartCard>
+      )}
+
+      {ops.ready && (
+        <ChartCard
+          title="员工协同"
+          subtitle="员工任务、今日盘点、采购申报的一览（点击直达）"
+          action={<Users size={18} className="text-orange-500" />}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {[
+              {
+                id: "dispatch" as OwnerTab,
+                label: "员工任务待完成",
+                value: staffFacts.pendingTasks,
+                hint:
+                  staffFacts.overdueTasks > 0
+                    ? `其中逾期 ${staffFacts.overdueTasks} 项`
+                    : "全部按时",
+                icon: ClipboardCheck,
+              },
+              {
+                id: "stocktake" as OwnerTab,
+                label: "今日盘点待提交",
+                value: staffFacts.pendingStocktakes,
+                hint: "已派给责任人",
+                icon: Boxes,
+              },
+              {
+                id: "requests" as OwnerTab,
+                label: "采购申报待审批",
+                value: staffFacts.pendingRequests,
+                hint: "员工提交的申报",
+                icon: ShoppingCart,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onTab?.(item.id)}
+                  className="bg-zinc-950 rounded-xl px-3.5 py-3 text-left hover:bg-zinc-900/70 transition-colors"
+                >
+                  <div className="flex items-center gap-2 text-xs text-zinc-400">
+                    <Icon size={14} /> {item.label}
+                  </div>
+                  <div
+                    className={`text-2xl font-bold tnum mt-1 ${
+                      item.value > 0 ? "text-orange-400" : "text-zinc-600"
+                    }`}
+                  >
+                    {item.value}
+                  </div>
+                  <div className="text-[11px] text-zinc-600">{item.hint}</div>
+                </button>
+              );
+            })}
+          </div>
         </ChartCard>
       )}
 
