@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles, Send, Copy } from "lucide-react";
-import { ChartCard, SkeletonRows } from "../components/ui";
+import { ChartCard } from "../components/ui";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
 import { STORE_NAME } from "../lib/supabase";
@@ -29,14 +29,26 @@ import {
   diagnosisPrompt,
   type DiagnosisFacts,
 } from "../lib/diagnosis";
+import { type OpsFacts } from "../lib/assistant";
 import {
-  ask,
-  PRESET_QUESTIONS,
-  llmSystemPrompt,
-  type OpsFacts,
-} from "../lib/assistant";
+  loadBusinessSnapshot,
+  buildChatSystemPrompt,
+  buildChatUserMessage,
+  answerWithoutLlm,
+  type BusinessSnapshot,
+  type ChatTurn,
+} from "../lib/aiContext";
 import { chatLLM, hasLlm } from "../lib/llm";
 import { actionDraft } from "../lib/actionDraft";
+
+const CHAT_SUGGESTIONS = [
+  "今天最该先处理什么？",
+  "菜单上哪些菜该调整？",
+  "哪些原料快没货或快过期？",
+  "近 7 天损耗正常吗？",
+  "采购价有异常吗？",
+  "员工任务完成得怎么样？",
+];
 
 export default function Assistant({
   recentOrders,
@@ -49,9 +61,11 @@ export default function Assistant({
 }) {
   const ops = useOpsSignals(version);
   const [q, setQ] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [aiAnswer, setAiAnswer] = useState(false);
-  const [thinking, setThinking] = useState(false);
+  const [messages, setMessages] = useState<
+    { role: "user" | "assistant"; content: string; source?: "ai" | "rule" }[]
+  >([]);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [snapshot, setSnapshot] = useState<BusinessSnapshot | null>(null);
   const [draft, setDraft] = useState<string[] | null>(null);
   const [diag, setDiag] = useState<{
     source: "ai" | "rule";
@@ -123,6 +137,17 @@ export default function Assistant({
     [ops, late],
   );
 
+  // 全店经营快照：对话助手的上下文（随数据版本刷新）
+  useEffect(() => {
+    let alive = true;
+    void loadBusinessSnapshot().then((s) => {
+      if (alive) setSnapshot(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [version]);
+
   /** 库存/采购/员工事实，供规则问答、简报和 LLM 上下文共用 */
   const opsFacts = useMemo<OpsFacts>(() => {
     const low = lowStockItems(ops.low)
@@ -186,23 +211,60 @@ export default function Assistant({
   );
 
   const send = async (text: string) => {
-    const t = text.trim();
-    if (!t || thinking) return;
+    const question = text.trim();
+    if (!question || chatBusy) return;
+    const history: ChatTurn[] = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
     setQ("");
-    setAnswer(null);
-    setAiAnswer(false);
+    setMessages((prev) => [...prev, { role: "user", content: question }]);
+    setChatBusy(true);
+
+    let snap = snapshot;
+    if (!snap) {
+      snap = await loadBusinessSnapshot();
+      setSnapshot(snap);
+    }
+
     if (hasLlm()) {
-      setThinking(true);
-      const reply = await chatLLM(llmSystemPrompt(data, brief), t);
-      setThinking(false);
+      const reply = await chatLLM(
+        buildChatSystemPrompt(snap),
+        buildChatUserMessage(history, question),
+      );
       if (reply) {
-        setAnswer(reply);
-        setAiAnswer(true);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: reply, source: "ai" },
+        ]);
+        setChatBusy(false);
         return;
       }
       toast.info("AI 暂不可用，已用规则版回答");
     }
-    setAnswer(ask(t, data));
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: answerWithoutLlm(snap, question),
+        source: "rule",
+      },
+    ]);
+    setChatBusy(false);
+  };
+
+  const clearChat = () => setMessages([]);
+
+  const copyMessage = (content: string) => {
+    try {
+      navigator.clipboard?.writeText(content).then(
+        () => toast.success("已复制"),
+        () => toast.error("复制失败"),
+      );
+    } catch {
+      toast.error("复制失败");
+    }
   };
 
   const copyBrief = () => {
@@ -350,16 +412,34 @@ export default function Assistant({
       </ChartCard>
 
       <ChartCard
-        title="经营问答"
-        subtitle="先问这几个常见问题"
-        action={<Sparkles size={18} className="text-orange-500" />}
+        title="经营助手"
+        subtitle={
+          snapshot
+            ? "懂今天和近 7 天的销售、菜单、库存、采购、损耗与员工任务 · 可连续追问"
+            : "正在汇总全店数据…"
+        }
+        action={
+          messages.length > 0 ? (
+            <button
+              onClick={clearChat}
+              className="text-[11px] text-zinc-500 hover:text-zinc-300"
+            >
+              清空对话
+            </button>
+          ) : (
+            <Sparkles size={18} className="text-orange-500" />
+          )
+        }
       >
-        {!ops.ready ? (
-          <SkeletonRows rows={2} />
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {PRESET_QUESTIONS.map((p) => (
+        {messages.length === 0 ? (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-zinc-950 px-4 py-3.5 text-sm text-zinc-400">
+              {snapshot
+                ? "直接问经营问题即可，回答会结合全店数据；也可以追问上一句。"
+                : "正在加载经营数据，稍等也可以先提问。"}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {CHAT_SUGGESTIONS.map((p) => (
                 <button
                   key={p}
                   onClick={() => send(p)}
@@ -369,50 +449,77 @@ export default function Assistant({
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && send(q)}
-                  placeholder="问我经营相关的问题…"
-                  className="w-full bg-zinc-950 border border-white/5 rounded-xl pl-3.5 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                />
-                <Dictation
-                  value={q}
-                  onChange={setQ}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5"
-                />
-              </div>
-              <button
-                onClick={() => send(q)}
-                disabled={thinking}
-                className="shrink-0 w-10 h-10 rounded-xl btn-brand text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50"
+          </div>
+        ) : (
+          <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                className={`flex ${
+                  m.role === "user" ? "justify-end" : "justify-start"
+                }`}
               >
-                <Send size={16} />
-              </button>
-            </div>
-            {thinking && (
-              <div className="mt-3 rounded-xl bg-zinc-950 border border-white/5 px-3.5 py-3 text-sm text-zinc-400 animate-pulse">
-                AI 思考中…
-              </div>
-            )}
-            {answer && (
-              <div className="mt-3 rounded-xl bg-orange-500/5 border border-orange-500/20 px-3.5 py-3 text-sm text-zinc-200 leading-relaxed">
-                <span
-                  className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mb-1.5 ${
-                    aiAnswer
-                      ? "bg-orange-500 text-white"
-                      : "bg-zinc-800 text-zinc-400"
+                <div
+                  className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-orange-600 text-white"
+                      : "bg-zinc-950 border border-white/5 text-zinc-200"
                   }`}
                 >
-                  {aiAnswer ? "AI" : "规则版"}
-                </span>
-                <div className="whitespace-pre-wrap">{answer}</div>
+                  {m.role === "assistant" && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span
+                        className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          m.source === "ai"
+                            ? "bg-orange-500 text-white"
+                            : "bg-zinc-800 text-zinc-400"
+                        }`}
+                      >
+                        {m.source === "ai" ? "AI" : "规则版"}
+                      </span>
+                      <button
+                        onClick={() => copyMessage(m.content)}
+                        className="ml-auto inline-flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300"
+                      >
+                        <Copy size={11} /> 复制
+                      </button>
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                </div>
+              </div>
+            ))}
+            {chatBusy && (
+              <div className="text-xs text-zinc-500 animate-pulse pl-1">
+                思考中…
               </div>
             )}
-          </>
+          </div>
         )}
+
+        <div className="flex items-center gap-2 mt-3">
+          <div className="relative flex-1">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send(q)}
+              placeholder="问经营问题，可连续追问…"
+              className="w-full bg-zinc-950 border border-white/5 rounded-xl pl-3.5 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+            />
+            <Dictation
+              value={q}
+              onChange={setQ}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5"
+            />
+          </div>
+          <button
+            onClick={() => send(q)}
+            disabled={chatBusy}
+            className="shrink-0 w-10 h-10 rounded-xl btn-brand text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50"
+          >
+            <Send size={16} />
+          </button>
+        </div>
       </ChartCard>
 
       {topP && (
