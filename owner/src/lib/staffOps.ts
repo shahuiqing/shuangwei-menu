@@ -123,19 +123,72 @@ export interface StocktakeCategoryRule {
   roles: Role[]; // 责任角色，可多选
   split_mode: SplitMode;
   enabled: boolean; // 停用=该分类当天不自动派发
+  /**
+   * 每天抽盘多少种（0 = 不按分类抽，跳过该分类；>0 = 每天抽 N 种）。
+   * 至少一个分类 >0 时，生成清单改为按分类配额抽取。
+   */
+  items_per_day?: number;
   updated_at?: string;
 }
 
 /** 内置默认映射（数据库无记录时兜底；与 SQL 6.6 默认值一致） */
 export const DEFAULT_CATEGORY_RULES: StocktakeCategoryRule[] = [
-  { category: "蔬菜", roles: ["helper"], split_mode: "average", enabled: true },
-  { category: "肉类", roles: ["helper"], split_mode: "average", enabled: true },
-  { category: "水产", roles: ["helper"], split_mode: "average", enabled: true },
-  { category: "调料", roles: ["helper"], split_mode: "average", enabled: true },
-  { category: "粮油", roles: ["helper"], split_mode: "average", enabled: true },
-  { category: "饮料", roles: ["helper"], split_mode: "average", enabled: true },
-  { category: "耗材", roles: ["waiter"], split_mode: "average", enabled: true },
-  { category: "其他", roles: [], split_mode: "average", enabled: true },
+  {
+    category: "蔬菜",
+    roles: ["helper"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "肉类",
+    roles: ["helper"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "水产",
+    roles: ["helper"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "调料",
+    roles: ["helper"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "粮油",
+    roles: ["helper"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "饮料",
+    roles: ["helper"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "耗材",
+    roles: ["waiter"],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
+  {
+    category: "其他",
+    roles: [],
+    split_mode: "average",
+    enabled: true,
+    items_per_day: 0,
+  },
 ];
 
 /** 自动派发的物品输入 */
@@ -313,6 +366,58 @@ export function pickDailyStocktakeItems(
     candidates = [...pool].sort(byStale);
   }
   return candidates.slice(0, Math.max(1, rule.items_per_day));
+}
+
+/**
+ * 按分类配额抽盘：每个分类取 N 种（久未盘优先，跳过今天已生成的）。
+ * 所有分类配额都为 0 时返回 active=false，调用方回退到全局规则。
+ */
+export function pickDailyByCategory(
+  items: {
+    id: string;
+    name: string;
+    category: string;
+    zone: string;
+    lastCountedAt: string | null;
+  }[],
+  rules: Pick<
+    StocktakeCategoryRule,
+    "category" | "enabled" | "items_per_day"
+  >[],
+  alreadyPlannedIds: string[] = [],
+): {
+  picks: typeof items;
+  byCategory: { category: string; count: number }[];
+  active: boolean;
+} {
+  const quotaRules = rules.filter(
+    (r) => r.enabled && Number(r.items_per_day || 0) > 0,
+  );
+  if (quotaRules.length === 0)
+    return { picks: [], byCategory: [], active: false };
+
+  const planned = new Set(alreadyPlannedIds);
+  const picks: typeof items = [];
+  const byCategory: { category: string; count: number }[] = [];
+  const byStale = (a: (typeof items)[number], b: (typeof items)[number]) => {
+    const ta = a.lastCountedAt ? new Date(a.lastCountedAt).getTime() : 0;
+    const tb = b.lastCountedAt ? new Date(b.lastCountedAt).getTime() : 0;
+    if (ta !== tb) return ta - tb;
+    return a.name.localeCompare(b.name, "zh");
+  };
+
+  for (const r of quotaRules) {
+    const take = items
+      .filter((i) => (i.category || "") === r.category && !planned.has(i.id))
+      .sort(byStale)
+      .slice(0, Math.max(1, Number(r.items_per_day)));
+    for (const it of take) {
+      picks.push(it);
+      planned.add(it.id);
+    }
+    byCategory.push({ category: r.category, count: take.length });
+  }
+  return { picks, byCategory, active: true };
 }
 
 // ────────────────────────── 分类→角色→人 自动派发 ──────────────────────────

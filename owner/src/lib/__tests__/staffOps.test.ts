@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   expandRoleAssignees,
   pickDailyStocktakeItems,
+  pickDailyByCategory,
   planAutoDispatch,
   stocktakeDiff,
   dueFromHours,
@@ -228,5 +229,61 @@ describe("任务按天自动派发 · planAutoDispatch", () => {
       ],
     );
     expect(res).toHaveLength(2);
+  });
+});
+
+describe("按分类配额抽盘 · pickDailyByCategory", () => {
+  const item = (
+    id: string,
+    category: string,
+    lastCountedAt: string | null = null,
+  ) => ({
+    id,
+    name: id,
+    category,
+    zone: "",
+    lastCountedAt,
+  });
+  const pool = [
+    item("v1", "蔬菜", "2026-11-10T00:00:00Z"),
+    item("v2", "蔬菜", "2026-11-01T00:00:00Z"),
+    item("v3", "蔬菜", "2026-11-12T00:00:00Z"),
+    item("m1", "耗材"),
+    item("m2", "耗材"),
+  ];
+
+  it("每个分类按配额取，久未盘优先", () => {
+    const res = pickDailyByCategory(pool, [
+      { category: "蔬菜", enabled: true, items_per_day: 2 },
+      { category: "耗材", enabled: true, items_per_day: 1 },
+    ]);
+    expect(res.active).toBe(true);
+    expect(res.byCategory).toEqual([
+      { category: "蔬菜", count: 2 },
+      { category: "耗材", count: 1 },
+    ]);
+    const ids = res.picks.map((p) => p.id);
+    expect(ids).toContain("v2"); // 最久未盘
+    expect(ids).toContain("v1");
+    expect(ids).not.toContain("v3");
+    expect(ids).toContain("m1");
+  });
+
+  it("停用分类或配额为 0 时跳过该分类", () => {
+    const res = pickDailyByCategory(pool, [
+      { category: "蔬菜", enabled: false, items_per_day: 2 },
+      { category: "耗材", enabled: true, items_per_day: 0 },
+    ]);
+    expect(res.active).toBe(false);
+    expect(res.picks).toHaveLength(0);
+  });
+
+  it("跳过今天已生成的物品；配额大于库存时只取现有", () => {
+    const res = pickDailyByCategory(
+      pool,
+      [{ category: "耗材", enabled: true, items_per_day: 5 }],
+      ["m1"],
+    );
+    expect(res.picks.map((p) => p.id)).toEqual(["m2"]);
   });
 });

@@ -25,6 +25,7 @@ import {
   cancelStocktakeTask,
   reviewStocktakeTask,
   pickDailyStocktakeItems,
+  pickDailyByCategory,
   stocktakeDiff,
   fetchStaffMembers,
   fetchStocktakeCategoryRules,
@@ -120,24 +121,39 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
     ok ? toast.success("盘点规则已保存") : toast.error("保存失败");
   };
 
-  /** 生成今日清单：按规则抽盘，默认不指派人（老板再逐条指派） */
+  /** 生成今日清单：优先按分类配额抽盘，否则按全局规则抽盘 */
   const generate = async () => {
     if (!rule) return;
     setGenerating(true);
-    const picked = pickDailyStocktakeItems(
-      items.map((it) => ({
-        id: it.id,
-        name: it.name,
-        zone: it.zone || "",
-        lastCountedAt: it.last_counted_at || null,
-      })),
-      rule,
-      today,
-      todayTasks.map((t) => t.item_id),
-    );
+    const pool = items.map((it) => ({
+      id: it.id,
+      name: it.name,
+      category: it.category || "",
+      zone: it.zone || "",
+      lastCountedAt: it.last_counted_at || null,
+    }));
+    const plannedIds = todayTasks.map((t) => t.item_id);
+    const catPick = pickDailyByCategory(pool, catRules, plannedIds);
+    const picked = catPick.active
+      ? catPick.picks
+      : pickDailyStocktakeItems(
+          pool.map((p) => ({
+            id: p.id,
+            name: p.name,
+            zone: p.zone,
+            lastCountedAt: p.lastCountedAt,
+          })),
+          rule,
+          today,
+          plannedIds,
+        );
     if (picked.length === 0) {
       setGenerating(false);
-      return toast.error("没有可盘的物品（已全部生成过或库存为空）");
+      return toast.error(
+        catPick.active
+          ? "按分类没有可盘的物品（检查各分类的「每天盘 N 种」和库存分类）"
+          : "没有可盘的物品（已全部生成过或库存为空）",
+      );
     }
     const full = picked
       .map((p) => items.find((it) => it.id === p.id)!)
@@ -145,7 +161,15 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
     const n = await createStocktakeTasks(today, full, null);
     setGenerating(false);
     if (n > 0) {
-      toast.success(`已生成 ${n} 条今日盘点任务，请逐条指派到人`);
+      const detail = catPick.active
+        ? `（${catPick.byCategory
+            .filter((c) => c.count > 0)
+            .map((c) => `${c.category} ${c.count}`)
+            .join(" · ")}）`
+        : "";
+      toast.success(
+        `已生成 ${n} 条今日盘点任务${detail}，请按分类自动派发或逐条指派`,
+      );
       load();
     } else toast.error("生成失败");
   };
@@ -485,6 +509,35 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
                   </button>
                 ),
               )}
+              <label className="flex items-center gap-1 bg-zinc-900 border border-white/5 rounded-lg px-2 py-1.5 text-[11px] text-zinc-400">
+                每天盘
+                <input
+                  type="number"
+                  min={0}
+                  value={r.items_per_day || 0}
+                  onChange={(e) =>
+                    setCatRules((prev) =>
+                      prev.map((x) =>
+                        x.category === r.category
+                          ? {
+                              ...x,
+                              items_per_day: Math.max(
+                                0,
+                                Number(e.target.value) || 0,
+                              ),
+                            }
+                          : x,
+                      ),
+                    )
+                  }
+                  onBlur={() => {
+                    const cur = catRules.find((x) => x.category === r.category);
+                    if (cur) saveCatRule(cur);
+                  }}
+                  className="w-9 bg-transparent text-white text-center text-xs focus:outline-none"
+                />
+                种
+              </label>
               <select
                 value={r.split_mode}
                 onChange={(e) =>
@@ -535,6 +588,9 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
         </div>
         <div className="mt-1.5 text-[11px] text-zinc-600">
           拆分方式：平均=轮流分给该角色每人；按区域=同货架整块给一人；整组=整个分类给任务最少的人；随机=当天随机但结果稳定；轮换=上次谁盘还谁盘（均衡分摊）。停用某分类=当天不自动派发它。
+          「每天盘 N 种」任一类 &gt; 0
+          时，生成清单改为按分类配额抽取（例如食品类 5 种、耗材 2 种）；全部为 0
+          时仍按上方全局规则抽盘。
         </div>
 
         {/* 预览 / 派发 / 重派 */}

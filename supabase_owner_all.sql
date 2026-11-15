@@ -967,6 +967,10 @@ CREATE TABLE IF NOT EXISTS public.stocktake_category_rules (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 每个分类每天盘多少种（0 = 不单独限量，沿用全局规则）
+ALTER TABLE public.stocktake_category_rules
+  ADD COLUMN IF NOT EXISTS items_per_day INTEGER NOT NULL DEFAULT 0;
+
 -- 自动派发总开关（关=维持现状：生成后老板手动指派）
 ALTER TABLE public.stocktake_rules
   ADD COLUMN IF NOT EXISTS auto_by_category BOOLEAN NOT NULL DEFAULT false;
