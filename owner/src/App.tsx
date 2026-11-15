@@ -42,6 +42,7 @@ import {
   runAutoDispatch,
   type StaffSession,
 } from "./lib/staffOps";
+import { syncTasks } from "./lib/tasks";
 import { todayKey } from "./lib/businessDay";
 import { Main as StaffMain } from "./staff/App";
 import { fetchSettings } from "./lib/data";
@@ -150,6 +151,8 @@ export default function App() {
     if (authed) {
       load();
       initCloudSync();
+      // 任务中心：每次登录后与云端合并一次（跨设备）
+      void syncTasks();
     }
   }, [authed, load]);
 

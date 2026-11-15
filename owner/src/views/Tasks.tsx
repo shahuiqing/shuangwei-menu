@@ -24,6 +24,7 @@ import {
   removeTask,
   setRoutine,
   processRoutines,
+  syncTasks,
   STAGE_LABEL,
   STAGE_NEXT,
   ROUTINE_LABEL,
@@ -68,7 +69,16 @@ export default function Tasks({
   );
 
   useEffect(() => {
-    setTasks(processRoutines());
+    let alive = true;
+    (async () => {
+      // 先与云端合并（跨设备），再处理本机例行任务
+      await syncTasks();
+      if (!alive) return;
+      setTasks(processRoutines());
+    })();
+    return () => {
+      alive = false;
+    };
   }, [version]);
 
   const cycleRoutine = (t: Task) => {

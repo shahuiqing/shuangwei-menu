@@ -1037,6 +1037,37 @@ CREATE POLICY "anon_all_stocktake_unassigned" ON public.stocktake_unassigned
 GRANT ALL ON public.stocktake_unassigned TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.10 任务中心上云（问题→任务→解决闭环，跨设备同步）
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.owner_tasks (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT '',
+  desc_text TEXT NOT NULL DEFAULT '',
+  impact NUMERIC NOT NULL DEFAULT 0,
+  evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
+  suggestion TEXT NOT NULL DEFAULT '',
+  assignee TEXT NOT NULL DEFAULT '',
+  stage TEXT NOT NULL DEFAULT 'found',
+  created_at_ms BIGINT NOT NULL DEFAULT 0,
+  resolved_at_ms BIGINT,
+  reopened_count INTEGER NOT NULL DEFAULT 0,
+  tab TEXT NOT NULL DEFAULT '',
+  routine TEXT NOT NULL DEFAULT 'none',
+  next_due_at_ms BIGINT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_tasks_stage
+  ON public.owner_tasks (stage, created_at_ms DESC);
+
+ALTER TABLE public.owner_tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all_owner_tasks" ON public.owner_tasks;
+CREATE POLICY "anon_all_owner_tasks" ON public.owner_tasks
+  FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON public.owner_tasks TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 6.7 安全加固：员工密码哈希不再暴露给前端
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
