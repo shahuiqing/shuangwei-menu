@@ -221,6 +221,49 @@ export interface AutoAssignResult {
   unassigned: { itemId: string; category: string; reason: AssignReason }[];
 }
 
+/** 盘点未派发留档记录 */
+export interface StocktakeUnassignedRecord {
+  id?: string;
+  count_date: string;
+  item_id: string;
+  item_name: string;
+  category: string;
+  reason: AssignReason;
+  roles: Role[];
+  created_at?: string;
+}
+
+/** 未派发结果 + 物品名 → 可落库记录（按 itemId 去重） */
+export function buildUnassignedLog(
+  items: { id: string; name: string; category: string }[],
+  unassigned: { itemId: string; category: string; reason: AssignReason }[],
+): {
+  itemId: string;
+  itemName: string;
+  category: string;
+  reason: AssignReason;
+}[] {
+  const seen = new Set<string>();
+  const out: {
+    itemId: string;
+    itemName: string;
+    category: string;
+    reason: AssignReason;
+  }[] = [];
+  for (const u of unassigned) {
+    if (seen.has(u.itemId)) continue;
+    seen.add(u.itemId);
+    const it = items.find((i) => i.id === u.itemId);
+    out.push({
+      itemId: u.itemId,
+      itemName: it?.name || u.itemId,
+      category: u.category || it?.category || "",
+      reason: u.reason,
+    });
+  }
+  return out;
+}
+
 export interface StocktakeTask {
   id: string;
   count_date: string;
@@ -1103,6 +1146,49 @@ export async function transferStocktakeTasks(
     return 0;
   }
   return data?.length || 0;
+}
+
+/** 保存当天未派发记录（先清后写，保证与本次派发结果一致） */
+export async function replaceStocktakeUnassigned(
+  countDate: string,
+  records: {
+    itemId: string;
+    itemName: string;
+    category: string;
+    reason: AssignReason;
+  }[],
+  rolesByCategory: Record<string, Role[]> = {},
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error: delErr } = await supabase
+    .from("stocktake_unassigned")
+    .delete()
+    .eq("count_date", countDate);
+  if (delErr) return warn("replaceStocktakeUnassigned/delete", delErr);
+  if (records.length === 0) return true;
+  const rows = records.map((r) => ({
+    count_date: countDate,
+    item_id: r.itemId,
+    item_name: r.itemName,
+    category: r.category,
+    reason: r.reason,
+    roles: rolesByCategory[r.category] || [],
+  }));
+  const { error } = await supabase.from("stocktake_unassigned").insert(rows);
+  return warn("replaceStocktakeUnassigned/insert", error);
+}
+
+export async function fetchStocktakeUnassigned(
+  countDate: string,
+): Promise<StocktakeUnassignedRecord[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("stocktake_unassigned")
+    .select("*")
+    .eq("count_date", countDate)
+    .order("created_at", { ascending: true });
+  if (!warn("fetchStocktakeUnassigned", error)) return [];
+  return data || [];
 }
 
 export async function fetchStocktakeTasks(

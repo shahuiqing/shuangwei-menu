@@ -36,12 +36,16 @@ import {
   applyStocktakeAutoAssign,
   resetStocktakeAssignments,
   transferStocktakeTasks,
+  fetchStocktakeUnassigned,
+  replaceStocktakeUnassigned,
+  buildUnassignedLog,
   ROLE_LABEL,
   SPLIT_MODE_LABEL,
   ASSIGN_REASON_LABEL,
   type StocktakeRule,
   type StocktakeTask,
   type StocktakeCategoryRule,
+  type StocktakeUnassignedRecord,
   type SplitMode,
   type Role,
   type StaffMember,
@@ -85,6 +89,10 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
   const [newCat, setNewCat] = useState("");
   const [transferFrom, setTransferFrom] = useState("");
   const [transferTo, setTransferTo] = useState("");
+  /** 今日未派发留档 */
+  const [unassignedLog, setUnassignedLog] = useState<
+    StocktakeUnassignedRecord[]
+  >([]);
 
   const today = todayStr();
   const todayTasks = useMemo(
@@ -94,18 +102,20 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
 
   const load = async () => {
     setLoading(true);
-    const [r, inv, t, cr, m] = await Promise.all([
+    const [r, inv, t, cr, m, ua] = await Promise.all([
       fetchStocktakeRule(),
       fetchInventory(),
       fetchStocktakeTasks(),
       fetchStocktakeCategoryRules(),
       fetchStaffMembers(),
+      fetchStocktakeUnassigned(today),
     ]);
     setRule(r);
     setItems(inv);
     setTasks(t);
     setCatRules(cr);
     setMembers(m);
+    setUnassignedLog(ua);
     setLoading(false);
   };
 
@@ -259,6 +269,14 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
     setDispatching(true);
     const res = await computeAssign();
     const n = await applyStocktakeAutoAssign(today, res.assignments);
+    // 留档：今天为什么有物品没派出去（可回查）
+    const rolesByCategory: Record<string, Role[]> = {};
+    for (const cr of catRules) rolesByCategory[cr.category] = cr.roles;
+    await replaceStocktakeUnassigned(
+      today,
+      buildUnassignedLog(items, res.unassigned),
+      rolesByCategory,
+    );
     setDispatching(false);
     setPreview(res);
     n > 0
@@ -686,6 +704,36 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* 今日未派发留档（持久化，刷新后仍可查） */}
+        {unassignedLog.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <div className="text-xs font-semibold text-amber-400">
+              今日未派发留档（{unassignedLog.length} 条）
+            </div>
+            {unassignedLog.map((r) => (
+              <div
+                key={r.item_id}
+                className="flex flex-wrap items-center gap-2 bg-zinc-950 rounded-lg px-3 py-2 text-[11px]"
+              >
+                <span className="text-zinc-200">{r.item_name}</span>
+                {r.category && (
+                  <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                    {r.category}
+                  </span>
+                )}
+                {r.roles.length > 0 && (
+                  <span className="text-zinc-500">
+                    责任角色 {r.roles.map((x) => ROLE_LABEL[x]).join("/")}
+                  </span>
+                )}
+                <span className="ml-auto text-amber-400">
+                  {ASSIGN_REASON_LABEL[r.reason]}
+                </span>
+              </div>
+            ))}
           </div>
         )}
 

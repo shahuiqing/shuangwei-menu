@@ -1013,6 +1013,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_tasks_auto_daily
   WHERE template_id IS NOT NULL AND dispatch_day IS NOT NULL;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.9 盘点未派发留档（为什么没派出去，可回查）
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.stocktake_unassigned (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  count_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  item_id VARCHAR(50) NOT NULL,
+  item_name VARCHAR(100) NOT NULL DEFAULT '',
+  category VARCHAR(50) NOT NULL DEFAULT '',
+  reason VARCHAR(30) NOT NULL,   -- no_category / no_rule / no_staff
+  roles TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (count_date, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stocktake_unassigned_date
+  ON public.stocktake_unassigned (count_date);
+
+ALTER TABLE public.stocktake_unassigned ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all_stocktake_unassigned" ON public.stocktake_unassigned;
+CREATE POLICY "anon_all_stocktake_unassigned" ON public.stocktake_unassigned
+  FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON public.stocktake_unassigned TO anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 6.7 安全加固：员工密码哈希不再暴露给前端
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

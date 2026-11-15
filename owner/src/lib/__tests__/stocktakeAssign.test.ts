@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   autoAssignStocktakes,
+  buildUnassignedLog,
   DEFAULT_CATEGORY_RULES,
   type AutoAssignItem,
   type AutoAssignStaff,
@@ -228,5 +229,38 @@ describe("autoAssignStocktakes · 分类→角色→人", () => {
     const count = (id: string) =>
       res.assignments.filter((a) => a.staffId === id).length;
     expect(count("h3")).toBeGreaterThan(0);
+  });
+});
+
+describe("未派发留档 · buildUnassignedLog", () => {
+  it("补充物品名并按 itemId 去重", () => {
+    const items = [
+      { id: "i1", name: "牛肉", category: "肉类" },
+      { id: "i2", name: "盘子", category: "餐具" },
+    ];
+    const log = buildUnassignedLog(items, [
+      { itemId: "i1", category: "肉类", reason: "no_staff" },
+      { itemId: "i1", category: "肉类", reason: "no_staff" },
+      { itemId: "i2", category: "餐具", reason: "no_rule" },
+    ]);
+    expect(log).toHaveLength(2);
+    expect(log[0]).toMatchObject({
+      itemId: "i1",
+      itemName: "牛肉",
+      reason: "no_staff",
+    });
+    expect(log[1]).toMatchObject({
+      itemId: "i2",
+      itemName: "盘子",
+      reason: "no_rule",
+    });
+  });
+
+  it("找不到物品时回退用 id 当名称", () => {
+    const log = buildUnassignedLog(
+      [],
+      [{ itemId: "x9", category: "", reason: "no_category" }],
+    );
+    expect(log[0]!.itemName).toBe("x9");
   });
 });
