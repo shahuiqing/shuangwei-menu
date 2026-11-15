@@ -13,6 +13,14 @@ export interface BriefInput {
   waste: number;
   topProblem: string | null;
   topDish?: { name: string; qty: number } | null;
+  /** 库存/采购/员工协同摘要（可选） */
+  ops?: {
+    lowCount: number;
+    lowNames?: string[];
+    pendingRequests: number;
+    pendingTasks: number;
+    overdueTasks: number;
+  };
 }
 
 export function buildDailyBrief(i: BriefInput): string[] {
@@ -28,6 +36,24 @@ export function buildDailyBrief(i: BriefInput): string[] {
     `食材成本 ${fmtMoney(i.foodCost)}（成本率 ${i.foodCostRate.toFixed(1)}%）`,
   );
   if (i.waste > 0) lines.push(`今日损耗 ${fmtMoney(i.waste)}`);
+  if (i.ops) {
+    const o = i.ops;
+    if (o.lowCount > 0) {
+      const names = (o.lowNames || []).slice(0, 3).join("、");
+      lines.push(
+        `📦 库存：${o.lowCount} 种低于安全库存${names ? `（${names}）` : ""}`,
+      );
+    }
+    if (o.pendingRequests > 0)
+      lines.push(`🧾 采购申报：${o.pendingRequests} 条待审批`);
+    if (o.pendingTasks > 0 || o.overdueTasks > 0) {
+      lines.push(
+        `✅ 员工任务：待完成 ${o.pendingTasks}${
+          o.overdueTasks > 0 ? `（逾期 ${o.overdueTasks}）` : ""
+        }`,
+      );
+    }
+  }
   lines.push(
     i.topProblem ? `⚠️ 最大问题：${i.topProblem}` : "✅ 今日无异常问题",
   );

@@ -10,14 +10,26 @@ import {
   dishStats,
   costSummary,
 } from "../lib/aggregate";
-import { fetchBoms, fetchInventory } from "../lib/inventory";
+import { fetchBoms, fetchInventory, lowStockItems } from "../lib/inventory";
 import { dishMargins, sumCost } from "../lib/cost";
 import { buildProblems, topProblem } from "../lib/problems";
 import { stocktakeDue } from "../lib/stocktakeReminder";
 import { lateOrders, loadLateConfig } from "../lib/lateOrders";
+import { todayKey } from "../lib/businessDay";
+import {
+  fetchPurchaseRequests,
+  fetchStaffTasks,
+  fetchStocktakeTasks,
+  isOverdue,
+} from "../lib/staffOps";
 import { useOpsSignals } from "../lib/useOpsSignals";
 import { buildDailyBrief } from "../lib/brief";
-import { ask, PRESET_QUESTIONS, llmSystemPrompt } from "../lib/assistant";
+import {
+  ask,
+  PRESET_QUESTIONS,
+  llmSystemPrompt,
+  type OpsFacts,
+} from "../lib/assistant";
 import { chatLLM, hasLlm } from "../lib/llm";
 import { actionDraft } from "../lib/actionDraft";
 
@@ -40,17 +52,27 @@ export default function Assistant({
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
   );
+  /** 员工协同事实（任务/盘点/申报） */
+  const [staffFacts, setStaffFacts] = useState({
+    pendingTasks: 0,
+    overdueTasks: 0,
+    pendingStocktakes: 0,
+    pendingRequests: 0,
+  });
 
   useEffect(() => {
     let alive = true;
     (async () => {
       const b = rangeToIso("today");
-      const [sum, ds, boms, inv, cs] = await Promise.all([
+      const [sum, ds, boms, inv, cs, tasks, stk, prs] = await Promise.all([
         salesSummary(b.start, b.end),
         dishStats(b.start, b.end),
         fetchBoms(),
         fetchInventory(),
         costSummary(b.start, b.end),
+        fetchStaffTasks(),
+        fetchStocktakeTasks(todayKey()),
+        fetchPurchaseRequests(),
       ]);
       if (!alive) return;
       setSummary({
@@ -60,6 +82,15 @@ export default function Assistant({
       });
       const top = [...ds].sort((a, c) => c.qty - a.qty)[0];
       setTopDish(top ? { name: top.name, qty: top.qty } : null);
+      const pending = tasks.filter((t) => t.status === "pending");
+      setStaffFacts({
+        pendingTasks: pending.length,
+        overdueTasks: pending.filter((t) => isOverdue(t.due_at)).length,
+        pendingStocktakes: stk.filter(
+          (s) => s.status === "pending" || s.status === "drafted",
+        ).length,
+        pendingRequests: prs.filter((r) => r.status === "pending").length,
+      });
     })();
     return () => {
       alive = false;
@@ -82,6 +113,26 @@ export default function Assistant({
     [ops, late],
   );
 
+  /** 库存/采购/员工事实，供规则问答、简报和 LLM 上下文共用 */
+  const opsFacts = useMemo<OpsFacts>(() => {
+    const low = lowStockItems(ops.low)
+      .map((i) => ({
+        name: i.name,
+        stock: Number(i.stock) || 0,
+        unit: i.unit,
+        safety: Number(i.safety_stock) || 0,
+      }))
+      .sort((a, b) => a.stock - a.safety - (b.stock - b.safety));
+    return {
+      lowStock: low,
+      priceAlerts: ops.alerts
+        .filter((a) => a.changePct > 0)
+        .map((a) => ({ name: a.itemName, pct: a.changePct * 100 }))
+        .sort((a, b) => b.pct - a.pct),
+      ...staffFacts,
+    };
+  }, [ops.low, ops.alerts, staffFacts]);
+
   const data = useMemo(() => {
     const aov = summary.orders ? summary.revenue / summary.orders : 0;
     const rate = summary.revenue ? (summary.cogs / summary.revenue) * 100 : 0;
@@ -94,8 +145,9 @@ export default function Assistant({
       waste: ops.todayWaste,
       profit: summary.revenue - summary.cogs,
       topProblem: topProblem(problems)?.title ?? null,
+      ops: opsFacts,
     };
-  }, [summary, ops.todayWaste, problems]);
+  }, [summary, ops.todayWaste, problems, opsFacts]);
   const topP = topProblem(problems);
 
   const storeName = settings?.restaurantName || STORE_NAME;
@@ -112,8 +164,15 @@ export default function Assistant({
         waste: data.waste,
         topProblem: data.topProblem,
         topDish,
+        ops: {
+          lowCount: opsFacts.lowStock.length,
+          lowNames: opsFacts.lowStock.slice(0, 3).map((i) => i.name),
+          pendingRequests: staffFacts.pendingRequests,
+          pendingTasks: staffFacts.pendingTasks,
+          overdueTasks: staffFacts.overdueTasks,
+        },
       }),
-    [storeName, data, topDish],
+    [storeName, data, topDish, opsFacts, staffFacts],
   );
 
   const send = async (text: string) => {
