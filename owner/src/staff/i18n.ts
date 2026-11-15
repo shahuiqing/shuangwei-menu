@@ -1,0 +1,525 @@
+/**
+ * 员工端三语支持：中文 / Français / العربية
+ * 轻量方案：模块级当前语言 + 订阅刷新；不含 boss 端界面。
+ * 阿拉伯语调用方需在容器上设 dir="rtl"（见 Main / Login 员工表单）。
+ */
+
+export type Lang = "zh" | "fr" | "ar";
+
+const LANG_KEY = "staff_lang";
+
+function detect(): Lang {
+  try {
+    const saved = localStorage.getItem(LANG_KEY) as Lang | null;
+    if (saved === "zh" || saved === "fr" || saved === "ar") return saved;
+  } catch {
+    /* ignore */
+  }
+  return "zh";
+}
+
+let lang: Lang = detect();
+const listeners = new Set<() => void>();
+
+export function getLang(): Lang {
+  return lang;
+}
+
+export function setLang(l: Lang) {
+  if (l === lang) return;
+  lang = l;
+  try {
+    localStorage.setItem(LANG_KEY, l);
+  } catch {
+    /* ignore */
+  }
+  listeners.forEach((f) => f());
+}
+
+/** 组件订阅语言变化以触发重渲染 */
+export function onLangChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+/** 该语言的本地日期/时间格式 */
+export function localeOf(l: Lang = lang): string {
+  return l === "zh" ? "zh-CN" : l === "fr" ? "fr-FR" : "ar-MA";
+}
+
+export function isRtl(l: Lang = lang): boolean {
+  return l === "ar";
+}
+
+type Dict = Record<string, string>;
+
+const zh: Dict = {
+  "lang.self": "中文",
+  "app.title": "员工端",
+  "app.unconfigured": "系统未配置数据库，请联系老板。",
+
+  "login.title": "员工登录",
+  "login.subtitle": "输入老板给你的姓名和密码",
+  "login.name": "姓名",
+  "login.namePlaceholder": "姓名",
+  "login.password": "密码",
+  "login.submit": "登录",
+  "login.busy": "登录中…",
+  "login.fill": "请输入姓名和密码",
+  "login.fail": "登录失败：姓名或密码错误，或账号已停用",
+  "login.note": "这里只显示你自己的任务和申报，不包含营业与成本数据",
+  "login.back": "返回老板登录",
+  "login.iAmStaff": "我是员工，进入员工端 →",
+
+  "nav.home": "首页",
+  "nav.tasks": "我的任务",
+  "nav.stocktake": "盘点",
+  "nav.purchase": "采购申报",
+  "nav.me": "我的",
+
+  "common.loading": "加载中…",
+  "common.logout": "退出登录",
+  "common.logoutConfirm": "退出登录？",
+  "common.photo": "拍照/选照片",
+  "common.photoExisting": "已有 {n} 张",
+  "common.photoFail": "照片处理失败，请换一张",
+  "common.submitting": "提交中…",
+  "common.retryFail": "提交失败，检查网络后重试",
+  "common.resubmit": "重新提交",
+
+  "home.title": "今日待办",
+  "home.tasks": "我的任务",
+  "home.tasksHint": "含被驳回需重做的",
+  "home.stocktake": "今日盘点",
+  "home.stocktakeHint": "填实盘数量、拍照、提交",
+  "home.rejectedReq": "被驳回的采购申报",
+  "home.rejectedReqHint": "可修改后重新提交",
+  "home.note":
+    "完成情况会实时同步给老板。这里看不到别人的任务，也看不到经营数据。",
+
+  "tasks.title": "我的任务",
+  "tasks.none": "暂时没有任务，等老板派发",
+  "tasks.due": "截止 {d}",
+  "tasks.resubmitN": "重提过 {n} 次",
+  "tasks.bossNote": "老板意见：{note}",
+  "tasks.rejectedRedo": "被驳回：{note}（修改后重新提交）",
+  "tasks.checklistTitle": "检查项（逐项完成打勾）",
+  "tasks.notePlaceholder": "完成说明（选填）",
+  "tasks.needChecklist": "还有检查项没打勾",
+  "tasks.needPhoto": "该任务要求拍照提交",
+  "tasks.submitDone": "提交完成",
+
+  "stocktake.title": "盘点任务",
+  "stocktake.hintMain": "填「我现在实际有多少」就好。",
+  "stocktake.hintNoBook": "按老板设置，这里不显示账面数量。",
+  "stocktake.hintBook": "老板已开启显示账面数量。",
+  "stocktake.honest": "数量会拿去校准库存，请如实填写。",
+  "stocktake.none": "今天没有你的盘点任务",
+  "stocktake.before": "{d} 前",
+  "stocktake.unitLabel": "单位：{u}",
+  "stocktake.qtyLabel": "实盘数量（现在实际有多少 {u}）",
+  "stocktake.qtyPlaceholder": "填数量",
+  "stocktake.notePlaceholder": "备注：比如临期、破损、位置不对（选填）",
+  "stocktake.photoRequired": "老板要求盘点拍照",
+  "stocktake.draft": "暂存（盘到一半）",
+  "stocktake.submit": "提交盘点",
+  "stocktake.fillQty": "请填写实盘数量（或点暂存）",
+  "stocktake.badQty": "数量要是不小于 0 的数字",
+  "stocktake.book": "账面 {q} {u}",
+  "stocktake.diff": "与账面差 {d}",
+  "stocktake.recheck": "老板要求复核：{note}",
+
+  "purchase.title": "采购申报",
+  "purchase.new": "申报要买的",
+  "purchase.none": "还没有申报过，点右上角「申报要买的」",
+  "purchase.purchasedDone": "已采购 ✓",
+  "purchase.fixResubmit": "修改后重新提交",
+  "purchase.rejectedReason": "驳回原因：{r}",
+  "purchase.formNew": "采购申报（明天要买的）",
+  "purchase.formEdit": "修改采购申报",
+  "purchase.itemPlaceholder": "要买什么，如：洋葱",
+  "purchase.qty": "数量",
+  "purchase.urgent": "🔥 紧急（今天就要）",
+  "purchase.notUrgent": "不紧急",
+  "purchase.expected": "期望到货",
+  "purchase.notePlaceholder": "用途/备注（选填）",
+  "purchase.photo": "拍照（选填）",
+  "purchase.submit": "提交申报",
+  "purchase.fillItem": "填写要买什么",
+  "purchase.fillQty": "填写数量",
+  "purchase.note": "老板审批后会汇总采购；这里看不到价格和供应商信息。",
+
+  "me.title": "我的资料",
+  "me.name": "姓名",
+  "me.roles": "岗位",
+  "me.status": "账号状态",
+  "me.active": "在职",
+  "me.note": "修改姓名/岗位/密码请联系老板。登录有效期 7 天。",
+
+  "role.waiter": "服务员",
+  "role.helper": "帮厨",
+  "role.cleaner": "保洁",
+  "role.other": "其他",
+
+  "st.task.pending": "待完成",
+  "st.task.submitted": "待验收",
+  "st.task.approved": "已通过",
+  "st.task.rejected": "已驳回",
+  "st.task.cancelled": "已取消",
+  "st.overdue": "逾期",
+
+  "st.stk.pending": "待盘点",
+  "st.stk.drafted": "已暂存",
+  "st.stk.submitted": "待老板审核",
+  "st.stk.rejected": "需复核",
+  "st.stk.calibrated": "已通过",
+  "st.stk.cancelled": "已取消",
+
+  "st.pur.pending": "待审批",
+  "st.pur.approved": "已通过",
+  "st.pur.rejected": "已驳回",
+  "st.pur.purchased": "已采购",
+
+  "unit.kg": "kg",
+  "unit.g": "g",
+  "unit.L": "L",
+  "unit.ml": "ml",
+  "unit.个": "个",
+  "unit.箱": "箱",
+  "unit.包": "包",
+  "unit.袋": "袋",
+  "unit.桶": "桶",
+  "unit.瓶": "瓶",
+
+  "cat.蔬菜": "蔬菜",
+  "cat.肉类": "肉类",
+  "cat.水产": "水产",
+  "cat.调料": "调料",
+  "cat.粮油": "粮油",
+  "cat.饮料": "饮料",
+  "cat.耗材": "耗材",
+  "cat.其他": "其他",
+};
+
+const fr: Dict = {
+  "lang.self": "Français",
+  "app.title": "Espace employé",
+  "app.unconfigured": "Base de données non configurée. Contactez le patron.",
+
+  "login.title": "Connexion employé",
+  "login.subtitle": "Entrez le nom et le mot de passe donnés par le patron",
+  "login.name": "Nom",
+  "login.namePlaceholder": "Nom",
+  "login.password": "Mot de passe",
+  "login.submit": "Se connecter",
+  "login.busy": "Connexion…",
+  "login.fill": "Veuillez saisir le nom et le mot de passe",
+  "login.fail": "Échec : nom ou mot de passe incorrect, ou compte désactivé",
+  "login.note": "Seulement vos tâches et demandes — aucune donnée commerciale",
+  "login.back": "Retour (patron)",
+  "login.iAmStaff": "Je suis employé, entrer →",
+
+  "nav.home": "Accueil",
+  "nav.tasks": "Mes tâches",
+  "nav.stocktake": "Inventaire",
+  "nav.purchase": "Achats",
+  "nav.me": "Profil",
+
+  "common.loading": "Chargement…",
+  "common.logout": "Déconnexion",
+  "common.logoutConfirm": "Se déconnecter ?",
+  "common.photo": "Photo",
+  "common.photoExisting": "{n} photo(s) déjà",
+  "common.photoFail": "Échec photo, réessayez",
+  "common.submitting": "Envoi…",
+  "common.retryFail": "Échec de l'envoi, vérifiez le réseau",
+  "common.resubmit": "Renvoyer",
+
+  "home.title": "À faire aujourd'hui",
+  "home.tasks": "Mes tâches",
+  "home.tasksHint": "y compris les refusées à refaire",
+  "home.stocktake": "Inventaire du jour",
+  "home.stocktakeHint": "Compter, photographier, envoyer",
+  "home.rejectedReq": "Demandes d'achat refusées",
+  "home.rejectedReqHint": "modifiables et renvoyables",
+  "home.note":
+    "Votre progression est envoyée au patron en direct. Pas de données des autres ni de chiffres d'affaires ici.",
+
+  "tasks.title": "Mes tâches",
+  "tasks.none": "Pas de tâches pour le moment",
+  "tasks.due": "Échéance : {d}",
+  "tasks.resubmitN": "renvoyée {n} fois",
+  "tasks.bossNote": "Remarque du patron : {note}",
+  "tasks.rejectedRedo": "Refusée : {note} (corrigez puis renvoyez)",
+  "tasks.checklistTitle": "Points à cocher",
+  "tasks.notePlaceholder": "Commentaire (facultatif)",
+  "tasks.needChecklist": "Il reste des points non cochés",
+  "tasks.needPhoto": "Photo obligatoire pour cette tâche",
+  "tasks.submitDone": "Marquer comme fait",
+
+  "stocktake.title": "Inventaire",
+  "stocktake.hintMain": "Comptez ce que vous voyez réellement.",
+  "stocktake.hintNoBook": "Le stock théorique est masqué (réglage du patron).",
+  "stocktake.hintBook": "Le stock théorique est affiché.",
+  "stocktake.honest": "Ce chiffre corrige le stock : soyez précis.",
+  "stocktake.none": "Aucun inventaire pour vous aujourd'hui",
+  "stocktake.before": "avant {d}",
+  "stocktake.unitLabel": "Unité : {u}",
+  "stocktake.qtyLabel": "Quantité réelle (en {u})",
+  "stocktake.qtyPlaceholder": "Quantité",
+  "stocktake.notePlaceholder":
+    "Remarque : péremption, casse, emplacement… (facultatif)",
+  "stocktake.photoRequired": "Photo exigée par le patron",
+  "stocktake.draft": "Brouillon (à moitié compté)",
+  "stocktake.submit": "Envoyer le comptage",
+  "stocktake.fillQty": "Saisissez la quantité (ou brouillon)",
+  "stocktake.badQty": "Nombre ≥ 0 requis",
+  "stocktake.book": "Théorique : {q} {u}",
+  "stocktake.diff": "Écart : {d}",
+  "stocktake.recheck": "Contre-vérification demandée : {note}",
+
+  "purchase.title": "Demandes d'achat",
+  "purchase.new": "Nouvelle demande",
+  "purchase.none": "Aucune demande — bouton « Nouvelle demande »",
+  "purchase.purchasedDone": "Acheté ✓",
+  "purchase.fixResubmit": "Modifier et renvoyer",
+  "purchase.rejectedReason": "Motif du refus : {r}",
+  "purchase.formNew": "À acheter demain",
+  "purchase.formEdit": "Modifier la demande",
+  "purchase.itemPlaceholder": "Quoi ? ex. : oignons",
+  "purchase.qty": "Quantité",
+  "purchase.urgent": "🔥 Urgent (aujourd'hui)",
+  "purchase.notUrgent": "Normal",
+  "purchase.expected": "Livraison souhaitée",
+  "purchase.notePlaceholder": "Usage / remarque (facultatif)",
+  "purchase.photo": "Photo (facultatif)",
+  "purchase.submit": "Envoyer la demande",
+  "purchase.fillItem": "Indiquez l'article",
+  "purchase.fillQty": "Indiquez la quantité",
+  "purchase.note":
+    "Après validation, le patron regroupe les achats. Ni prix ni fournisseurs ici.",
+
+  "me.title": "Mon profil",
+  "me.name": "Nom",
+  "me.roles": "Poste",
+  "me.status": "Statut",
+  "me.active": "Actif",
+  "me.note": "Pour toute modification, contactez le patron. Session : 7 jours.",
+
+  "role.waiter": "Serveur",
+  "role.helper": "Aide-cuisine",
+  "role.cleaner": "Entretien",
+  "role.other": "Autre",
+
+  "st.task.pending": "À faire",
+  "st.task.submitted": "En validation",
+  "st.task.approved": "Validée",
+  "st.task.rejected": "Refusée",
+  "st.task.cancelled": "Annulée",
+  "st.overdue": "En retard",
+
+  "st.stk.pending": "À compter",
+  "st.stk.drafted": "Brouillon",
+  "st.stk.submitted": "En validation",
+  "st.stk.rejected": "À refaire",
+  "st.stk.calibrated": "Validé",
+  "st.stk.cancelled": "Annulé",
+
+  "st.pur.pending": "En attente",
+  "st.pur.approved": "Approuvée",
+  "st.pur.rejected": "Refusée",
+  "st.pur.purchased": "Achetée",
+
+  "unit.kg": "kg",
+  "unit.g": "g",
+  "unit.L": "L",
+  "unit.ml": "ml",
+  "unit.个": "pièce",
+  "unit.箱": "caisse",
+  "unit.包": "paquet",
+  "unit.袋": "sac",
+  "unit.桶": "bidon",
+  "unit.瓶": "bouteille",
+
+  "cat.蔬菜": "Légumes",
+  "cat.肉类": "Viandes",
+  "cat.水产": "Marée",
+  "cat.调料": "Épices",
+  "cat.粮油": "Épicerie",
+  "cat.饮料": "Boissons",
+  "cat.耗材": "Consommables",
+  "cat.其他": "Autre",
+};
+
+const ar: Dict = {
+  "lang.self": "العربية",
+  "app.title": "واجهة الموظف",
+  "app.unconfigured": "قاعدة البيانات غير مهيأة، تواصل مع المدير.",
+
+  "login.title": "تسجيل دخول الموظف",
+  "login.subtitle": "أدخل الاسم وكلمة المرور اللذين أعطاك إياهما المدير",
+  "login.name": "الاسم",
+  "login.namePlaceholder": "الاسم",
+  "login.password": "كلمة المرور",
+  "login.submit": "تسجيل الدخول",
+  "login.busy": "جارٍ تسجيل الدخول…",
+  "login.fill": "يرجى إدخال الاسم وكلمة المرور",
+  "login.fail": "فشل: الاسم أو كلمة المرور خطأ، أو الحساب موقوف",
+  "login.note": "تظهر هنا مهامك وطلباتك فقط، دون أي بيانات أرباح أو تكاليف",
+  "login.back": "رجوع (المدير)",
+  "login.iAmStaff": "أنا موظف، دخول →",
+
+  "nav.home": "الرئيسية",
+  "nav.tasks": "مهامي",
+  "nav.stocktake": "الجرد",
+  "nav.purchase": "الشراء",
+  "nav.me": "حسابي",
+
+  "common.loading": "جارٍ التحميل…",
+  "common.logout": "خروج",
+  "common.logoutConfirm": "الخروج؟",
+  "common.photo": "التقاط صورة",
+  "common.photoExisting": "لديك {n} صورة",
+  "common.photoFail": "فشلت معالجة الصورة، جرّب صورة أخرى",
+  "common.submitting": "جارٍ الإرسال…",
+  "common.retryFail": "فشل الإرسال، تحقق من الشبكة وأعد المحاولة",
+  "common.resubmit": "إعادة الإرسال",
+
+  "home.title": "مهام اليوم",
+  "home.tasks": "مهامي",
+  "home.tasksHint": "بما فيها المرفوضة لإعادة العمل",
+  "home.stocktake": "جرد اليوم",
+  "home.stocktakeHint": "اكتب الكمية، صوّر، أرسل",
+  "home.rejectedReq": "طلبات شراء مرفوضة",
+  "home.rejectedReqHint": "يمكن تعديلها وإعادة إرسالها",
+  "home.note":
+    "تُرسل حالة الإنجاز إلى المدير مباشرة. لا ترى مهام الآخرين ولا البيانات المالية هنا.",
+
+  "tasks.title": "مهامي",
+  "tasks.none": "لا توجد مهام حاليا، بانتظار الإسناد",
+  "tasks.due": "الموعد النهائي: {d}",
+  "tasks.resubmitN": "أُعيد إرسالها {n} مرات",
+  "tasks.bossNote": "ملاحظة المدير: {note}",
+  "tasks.rejectedRedo": "مرفوضة: {note} (عدّل ثم أعد الإرسال)",
+  "tasks.checklistTitle": "بنود للتحقق (علّم كل بند عند إنجازه)",
+  "tasks.notePlaceholder": "ملاحظة الإنجاز (اختياري)",
+  "tasks.needChecklist": "هناك بنود لم تُعلَّم",
+  "tasks.needPhoto": "هذه المهمة تتطلب صورة",
+  "tasks.submitDone": "إتمام وإرسال",
+
+  "stocktake.title": "مهام الجرد",
+  "stocktake.hintMain": "اكتب «ما أراه الآن فعليًا» فقط.",
+  "stocktake.hintNoBook": "حسب إعداد المدير، لا تُعرض الكمية الدفترية.",
+  "stocktake.hintBook": "المدير فعّل عرض الكمية الدفترية.",
+  "stocktake.honest": "سيُستخدم هذا الرقم لتصحيح المخزون، كن صادقًا.",
+  "stocktake.none": "لا توجد مهام جرد لك اليوم",
+  "stocktake.before": "قبل {d}",
+  "stocktake.unitLabel": "الوحدة: {u}",
+  "stocktake.qtyLabel": "الكمية الفعلية (بوحدة {u})",
+  "stocktake.qtyPlaceholder": "اكتب الكمية",
+  "stocktake.notePlaceholder":
+    "ملاحظة: قرب انتهاء الصلاحية، تلف، مكان خاطئ (اختياري)",
+  "stocktake.photoRequired": "المدير يطلب صورة للجرد",
+  "stocktake.draft": "حفظ مؤقت (لم أنتهِ)",
+  "stocktake.submit": "إرسال الجرد",
+  "stocktake.fillQty": "املأ الكمية الفعلية (أو احفظ مؤقتًا)",
+  "stocktake.badQty": "يجب أن يكون رقمًا لا يقل عن 0",
+  "stocktake.book": "الدفتري {q} {u}",
+  "stocktake.diff": "الفارق عن الدفتري {d}",
+  "stocktake.recheck": "المدير يطلب إعادة التحقق: {note}",
+
+  "purchase.title": "طلبات الشراء",
+  "purchase.new": "طلب جديد",
+  "purchase.none": "لا طلبات بعد — اضغط «طلب جديد» أعلى اليمين",
+  "purchase.purchasedDone": "تم الشراء ✓",
+  "purchase.fixResubmit": "تعديل وإعادة الإرسال",
+  "purchase.rejectedReason": "سبب الرفض: {r}",
+  "purchase.formNew": "طلب شراء (ليُشترى غدًا)",
+  "purchase.formEdit": "تعديل الطلب",
+  "purchase.itemPlaceholder": "ماذا؟ مثال: البصل",
+  "purchase.qty": "الكمية",
+  "purchase.urgent": "🔥 عاجل (اليوم)",
+  "purchase.notUrgent": "عادي",
+  "purchase.expected": "تاريخ التسليم المرغوب",
+  "purchase.notePlaceholder": "الغرض / ملاحظة (اختياري)",
+  "purchase.photo": "صورة (اختياري)",
+  "purchase.submit": "إرسال الطلب",
+  "purchase.fillItem": "اكتب ما تريد شراءه",
+  "purchase.fillQty": "اكتب الكمية",
+  "purchase.note":
+    "بعد موافقة المدير يُجمَّع الشراء؛ لا تظهر هنا أسعار ولا مورّدين.",
+
+  "me.title": "بياناتي",
+  "me.name": "الاسم",
+  "me.roles": "الوظيفة",
+  "me.status": "حالة الحساب",
+  "me.active": "نشط",
+  "me.note":
+    "لتعديل الاسم/الوظيفة/كلمة المرور تواصل مع المدير. مدة الجلسة 7 أيام.",
+
+  "role.waiter": "نادل",
+  "role.helper": "مساعد الطبخ",
+  "role.cleaner": "عامل نظافة",
+  "role.other": "أخرى",
+
+  "st.task.pending": "بانتظار التنفيذ",
+  "st.task.submitted": "بانتظار التحقق",
+  "st.task.approved": "مقبولة",
+  "st.task.rejected": "مرفوضة",
+  "st.task.cancelled": "ملغاة",
+  "st.overdue": "متأخرة",
+
+  "st.stk.pending": "بانتظار الجرد",
+  "st.stk.drafted": "محفوظ مؤقتًا",
+  "st.stk.submitted": "بانتظار مراجعة المدير",
+  "st.stk.rejected": "يحتاج إعادة تحقق",
+  "st.stk.calibrated": "مقبول",
+  "st.stk.cancelled": "ملغى",
+
+  "st.pur.pending": "بانتظار الموافقة",
+  "st.pur.approved": "موافق عليها",
+  "st.pur.rejected": "مرفوضة",
+  "st.pur.purchased": "تم شراؤها",
+
+  "unit.kg": "كغ",
+  "unit.g": "غ",
+  "unit.L": "ل",
+  "unit.ml": "مل",
+  "unit.个": "حبة",
+  "unit.箱": "صندوق",
+  "unit.包": "علبة",
+  "unit.袋": "كيس",
+  "unit.桶": "برميل",
+  "unit.瓶": "زجاجة",
+
+  "cat.蔬菜": "خضروات",
+  "cat.肉类": "لحوم",
+  "cat.水产": "أسماك",
+  "cat.调料": "توابل",
+  "cat.粮油": "زيوت وحبوب",
+  "cat.饮料": "مشروبات",
+  "cat.耗材": "مواد استهلاكية",
+  "cat.其他": "أخرى",
+};
+
+const DICTS: Record<Lang, Dict> = { zh, fr, ar };
+
+/** 取词条；支持 {n}/{d}/{u}/{q}/{note}/{r} 占位符 */
+export function t(key: string, vars?: Record<string, string | number>): string {
+  let s = DICTS[lang][key] ?? zh[key] ?? key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+    }
+  }
+  return s;
+}
+
+/** 语言切换按钮组（三语） */
+export const LANGS: { id: Lang; label: string }[] = [
+  { id: "zh", label: "中文" },
+  { id: "fr", label: "Français" },
+  { id: "ar", label: "العربية" },
+];

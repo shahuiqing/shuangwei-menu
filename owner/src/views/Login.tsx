@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Lock,
@@ -7,6 +7,7 @@ import {
   EyeOff,
   AlertCircle,
   User,
+  Languages,
 } from "lucide-react";
 import {
   verifyOwnerPassword,
@@ -22,6 +23,7 @@ import {
   saveStaffSession,
   type StaffSession,
 } from "../lib/staffOps";
+import { t, getLang, setLang, onLangChange, isRtl, LANGS } from "../staff/i18n";
 
 const fieldCls =
   "w-full bg-zinc-950/80 border border-white/[0.07] rounded-xl pl-11 pr-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/70 focus:ring-4 focus:ring-orange-500/15 focus:bg-zinc-950 transition-all";
@@ -44,11 +46,37 @@ export default function Login({
   const [show, setShow] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [staffPw, setStaffPw] = useState("");
+  const [, force] = useState(0);
+  useEffect(() => onLangChange(() => force((v) => v + 1)), []);
+
+  /** 员工登录页的语言切换（三语） */
+  const staffLangSwitch = (
+    <div
+      dir="ltr"
+      className="flex items-center justify-center gap-1 bg-zinc-900 border border-white/5 rounded-full px-1 py-0.5 w-fit mx-auto"
+    >
+      <Languages size={13} className="text-zinc-500 mx-1" />
+      {LANGS.map((l) => (
+        <button
+          key={l.id}
+          type="button"
+          onClick={() => setLang(l.id)}
+          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+            getLang() === l.id
+              ? "bg-orange-600 text-white"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
 
   const handleStaffLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!staffName.trim() || !staffPw) {
-      setErr("请输入姓名和密码");
+      setErr(t("login.fill"));
       return;
     }
     setBusy(true);
@@ -58,7 +86,7 @@ export default function Login({
       saveStaffSession(s);
       onStaffOk(s);
     } else {
-      setErr("登录失败：姓名或密码错误，或账号已停用");
+      setErr(t("login.fail"));
     }
   };
 
@@ -217,11 +245,21 @@ export default function Login({
               </button>
             </form>
           ) : mode === "staff" ? (
-            <form onSubmit={handleStaffLogin} className="space-y-3.5">
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
+            <form
+              onSubmit={handleStaffLogin}
+              dir={isRtl() ? "rtl" : "ltr"}
+              className="space-y-3.5"
+            >
+              <div
+                dir="ltr"
+                className="flex items-center justify-center gap-1 text-sm text-zinc-400"
+              >
                 <User size={16} className="text-orange-500" />
-                员工登录 · 只能看自己的任务/盘点/申报
+                <span className="text-center">
+                  {t("login.title")} · {t("login.note")}
+                </span>
               </div>
+              {staffLangSwitch}
               <input
                 value={staffName}
                 autoFocus
@@ -229,7 +267,7 @@ export default function Login({
                   setStaffName(e.target.value);
                   setErr("");
                 }}
-                placeholder="姓名"
+                placeholder={t("login.namePlaceholder")}
                 className={fieldCls.replace("pl-11", "pl-4")}
               />
               <div className="relative">
@@ -244,7 +282,7 @@ export default function Login({
                     setStaffPw(e.target.value);
                     setErr("");
                   }}
-                  placeholder="密码"
+                  placeholder={t("login.password")}
                   className={fieldCls}
                 />
                 <button
@@ -267,7 +305,7 @@ export default function Login({
                 disabled={busy}
                 className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 active:scale-[0.98] transition-transform disabled:opacity-50"
               >
-                {busy ? "验证中…" : "员工登录"}
+                {busy ? t("login.busy") : t("login.submit")}
               </button>
               <button
                 type="button"
@@ -277,7 +315,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                返回老板登录
+                {t("login.back")}
               </button>
             </form>
           ) : mode === "login" ? (

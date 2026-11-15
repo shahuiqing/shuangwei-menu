@@ -11,6 +11,7 @@ import {
   Send,
   AlertTriangle,
   ChevronLeft,
+  Languages,
 } from "lucide-react";
 import {
   loadStaffSession,
@@ -26,10 +27,8 @@ import {
   createPurchaseRequest,
   resubmitPurchaseRequest,
   compressPhoto,
-  ROLE_LABEL,
-  TASK_STATUS_LABEL,
-  stocktakeDiff,
   isOverdue,
+  stocktakeDiff,
   type StaffSession,
   type StaffTask,
   type StocktakeTask,
@@ -38,13 +37,16 @@ import {
   type PurchaseStatus,
 } from "../lib/staffOps";
 import { isConfigured } from "../lib/supabase";
+import {
+  t,
+  getLang,
+  setLang,
+  onLangChange,
+  localeOf,
+  isRtl,
+  LANGS,
+} from "./i18n";
 
-const PUR_LABEL: Record<PurchaseStatus, string> = {
-  pending: "待审批",
-  approved: "已通过",
-  rejected: "已驳回",
-  purchased: "已采购",
-};
 const PUR_CLS: Record<PurchaseStatus, string> = {
   pending: "bg-amber-500/15 text-amber-400",
   approved: "bg-sky-500/15 text-sky-400",
@@ -67,16 +69,35 @@ const STK_CLS: Record<string, string> = {
   calibrated: "bg-green-500/15 text-green-400",
   cancelled: "bg-zinc-700/40 text-zinc-500",
 };
-const STK_LABEL: Record<string, string> = {
-  pending: "待盘点",
-  drafted: "已暂存",
-  submitted: "待老板审核",
-  rejected: "需复核",
-  calibrated: "已通过",
-  cancelled: "已取消",
-};
 
 const todayStr = () => new Date().toLocaleDateString("sv-SE");
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString(localeOf(), { hour12: false });
+
+/** 语言切换按钮组 */
+function LangSwitch() {
+  const [, force] = useState(0);
+  useEffect(() => onLangChange(() => force((v) => v + 1)), []);
+  return (
+    <div className="flex items-center gap-1 bg-zinc-900 border border-white/5 rounded-full px-1 py-0.5">
+      <Languages size={13} className="text-zinc-500 mx-1" />
+      {LANGS.map((l) => (
+        <button
+          key={l.id}
+          onClick={() => setLang(l.id)}
+          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+            getLang() === l.id
+              ? "bg-orange-600 text-white"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 type Tab = "home" | "tasks" | "stocktake" | "purchase" | "me";
 
@@ -91,7 +112,7 @@ export default function App() {
   if (!isConfigured) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-zinc-950 text-zinc-300 p-6 text-center">
-        系统未配置数据库，请联系老板。
+        {t("app.unconfigured")}
       </div>
     );
   }
@@ -110,35 +131,41 @@ function Login({ onOk }: { onOk: (s: StaffInfo) => void }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [, force] = useState(0);
+  useEffect(() => onLangChange(() => force((v) => v + 1)), []);
 
   const go = async () => {
-    if (!name.trim() || !pw) return setErr("请输入姓名和密码");
+    if (!name.trim() || !pw) return setErr(t("login.fill"));
     setBusy(true);
     const s = await staffLogin(name, pw);
     setBusy(false);
     if (s) {
       saveStaffSession(s);
       onOk(s);
-    } else setErr("登录失败：姓名或密码错误，或账号已停用");
+    } else setErr(t("login.fail"));
   };
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center bg-zinc-950 text-white p-6">
+    <div
+      dir={isRtl() ? "rtl" : "ltr"}
+      className="min-h-dvh flex flex-col items-center justify-center bg-zinc-950 text-white p-6"
+    >
       <div className="w-full max-w-sm space-y-4">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto bg-orange-600/20 text-orange-500 rounded-full flex items-center justify-center mb-3">
             <User size={30} />
           </div>
-          <h1 className="text-xl font-bold">员工端</h1>
-          <p className="text-sm text-zinc-500 mt-1">输入老板给你的姓名和密码</p>
+          <h1 className="text-xl font-bold">{t("login.title")}</h1>
+          <p className="text-sm text-zinc-500 mt-1">{t("login.subtitle")}</p>
         </div>
+        <LangSwitch />
         <input
           value={name}
           onChange={(e) => {
             setName(e.target.value);
             setErr("");
           }}
-          placeholder="姓名"
+          placeholder={t("login.namePlaceholder")}
           className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-500"
         />
         <input
@@ -149,7 +176,7 @@ function Login({ onOk }: { onOk: (s: StaffInfo) => void }) {
             setErr("");
           }}
           onKeyDown={(e) => e.key === "Enter" && go()}
-          placeholder="密码"
+          placeholder={t("login.password")}
           className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-500"
         />
         {err && <div className="text-sm text-rose-400">{err}</div>}
@@ -158,10 +185,10 @@ function Login({ onOk }: { onOk: (s: StaffInfo) => void }) {
           disabled={busy}
           className="w-full py-3 font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-xl disabled:opacity-50"
         >
-          {busy ? "登录中…" : "登录"}
+          {busy ? t("login.busy") : t("login.submit")}
         </button>
         <p className="text-[11px] text-zinc-600 text-center">
-          这里只显示你自己的任务和申报，不包含营业与成本数据
+          {t("login.note")}
         </p>
       </div>
     </div>
@@ -180,18 +207,23 @@ export function Main({
 }) {
   const [tab, setTab] = useState<Tab>("home");
   const [refresh, setRefresh] = useState(0);
+  const [, force] = useState(0);
+  useEffect(() => onLangChange(() => force((v) => v + 1)), []);
   const reload = useCallback(() => setRefresh((v) => v + 1), []);
 
   const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
-    { id: "home", label: "首页", icon: Home },
-    { id: "tasks", label: "我的任务", icon: ClipboardList },
-    { id: "stocktake", label: "盘点", icon: Boxes },
-    { id: "purchase", label: "采购申报", icon: ShoppingCart },
-    { id: "me", label: "我的", icon: User },
+    { id: "home", label: t("nav.home"), icon: Home },
+    { id: "tasks", label: t("nav.tasks"), icon: ClipboardList },
+    { id: "stocktake", label: t("nav.stocktake"), icon: Boxes },
+    { id: "purchase", label: t("nav.purchase"), icon: ShoppingCart },
+    { id: "me", label: t("nav.me"), icon: User },
   ];
 
   return (
-    <div className="min-h-dvh bg-zinc-950 text-white pb-20">
+    <div
+      dir={isRtl() ? "rtl" : "ltr"}
+      className="min-h-dvh bg-zinc-950 text-white pb-20"
+    >
       {/* 顶栏 */}
       <div className="sticky top-0 z-10 bg-zinc-950/90 backdrop-blur border-b border-white/5 px-4 py-3 flex items-center gap-2">
         <div className="font-bold">{session.name}</div>
@@ -201,7 +233,7 @@ export function Main({
               key={r}
               className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-600/20 text-orange-400"
             >
-              {ROLE_LABEL[r] || r}
+              {t(`role.${r}`)}
             </span>
           ))}
         </div>
@@ -209,18 +241,23 @@ export function Main({
           onClick={reload}
           className="ml-auto p-2 text-zinc-500 hover:text-white"
         >
-          <RefreshCw size={16} className={refresh ? "" : ""} />
+          <RefreshCw size={16} />
         </button>
         <button
           onClick={() => {
-            if (!confirm("退出登录？")) return;
+            if (!confirm(t("common.logoutConfirm"))) return;
             clearStaffSession();
             onLogout();
           }}
           className="p-2 text-zinc-500 hover:text-rose-400"
+          title={t("common.logout")}
         >
           <LogOut size={16} />
         </button>
+      </div>
+
+      <div className="px-4 pt-3 flex justify-center sm:justify-end">
+        <LangSwitch />
       </div>
 
       <div className="p-4 max-w-lg mx-auto" key={refresh}>
@@ -233,16 +270,16 @@ export function Main({
 
       {/* 底部导航 */}
       <div className="fixed bottom-0 inset-x-0 z-10 bg-zinc-900/95 backdrop-blur border-t border-white/5 flex">
-        {tabs.map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={tb.id}
+            onClick={() => setTab(tb.id)}
             className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] ${
-              tab === t.id ? "text-orange-500" : "text-zinc-500"
+              tab === tb.id ? "text-orange-500" : "text-zinc-500"
             }`}
           >
-            <t.icon size={20} />
-            {t.label}
+            <tb.icon size={20} />
+            {tb.label}
           </button>
         ))}
       </div>
@@ -261,23 +298,23 @@ function HomeTab({ session }: { session: StaffInfo }) {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [t, s, p] = await Promise.all([
+      const [tk, sk, pr] = await Promise.all([
         fetchMyTasks(session.staffId),
         fetchMyStocktakes(session.staffId, todayStr()),
         fetchMyPurchaseRequests(session.staffId),
       ]);
       setTodoTasks(
-        t.filter((x) => x.status === "pending" || x.status === "rejected"),
+        tk.filter((x) => x.status === "pending" || x.status === "rejected"),
       );
       setTodoStk(
-        s.filter(
+        sk.filter(
           (x) =>
             x.status === "pending" ||
             x.status === "drafted" ||
             x.status === "rejected",
         ),
       );
-      setRejectedReq(p.filter((x) => x.status === "rejected"));
+      setRejectedReq(pr.filter((x) => x.status === "rejected"));
       setLoading(false);
     })();
   }, [session.staffId]);
@@ -301,17 +338,27 @@ function HomeTab({ session }: { session: StaffInfo }) {
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold">今日待办</h2>
-      {item("我的任务", todoTasks.length, ClipboardList, "含被驳回需重做的")}
-      {item("今日盘点", todoStk.length, Boxes, "填实盘数量、拍照、提交")}
+      <h2 className="text-lg font-bold">{t("home.title")}</h2>
       {item(
-        "被驳回的采购申报",
+        t("home.tasks"),
+        todoTasks.length,
+        ClipboardList,
+        t("home.tasksHint"),
+      )}
+      {item(
+        t("home.stocktake"),
+        todoStk.length,
+        Boxes,
+        t("home.stocktakeHint"),
+      )}
+      {item(
+        t("home.rejectedReq"),
         rejectedReq.length,
         ShoppingCart,
-        "可修改后重新提交",
+        t("home.rejectedReqHint"),
       )}
       <div className="bg-zinc-900/60 border border-white/5 rounded-2xl px-4 py-3 text-[11px] text-zinc-600">
-        完成情况会实时同步给老板。这里看不到别人的任务，也看不到经营数据。
+        {t("home.note")}
       </div>
     </div>
   );
@@ -334,14 +381,14 @@ function TasksTab({ session }: { session: StaffInfo }) {
     load();
   }, [load]);
 
-  const open = tasks.find((t) => t.id === openId) || null;
+  const open = tasks.find((tk) => tk.id === openId) || null;
   const sorted = useMemo(() => {
     // 待办在前，逾期最靠前
-    const rank = (t: StaffTask) =>
-      t.status === "rejected"
+    const rank = (tk: StaffTask) =>
+      tk.status === "rejected"
         ? 0
-        : t.status === "pending"
-          ? isOverdue(t.due_at)
+        : tk.status === "pending"
+          ? isOverdue(tk.due_at)
             ? 1
             : 2
           : 3;
@@ -350,49 +397,48 @@ function TasksTab({ session }: { session: StaffInfo }) {
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold">我的任务</h2>
+      <h2 className="text-lg font-bold">{t("tasks.title")}</h2>
       {loading ? (
-        <div className="text-sm text-zinc-500">加载中…</div>
+        <div className="text-sm text-zinc-500">{t("common.loading")}</div>
       ) : sorted.length === 0 ? (
         <div className="text-sm text-zinc-500 bg-zinc-900 rounded-2xl p-6 text-center">
-          暂时没有任务，等老板派发
+          {t("tasks.none")}
         </div>
       ) : (
-        sorted.map((t) => {
-          const overdue = t.status === "pending" && isOverdue(t.due_at);
+        sorted.map((tk) => {
+          const overdue = tk.status === "pending" && isOverdue(tk.due_at);
           return (
             <button
-              key={t.id}
-              onClick={() => setOpenId(t.id)}
+              key={tk.id}
+              onClick={() => setOpenId(tk.id)}
               className={`w-full text-left bg-zinc-900 border rounded-2xl p-4 ${
                 overdue ? "border-rose-500/40" : "border-white/5"
               }`}
             >
               <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${TASK_CLS[t.status]}`}
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${TASK_CLS[tk.status]}`}
                 >
-                  {TASK_STATUS_LABEL[t.status]}
+                  {t(`st.task.${tk.status}`)}
                 </span>
                 {overdue && (
                   <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 font-bold">
-                    <AlertTriangle size={11} /> 逾期
+                    <AlertTriangle size={11} /> {t("st.overdue")}
                   </span>
                 )}
-                <span className="text-sm font-semibold">{t.title}</span>
+                <span className="text-sm font-semibold">{tk.title}</span>
               </div>
               <div className="text-[11px] text-zinc-500 mt-1">
-                截止{" "}
-                {t.due_at
-                  ? new Date(t.due_at).toLocaleString("zh-CN", {
-                      hour12: false,
-                    })
-                  : "—"}
-                {t.resubmit_count > 0 ? ` · 重提过 ${t.resubmit_count} 次` : ""}
+                {t("tasks.due", {
+                  d: tk.due_at ? fmtDateTime(tk.due_at) : "—",
+                })}
+                {tk.resubmit_count > 0
+                  ? " · " + t("tasks.resubmitN", { n: tk.resubmit_count })
+                  : ""}
               </div>
-              {t.status === "rejected" && t.review_note && (
+              {tk.status === "rejected" && tk.review_note && (
                 <div className="text-xs text-rose-400 mt-1">
-                  老板意见：{t.review_note}
+                  {t("tasks.bossNote", { note: tk.review_note })}
                 </div>
               )}
             </button>
@@ -439,16 +485,16 @@ function TaskDetail({
       const p = await compressPhoto(f);
       setPhotos((prev) => [...prev, p]);
     } catch {
-      setErr("照片处理失败，请换一张");
+      setErr(t("common.photoFail"));
     }
     e.target.value = "";
   };
 
   const submit = async () => {
     if (checklist.some((c) => !c.done && c.text.trim()))
-      return setErr("还有检查项没打勾");
+      return setErr(t("tasks.needChecklist"));
     if (task.require_photo && photos.length === 0 && task.photos.length === 0)
-      return setErr("该任务要求拍照提交");
+      return setErr(t("tasks.needPhoto"));
     setBusy(true);
     const ok = await submitStaffTask(
       task.id,
@@ -459,7 +505,7 @@ function TaskDetail({
     );
     setBusy(false);
     if (ok) onDone();
-    else setErr("提交失败，检查网络后重试");
+    else setErr(t("common.retryFail"));
   };
 
   const resubmitting = task.status === "rejected";
@@ -475,7 +521,7 @@ function TaskDetail({
           <span
             className={`ml-auto text-[11px] px-2 py-0.5 rounded-full font-bold ${TASK_CLS[task.status]}`}
           >
-            {TASK_STATUS_LABEL[task.status]}
+            {t(`st.task.${task.status}`)}
           </span>
         </div>
         {task.description && (
@@ -483,13 +529,15 @@ function TaskDetail({
         )}
         {resubmitting && task.review_note && (
           <div className="text-xs text-rose-400 bg-rose-500/10 rounded-xl px-3 py-2">
-            被驳回：{task.review_note}（修改后重新提交）
+            {t("tasks.rejectedRedo", { note: task.review_note })}
           </div>
         )}
 
         {checklist.length > 0 && (
           <div className="space-y-1.5">
-            <div className="text-xs text-zinc-500">检查项（逐项完成打勾）</div>
+            <div className="text-xs text-zinc-500">
+              {t("tasks.checklistTitle")}
+            </div>
             {checklist.map((c, i) => (
               <label
                 key={i}
@@ -516,14 +564,14 @@ function TaskDetail({
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="完成说明（选填）"
+          placeholder={t("tasks.notePlaceholder")}
           rows={2}
           className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500"
         />
 
         <div className="flex items-center gap-2 flex-wrap">
           <label className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-zinc-800 text-zinc-200 cursor-pointer">
-            <Camera size={14} /> 拍照/选照片
+            <Camera size={14} /> {t("common.photo")}
             <input
               type="file"
               accept="image/*"
@@ -534,7 +582,7 @@ function TaskDetail({
           </label>
           {task.photos.length > 0 && (
             <span className="text-[11px] text-zinc-500">
-              已有 {task.photos.length} 张
+              {t("common.photoExisting", { n: task.photos.length })}
             </span>
           )}
         </div>
@@ -567,7 +615,11 @@ function TaskDetail({
           className="w-full flex items-center justify-center gap-2 py-3 font-bold text-white bg-green-600 hover:bg-green-500 rounded-xl disabled:opacity-50"
         >
           <Send size={16} />{" "}
-          {busy ? "提交中…" : resubmitting ? "重新提交" : "提交完成"}
+          {busy
+            ? t("common.submitting")
+            : resubmitting
+              ? t("common.resubmit")
+              : t("tasks.submitDone")}
         </button>
       </div>
     </div>
@@ -584,7 +636,7 @@ function StocktakeTab({ session }: { session: StaffInfo }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [r, t] = await Promise.all([
+    const [r, tk] = await Promise.all([
       fetchStocktakeRule(),
       fetchMyStocktakes(session.staffId),
     ]);
@@ -597,7 +649,7 @@ function StocktakeTab({ session }: { session: StaffInfo }) {
         : x.status === "pending" || x.status === "drafted"
           ? 1
           : 2);
-    setTasks([...t].sort((a, b) => rank(a) - rank(b)));
+    setTasks([...tk].sort((a, b) => rank(a) - rank(b)));
     setLoading(false);
   }, [session.staffId]);
 
@@ -605,38 +657,38 @@ function StocktakeTab({ session }: { session: StaffInfo }) {
     load();
   }, [load]);
 
-  const open = tasks.find((t) => t.id === openId) || null;
+  const open = tasks.find((tk) => tk.id === openId) || null;
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold">盘点任务</h2>
+      <h2 className="text-lg font-bold">{t("stocktake.title")}</h2>
       <div className="text-[11px] text-zinc-600 bg-zinc-900/60 border border-white/5 rounded-xl px-3 py-2">
-        填「我看到多少」就好。
-        {rule && !rule.show_book_qty
-          ? "按老板设置，这里不显示账面数量。"
-          : rule
-            ? "老板已开启显示账面数量。"
-            : ""}
-        数量会拿去校准库存，请如实填写。
+        {t("stocktake.hintMain")}{" "}
+        {rule
+          ? rule.show_book_qty
+            ? t("stocktake.hintBook")
+            : t("stocktake.hintNoBook")
+          : ""}{" "}
+        {t("stocktake.honest")}
       </div>
       {loading ? (
-        <div className="text-sm text-zinc-500">加载中…</div>
+        <div className="text-sm text-zinc-500">{t("common.loading")}</div>
       ) : tasks.length === 0 ? (
         <div className="text-sm text-zinc-500 bg-zinc-900 rounded-2xl p-6 text-center">
-          今天没有你的盘点任务
+          {t("stocktake.none")}
         </div>
       ) : (
-        tasks.map((t) => {
+        tasks.map((tk) => {
           const overdue =
-            (t.status === "pending" || t.status === "drafted") &&
+            (tk.status === "pending" || tk.status === "drafted") &&
             rule?.due_time &&
-            todayStr() >= t.count_date;
+            todayStr() >= tk.count_date;
           return (
             <button
-              key={t.id}
-              onClick={() => setOpenId(t.id)}
+              key={tk.id}
+              onClick={() => setOpenId(tk.id)}
               className={`w-full text-left bg-zinc-900 border rounded-2xl p-4 ${
-                t.status === "rejected"
+                tk.status === "rejected"
                   ? "border-rose-500/40"
                   : overdue
                     ? "border-amber-500/30"
@@ -645,20 +697,26 @@ function StocktakeTab({ session }: { session: StaffInfo }) {
             >
               <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STK_CLS[t.status]}`}
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${STK_CLS[tk.status]}`}
                 >
-                  {STK_LABEL[t.status]}
+                  {t(`st.stk.${tk.status}`)}
                 </span>
-                <span className="text-sm font-semibold">{t.item_name}</span>
-                <span className="text-xs text-zinc-500">{t.unit}</span>
+                <span className="text-sm font-semibold">{tk.item_name}</span>
+                <span className="text-xs text-zinc-500">
+                  {t(`unit.${tk.unit}`) !== `unit.${tk.unit}`
+                    ? t(`unit.${tk.unit}`)
+                    : tk.unit}
+                </span>
                 <span className="ml-auto text-[11px] text-zinc-500">
-                  {t.count_date}
-                  {rule?.due_time ? ` · ${rule.due_time} 前` : ""}
+                  {tk.count_date}
+                  {rule?.due_time
+                    ? " · " + t("stocktake.before", { d: rule.due_time })
+                    : ""}
                 </span>
               </div>
-              {t.status === "rejected" && t.review_note && (
+              {tk.status === "rejected" && tk.review_note && (
                 <div className="text-xs text-rose-400 mt-1">
-                  老板意见：{t.review_note}
+                  {t("tasks.bossNote", { note: tk.review_note })}
                 </div>
               )}
             </button>
@@ -708,24 +766,24 @@ function StocktakeDetail({
       const p = await compressPhoto(f);
       setPhotos((prev) => [...prev, p]);
     } catch {
-      setErr("照片处理失败");
+      setErr(t("common.photoFail"));
     }
     e.target.value = "";
   };
 
   const submit = async (asDraft: boolean) => {
     const trimmed = qty.trim();
-    if (!asDraft && trimmed === "") return setErr("请填写实盘数量（或点暂存）");
+    if (!asDraft && trimmed === "") return setErr(t("stocktake.fillQty"));
     const n = trimmed === "" ? null : Number(trimmed);
     if (n !== null && (!isFinite(n) || n < 0))
-      return setErr("数量要是不小于 0 的数字");
+      return setErr(t("stocktake.badQty"));
     if (
       rule?.require_photo &&
       !asDraft &&
       task.photos.length === 0 &&
       photos.length === 0
     )
-      return setErr("老板要求盘点拍照");
+      return setErr(t("stocktake.photoRequired"));
     setBusy(true);
     const res = await submitStocktakeTask(
       task.id,
@@ -735,12 +793,16 @@ function StocktakeDetail({
       rule?.allow_draft ?? true,
     );
     setBusy(false);
-    if (res === false) setErr("提交失败，检查网络后重试");
+    if (res === false) setErr(t("common.retryFail"));
     else onDone();
   };
 
   const showBook = rule?.show_book_qty && task.book_qty !== null;
   const diff = stocktakeDiff(task.book_qty, qty === "" ? null : Number(qty));
+  const unitDisplay =
+    t(`unit.${task.unit}`) !== `unit.${task.unit}`
+      ? t(`unit.${task.unit}`)
+      : task.unit;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -753,22 +815,22 @@ function StocktakeDetail({
           <span
             className={`ml-auto text-[11px] px-2 py-0.5 rounded-full font-bold ${STK_CLS[task.status]}`}
           >
-            {STK_LABEL[task.status]}
+            {t(`st.stk.${task.status}`)}
           </span>
         </div>
         <div className="text-xs text-zinc-500">
-          单位：{task.unit} · {task.count_date}
+          {t("stocktake.unitLabel", { u: unitDisplay })} · {task.count_date}
           {task.zone ? ` · ${task.zone}` : ""}
         </div>
         {task.status === "rejected" && task.review_note && (
           <div className="text-xs text-rose-400 bg-rose-500/10 rounded-xl px-3 py-2">
-            老板要求复核：{task.review_note}
+            {t("stocktake.recheck", { note: task.review_note })}
           </div>
         )}
 
         <div>
           <div className="text-xs text-zinc-500 mb-1">
-            实盘数量（现在实际有多少 {task.unit}）
+            {t("stocktake.qtyLabel", { u: unitDisplay })}
           </div>
           <div className="flex items-center gap-2 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5">
             <input
@@ -781,15 +843,17 @@ function StocktakeDetail({
                 setQty(e.target.value);
                 setErr("");
               }}
-              placeholder="填数量"
+              placeholder={t("stocktake.qtyPlaceholder")}
               className="flex-1 bg-transparent text-lg font-bold focus:outline-none"
             />
-            <span className="text-zinc-500 text-sm">{task.unit}</span>
+            <span className="text-zinc-500 text-sm">{unitDisplay}</span>
           </div>
           {showBook && diff !== null && (
             <div className="text-[11px] text-zinc-600 mt-1">
-              账面 {task.book_qty} {task.unit}
-              {diff !== 0 && ` · 与账面差 ${diff > 0 ? "+" : ""}${diff}`}
+              {t("stocktake.book", { q: task.book_qty ?? 0, u: unitDisplay })}
+              {diff !== 0 &&
+                " · " +
+                  t("stocktake.diff", { d: (diff > 0 ? "+" : "") + diff })}
             </div>
           )}
         </div>
@@ -797,14 +861,14 @@ function StocktakeDetail({
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="备注：比如临期、破损、位置不对（选填）"
+          placeholder={t("stocktake.notePlaceholder")}
           rows={2}
           className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500"
         />
 
         <div className="flex items-center gap-2 flex-wrap">
           <label className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-zinc-800 text-zinc-200 cursor-pointer">
-            <Camera size={14} /> 拍照/选照片
+            <Camera size={14} /> {t("common.photo")}
             <input
               type="file"
               accept="image/*"
@@ -815,7 +879,7 @@ function StocktakeDetail({
           </label>
           {task.photos.length > 0 && (
             <span className="text-[11px] text-zinc-500">
-              已有 {task.photos.length} 张
+              {t("common.photoExisting", { n: task.photos.length })}
             </span>
           )}
         </div>
@@ -849,7 +913,7 @@ function StocktakeDetail({
               disabled={busy}
               className="flex-1 py-3 font-semibold text-zinc-200 bg-zinc-800 rounded-xl disabled:opacity-50"
             >
-              暂存（盘到一半）
+              {t("stocktake.draft")}
             </button>
           )}
           <button
@@ -857,7 +921,7 @@ function StocktakeDetail({
             disabled={busy}
             className="flex-1 py-3 font-bold text-white bg-green-600 hover:bg-green-500 rounded-xl disabled:opacity-50"
           >
-            {busy ? "提交中…" : "提交盘点"}
+            {busy ? t("common.submitting") : t("stocktake.submit")}
           </button>
         </div>
       </div>
@@ -867,6 +931,7 @@ function StocktakeDetail({
 
 // ───────────────────────── 采购申报 ─────────────────────────
 
+/** 规范值（存库用）= 中文键；显示时经 t() 翻译 */
 const UNITS = ["kg", "g", "L", "ml", "个", "箱", "包", "袋", "桶", "瓶"];
 const CATEGORIES = [
   "蔬菜",
@@ -878,6 +943,11 @@ const CATEGORIES = [
   "耗材",
   "其他",
 ];
+
+const unitDisplayOf = (u: string) =>
+  t(`unit.${u}`) !== `unit.${u}` ? t(`unit.${u}`) : u;
+const catDisplayOf = (c: string) =>
+  t(`cat.${c}`) !== `cat.${c}` ? t(`cat.${c}`) : c;
 
 function PurchaseTab({ session }: { session: StaffInfo }) {
   const [list, setList] = useState<PurchaseRequest[]>([]);
@@ -898,7 +968,7 @@ function PurchaseTab({ session }: { session: StaffInfo }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-bold">采购申报</h2>
+        <h2 className="text-lg font-bold">{t("purchase.title")}</h2>
         <button
           onClick={() => {
             setEditing(null);
@@ -906,14 +976,14 @@ function PurchaseTab({ session }: { session: StaffInfo }) {
           }}
           className="ml-auto flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 rounded-xl"
         >
-          <ShoppingCart size={15} /> 申报要买的
+          <ShoppingCart size={15} /> {t("purchase.new")}
         </button>
       </div>
       {loading ? (
-        <div className="text-sm text-zinc-500">加载中…</div>
+        <div className="text-sm text-zinc-500">{t("common.loading")}</div>
       ) : list.length === 0 ? (
         <div className="text-sm text-zinc-500 bg-zinc-900 rounded-2xl p-6 text-center">
-          还没有申报过，点右上角「申报要买的」
+          {t("purchase.none")}
         </div>
       ) : (
         list.map((r) => (
@@ -925,25 +995,27 @@ function PurchaseTab({ session }: { session: StaffInfo }) {
               <span
                 className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${PUR_CLS[r.status]}`}
               >
-                {PUR_LABEL[r.status]}
+                {t(`st.pur.${r.status}`)}
               </span>
               {r.urgency === "urgent" && (
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 font-bold">
-                  紧急
+                  {t("purchase.urgent")}
                 </span>
               )}
               <span className="text-sm font-semibold">{r.item_name}</span>
               <span className="text-sm text-zinc-300">
-                {r.quantity} {r.unit}
+                {r.quantity} {unitDisplayOf(r.unit)}
               </span>
             </div>
             {r.status === "rejected" && r.reject_reason && (
               <div className="text-xs text-rose-400 mt-1">
-                驳回原因：{r.reject_reason}
+                {t("purchase.rejectedReason", { r: r.reject_reason })}
               </div>
             )}
             {r.status === "purchased" && (
-              <div className="text-[11px] text-green-500 mt-1">已采购 ✓</div>
+              <div className="text-[11px] text-green-500 mt-1">
+                {t("purchase.purchasedDone")}
+              </div>
             )}
             {r.status === "rejected" && (
               <button
@@ -953,7 +1025,7 @@ function PurchaseTab({ session }: { session: StaffInfo }) {
                 }}
                 className="mt-2 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-200"
               >
-                修改后重新提交
+                {t("purchase.fixResubmit")}
               </button>
             )}
           </div>
@@ -1005,14 +1077,14 @@ function RequestForm({
       const p = await compressPhoto(f);
       setPhotos((prev) => [...prev, p]);
     } catch {
-      setErr("照片处理失败");
+      setErr(t("common.photoFail"));
     }
     e.target.value = "";
   };
 
   const submit = async () => {
-    if (!name.trim()) return setErr("填写要买什么");
-    if (!qty.trim() || !(Number(qty) > 0)) return setErr("填写数量");
+    if (!name.trim()) return setErr(t("purchase.fillItem"));
+    if (!qty.trim() || !(Number(qty) > 0)) return setErr(t("purchase.fillQty"));
     setBusy(true);
     const payload = {
       item_name: name.trim(),
@@ -1029,7 +1101,7 @@ function RequestForm({
       : await createPurchaseRequest(session, payload);
     setBusy(false);
     if (ok) onDone();
-    else setErr("提交失败，检查网络后重试");
+    else setErr(t("common.retryFail"));
   };
 
   return (
@@ -1040,13 +1112,13 @@ function RequestForm({
             <ChevronLeft size={20} />
           </button>
           <div className="font-bold">
-            {editing ? "修改采购申报" : "采购申报（明天要买的）"}
+            {editing ? t("purchase.formEdit") : t("purchase.formNew")}
           </div>
         </div>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="要买什么，如：洋葱"
+          placeholder={t("purchase.itemPlaceholder")}
           className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500"
         />
         <div className="flex gap-2">
@@ -1057,7 +1129,7 @@ function RequestForm({
             step="any"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
-            placeholder="数量"
+            placeholder={t("purchase.qty")}
             className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500"
           />
           <select
@@ -1066,7 +1138,9 @@ function RequestForm({
             className="bg-zinc-950 border border-white/10 rounded-xl px-3 text-sm text-white"
           >
             {UNITS.map((u) => (
-              <option key={u}>{u}</option>
+              <option key={u} value={u}>
+                {unitDisplayOf(u)}
+              </option>
             ))}
           </select>
         </div>
@@ -1081,11 +1155,11 @@ function RequestForm({
                   : "bg-zinc-950 border-white/5 text-zinc-500"
               }`}
             >
-              {c}
+              {catDisplayOf(c)}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setUrgent(!urgent)}
             className={`px-3 py-2 rounded-xl text-xs font-semibold ${
@@ -1094,10 +1168,10 @@ function RequestForm({
                 : "bg-zinc-950 border border-white/5 text-zinc-500"
             }`}
           >
-            {urgent ? "🔥 紧急（今天就要）" : "不紧急"}
+            {urgent ? t("purchase.urgent") : t("purchase.notUrgent")}
           </button>
           <label className="flex items-center gap-1.5 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-400">
-            期望到货
+            {t("purchase.expected")}
             <input
               type="date"
               value={expected}
@@ -1109,12 +1183,12 @@ function RequestForm({
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="用途/备注（选填）"
+          placeholder={t("purchase.notePlaceholder")}
           rows={2}
           className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500"
         />
         <label className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-zinc-800 text-zinc-200 cursor-pointer">
-          <Camera size={14} /> 拍照（选填）
+          <Camera size={14} /> {t("purchase.photo")}
           <input
             type="file"
             accept="image/*"
@@ -1150,11 +1224,13 @@ function RequestForm({
           disabled={busy}
           className="w-full py-3 font-bold text-white bg-green-600 hover:bg-green-500 rounded-xl disabled:opacity-50"
         >
-          {busy ? "提交中…" : editing ? "重新提交" : "提交申报"}
+          {busy
+            ? t("common.submitting")
+            : editing
+              ? t("common.resubmit")
+              : t("purchase.submit")}
         </button>
-        <div className="text-[11px] text-zinc-600">
-          老板审批后会汇总采购；这里看不到价格和供应商信息。
-        </div>
+        <div className="text-[11px] text-zinc-600">{t("purchase.note")}</div>
       </div>
     </div>
   );
@@ -1165,15 +1241,15 @@ function RequestForm({
 function MeTab({ session }: { session: StaffInfo }) {
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold">我的资料</h2>
+      <h2 className="text-lg font-bold">{t("me.title")}</h2>
       <div className="bg-zinc-900 border border-white/5 rounded-2xl divide-y divide-white/5">
         {[
-          { label: "姓名", value: session.name },
+          { label: t("me.name"), value: session.name },
           {
-            label: "岗位",
-            value: session.roles.map((r) => ROLE_LABEL[r] || r).join("、"),
+            label: t("me.roles"),
+            value: session.roles.map((r) => t(`role.${r}`)).join("、"),
           },
-          { label: "账号状态", value: "在职" },
+          { label: t("me.status"), value: t("me.active") },
         ].map((row) => (
           <div key={row.label} className="flex items-center px-4 py-3.5">
             <span className="text-sm text-zinc-500">{row.label}</span>
@@ -1182,7 +1258,7 @@ function MeTab({ session }: { session: StaffInfo }) {
         ))}
       </div>
       <div className="bg-zinc-900/60 border border-white/5 rounded-2xl px-4 py-3 text-[11px] text-zinc-600">
-        修改姓名/岗位/密码请联系老板。登录有效期 7 天。
+        {t("me.note")}
       </div>
     </div>
   );
