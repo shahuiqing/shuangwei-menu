@@ -993,6 +993,22 @@ ON CONFLICT (category) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_stocktake_category_rules_cat ON public.stocktake_category_rules (category);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.8 任务按天自动派发
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 模板开关：开启后每天首次打开老板端时，按模板岗位自动派发给在职员工
+ALTER TABLE public.task_templates
+  ADD COLUMN IF NOT EXISTS auto_dispatch BOOLEAN NOT NULL DEFAULT false;
+
+-- 任务记录派发日（手动派发为空；自动派发用于当天去重）
+ALTER TABLE public.staff_tasks
+  ADD COLUMN IF NOT EXISTS dispatch_day DATE;
+
+-- 同一模板、同一天、同一员工只允许一条自动任务（重复执行自动派发不会重复生成）
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_tasks_auto_daily
+  ON public.staff_tasks (template_id, dispatch_day, assigned_to)
+  WHERE template_id IS NOT NULL AND dispatch_day IS NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 6.7 安全加固：员工密码哈希不再暴露给前端
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

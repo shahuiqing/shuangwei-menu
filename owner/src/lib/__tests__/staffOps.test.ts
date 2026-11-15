@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   expandRoleAssignees,
   pickDailyStocktakeItems,
+  planAutoDispatch,
   stocktakeDiff,
   dueFromHours,
   isOverdue,
   type StaffMember,
+  type TaskTemplate,
 } from "../staffOps";
 
 const staff: StaffMember[] = [
@@ -153,5 +155,78 @@ describe("差异与逾期", () => {
     expect(isOverdue(due, now - 1)).toBe(false);
     expect(isOverdue(due, now + 3 * 3600_000)).toBe(true);
     expect(isOverdue(null)).toBe(false);
+  });
+});
+
+describe("任务按天自动派发 · planAutoDispatch", () => {
+  const tpl = (over: Partial<TaskTemplate>): TaskTemplate => ({
+    id: "t1",
+    name: "开档清洁",
+    task_type: "daily",
+    roles: ["waiter"],
+    checklist: [{ text: "擦桌子" }],
+    require_photo: false,
+    due_hours: 4,
+    description: "",
+    auto_dispatch: true,
+    ...over,
+  });
+
+  it("只处理开启自动且有岗位的模板", () => {
+    const res = planAutoDispatch(
+      [
+        tpl({ id: "t1" }),
+        tpl({ id: "t2", auto_dispatch: false }),
+        tpl({ id: "t3", roles: [] }),
+      ],
+      staff,
+      "2026-11-15",
+      [],
+    );
+    expect(new Set(res.map((r) => r.templateId))).toEqual(new Set(["t1"]));
+  });
+
+  it("按岗位展开到在职员工（停用不派）", () => {
+    const res = planAutoDispatch(
+      [tpl({ id: "t1", roles: ["waiter"] })],
+      staff,
+      "2026-11-15",
+      [],
+    );
+    const ids = new Set(res.map((r) => r.staffId));
+    expect(ids).toEqual(new Set(["a", "b"]));
+    expect(ids.has("c")).toBe(false); // 停用
+  });
+
+  it("同一天已派过的 (模板,员工) 不重复派", () => {
+    const res = planAutoDispatch(
+      [tpl({ id: "t1", roles: ["waiter"] })],
+      staff,
+      "2026-11-15",
+      [
+        {
+          template_id: "t1",
+          assigned_to: "a",
+          dispatch_day: "2026-11-15",
+        },
+      ],
+    );
+    expect(res.map((r) => r.staffId)).toEqual(["b"]);
+  });
+
+  it("其他日期的记录不影响今天", () => {
+    const res = planAutoDispatch(
+      [tpl({ id: "t1", roles: ["waiter"] })],
+      staff,
+      "2026-11-15",
+      [
+        {
+          template_id: "t1",
+          assigned_to: "a",
+          dispatch_day: "2026-11-14",
+        },
+      ],
+    );
+    expect(res).toHaveLength(2);
   });
 });

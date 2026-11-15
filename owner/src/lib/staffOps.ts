@@ -6,6 +6,7 @@
  * 员工端(/staff.html)只查询这几张表，绝不触碰经营/成本/供应商数据。
  */
 import { supabase, isConfigured } from "./supabase";
+import { businessDayKey } from "./businessDay";
 
 // ───────────────────────── 类型 ─────────────────────────
 
@@ -60,6 +61,8 @@ export interface TaskTemplate {
   require_photo: boolean;
   due_hours: number;
   description: string;
+  /** 每天自动派发（打开老板端时触发，一天一次） */
+  auto_dispatch?: boolean;
 }
 
 export interface StaffTask {
@@ -596,6 +599,7 @@ export async function upsertTaskTemplate(
     require_photo: !!tpl.require_photo,
     due_hours: tpl.due_hours ?? 8,
     description: tpl.description || "",
+    auto_dispatch: !!tpl.auto_dispatch,
   };
   if (tpl.id) {
     const { error } = await supabase
@@ -626,6 +630,8 @@ export interface DispatchInput {
   assigneeIds?: string[]; // 或指定员工
   due_hours?: number;
   template_id?: string;
+  /** 自动派发的营业日（手动派发留空） */
+  dispatch_day?: string;
 }
 
 /** 派发：按岗位展开为每人一条；返回成功条数 */
@@ -646,6 +652,7 @@ export async function dispatchTasks(input: DispatchInput): Promise<number> {
   const rows = targets.map((s) => ({
     batch_id: batchId,
     template_id: input.template_id || null,
+    dispatch_day: input.dispatch_day || null,
     title: input.title.trim(),
     description: input.description || "",
     checklist: (input.checklist || []).map((c) => ({
@@ -675,6 +682,111 @@ export async function fetchStaffTasks(): Promise<StaffTask[]> {
     .limit(500);
   if (!warn("fetchStaffTasks", error)) return [];
   return data || [];
+}
+
+// ───────────────────────── 任务按天自动派发 ─────────────────────────
+
+export interface AutoDispatchTask {
+  templateId: string;
+  staffId: string;
+  staffName: string;
+  staffRoles: Role[];
+  title: string;
+  description: string;
+  checklist: ChecklistItem[];
+  require_photo: boolean;
+  due_hours: number;
+}
+
+/**
+ * 计算某天还缺哪些自动任务（纯函数）：
+ * - 只处理开启 auto_dispatch 且有岗位的模板
+ * - 按模板岗位展开到在职员工
+ * - 已存在（同模板+同员工+同一天）的不再重复生成
+ */
+export function planAutoDispatch(
+  templates: TaskTemplate[],
+  staff: StaffMember[],
+  day: string,
+  existing: {
+    template_id: string | null;
+    assigned_to: string | null;
+    dispatch_day: string | null;
+  }[],
+): AutoDispatchTask[] {
+  const done = new Set(
+    existing
+      .filter((e) => e.dispatch_day === day && e.template_id && e.assigned_to)
+      .map((e) => `${e.template_id}|${e.assigned_to}`),
+  );
+  const out: AutoDispatchTask[] = [];
+  for (const tpl of templates) {
+    if (!tpl.auto_dispatch || !tpl.id || !(tpl.roles || []).length) continue;
+    for (const s of expandRoleAssignees(tpl.roles, staff)) {
+      if (done.has(`${tpl.id}|${s.id}`)) continue;
+      out.push({
+        templateId: tpl.id,
+        staffId: s.id,
+        staffName: s.name,
+        staffRoles: s.roles,
+        title: tpl.name,
+        description: tpl.description || "",
+        checklist: (tpl.checklist || []).map((c) => ({ text: c.text })),
+        require_photo: !!tpl.require_photo,
+        due_hours: tpl.due_hours ?? 8,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * 执行当天自动派发（幂等：数据库唯一索引 + 预计算去重）。
+ * 返回 ok=false 时调用方不要标记「今天已完成」，下次打开会重试。
+ */
+export async function runAutoDispatch(
+  day = businessDayKey(Date.now()),
+): Promise<{ ok: boolean; count: number }> {
+  if (!supabase || !isConfigured) return { ok: false, count: 0 };
+  const [templates, staff] = await Promise.all([
+    fetchTaskTemplates(),
+    fetchStaffMembers(),
+  ]);
+  const { data: existing, error } = await supabase
+    .from("staff_tasks")
+    .select("template_id,assigned_to,dispatch_day")
+    .eq("dispatch_day", day)
+    .limit(1000);
+  if (error) {
+    warn("runAutoDispatch/existing", error);
+    return { ok: false, count: 0 };
+  }
+  const plan = planAutoDispatch(templates, staff, day, existing || []);
+  if (plan.length === 0) return { ok: true, count: 0 };
+
+  const now = new Date().toISOString();
+  const rows = plan.map((p) => ({
+    batch_id: `auto-${p.templateId}-${day}`,
+    template_id: p.templateId,
+    dispatch_day: day,
+    title: p.title,
+    description: p.description,
+    checklist: p.checklist.map((c) => ({ text: c.text, done: false })),
+    require_photo: p.require_photo,
+    priority: "normal",
+    assigned_to: p.staffId,
+    assignee_name: p.staffName,
+    assignee_roles: p.staffRoles,
+    due_at: dueFromHours(p.due_hours),
+    status: "pending",
+    created_at: now,
+  }));
+  const { error: insErr } = await supabase.from("staff_tasks").insert(rows);
+  if (insErr) {
+    warn("runAutoDispatch", insErr);
+    return { ok: false, count: 0 };
+  }
+  return { ok: true, count: rows.length };
 }
 
 /** 验收：通过 / 驳回（驳回后员工端可重新提交） */

@@ -38,8 +38,10 @@ import { isConfigured, STORE_NAME } from "./lib/supabase";
 import {
   loadStaffSession,
   clearStaffSession,
+  runAutoDispatch,
   type StaffSession,
 } from "./lib/staffOps";
+import { todayKey } from "./lib/businessDay";
 import { Main as StaffMain } from "./staff/App";
 import { fetchSettings } from "./lib/data";
 import { initCloudSync } from "./lib/cloudSync";
@@ -149,6 +151,28 @@ export default function App() {
       initCloudSync();
     }
   }, [authed, load]);
+
+  // 任务按天自动派发：每天首次打开老板端时执行一次；失败不标记，下次打开重试
+  useEffect(() => {
+    if (!authed || !isConfigured) return;
+    const day = todayKey();
+    const key = "owner:auto-dispatch-day";
+    try {
+      if (localStorage.getItem(key) === day) return;
+    } catch {
+      /* ignore */
+    }
+    (async () => {
+      const res = await runAutoDispatch(day);
+      if (!res.ok) return;
+      try {
+        localStorage.setItem(key, day);
+      } catch {
+        /* ignore */
+      }
+      if (res.count > 0) console.info(`[owner] 自动派发任务 ${res.count} 条`);
+    })();
+  }, [authed]);
 
   // PWA：断网期间看的是缓存，恢复联网立即重新拉取并通知各页刷新
   useEffect(() => {

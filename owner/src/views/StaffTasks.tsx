@@ -10,6 +10,7 @@ import {
   Clock,
   AlertTriangle,
   Layers,
+  Zap,
 } from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -22,6 +23,7 @@ import {
   fetchStaffTasks,
   reviewStaffTask,
   cancelStaffTask,
+  runAutoDispatch,
   ROLES,
   ROLE_LABEL,
   TASK_STATUS_LABEL,
@@ -119,6 +121,7 @@ export default function StaffTasks({ version = 0 }: { version?: number }) {
   const [pickedRoles, setPickedRoles] = useState<Role[]>([]);
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [dispatching, setDispatching] = useState(false);
+  const [autoRunning, setAutoRunning] = useState(false);
 
   // 看板
   const [filter, setFilter] = useState<string>("all");
@@ -139,6 +142,20 @@ export default function StaffTasks({ version = 0 }: { version?: number }) {
   useEffect(() => {
     load();
   }, [version]);
+
+  /** 立即执行今天的自动派发（每天自动触发失败时可手动补） */
+  const runAutoNow = async () => {
+    setAutoRunning(true);
+    const res = await runAutoDispatch();
+    setAutoRunning(false);
+    if (!res.ok) return toast.error("自动派发失败，请检查数据库权限");
+    toast.success(
+      res.count > 0
+        ? `已自动派发 ${res.count} 条任务`
+        : "今天没有需要自动派发的任务（或已派发过）",
+    );
+    load();
+  };
 
   const loadTpl = (id: string) => {
     setTplId(id);
@@ -250,6 +267,19 @@ export default function StaffTasks({ version = 0 }: { version?: number }) {
             subtitle="点模板自动填入下方派发表单"
             action={<ClipboardList size={18} className="text-orange-500" />}
           >
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <span className="text-[11px] text-zinc-500">
+                开启「每日自动」的模板，会在你每天首次打开老板端时，按岗位自动派发给在职员工（一天一次，不重复）。
+              </span>
+              <button
+                onClick={runAutoNow}
+                disabled={autoRunning}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                <Zap size={13} />
+                {autoRunning ? "执行中…" : "立即执行今日自动派发"}
+              </button>
+            </div>
             {templates.length === 0 ? (
               <div className="space-y-3">
                 <EmptyState text="暂无模板，可用下方预设一键导入" />
@@ -290,6 +320,24 @@ export default function StaffTasks({ version = 0 }: { version?: number }) {
                           : ""}
                       </div>
                     </div>
+                    <button
+                      onClick={async () => {
+                        const ok = await upsertTaskTemplate({
+                          ...t,
+                          auto_dispatch: !t.auto_dispatch,
+                        });
+                        if (ok) load();
+                        else toast.error("设置失败");
+                      }}
+                      title="开启后每天自动派发给该岗位的在职员工"
+                      className={`shrink-0 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg ${
+                        t.auto_dispatch
+                          ? "bg-orange-600/20 text-orange-400"
+                          : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      {t.auto_dispatch ? "每日自动 ✓" : "手动"}
+                    </button>
                     <button
                       onClick={() => loadTpl(t.id)}
                       className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-orange-600 text-white"
