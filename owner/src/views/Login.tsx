@@ -1,6 +1,13 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Lock, ShieldCheck, Eye, EyeOff, AlertCircle } from "lucide-react";
+import {
+  Lock,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  User,
+} from "lucide-react";
 import {
   verifyOwnerPassword,
   markAuthed,
@@ -10,20 +17,50 @@ import {
   MIN_PASSWORD_LEN,
 } from "../lib/auth";
 import { STORE_NAME } from "../lib/supabase";
+import {
+  staffLogin,
+  saveStaffSession,
+  type StaffSession,
+} from "../lib/staffOps";
 
 const fieldCls =
   "w-full bg-zinc-950/80 border border-white/[0.07] rounded-xl pl-11 pr-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/70 focus:ring-4 focus:ring-orange-500/15 focus:bg-zinc-950 transition-all";
 
-export default function Login({ onDone }: { onDone: () => void }) {
+export default function Login({
+  onDone,
+  onStaffOk,
+}: {
+  onDone: () => void;
+  onStaffOk?: (s: Omit<StaffSession, "exp">) => void;
+}) {
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [err, setErr] = useState("");
-  const [mode, setMode] = useState<"login" | "change" | "setup">(() =>
-    needsPasswordSetup() ? "setup" : "login",
+  const [mode, setMode] = useState<"login" | "change" | "setup" | "staff">(
+    () => (needsPasswordSetup() ? "setup" : "login"),
   );
   const [newPw, setNewPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState(false);
+  const [staffName, setStaffName] = useState("");
+  const [staffPw, setStaffPw] = useState("");
+
+  const handleStaffLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!staffName.trim() || !staffPw) {
+      setErr("请输入姓名和密码");
+      return;
+    }
+    setBusy(true);
+    const s = await staffLogin(staffName, staffPw);
+    setBusy(false);
+    if (s && onStaffOk) {
+      saveStaffSession(s);
+      onStaffOk(s);
+    } else {
+      setErr("登录失败：姓名或密码错误，或账号已停用");
+    }
+  };
 
   const handleSetup = (e: FormEvent) => {
     e.preventDefault();
@@ -168,6 +205,80 @@ export default function Login({ onDone }: { onDone: () => void }) {
               >
                 已有密码？直接登录
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("staff");
+                  setErr("");
+                }}
+                className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
+              >
+                我是员工，进入员工端 →
+              </button>
+            </form>
+          ) : mode === "staff" ? (
+            <form onSubmit={handleStaffLogin} className="space-y-3.5">
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <User size={16} className="text-orange-500" />
+                员工登录 · 只能看自己的任务/盘点/申报
+              </div>
+              <input
+                value={staffName}
+                autoFocus
+                onChange={(e) => {
+                  setStaffName(e.target.value);
+                  setErr("");
+                }}
+                placeholder="姓名"
+                className={fieldCls.replace("pl-11", "pl-4")}
+              />
+              <div className="relative">
+                <Lock
+                  size={17}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none"
+                />
+                <input
+                  type={show ? "text" : "password"}
+                  value={staffPw}
+                  onChange={(e) => {
+                    setStaffPw(e.target.value);
+                    setErr("");
+                  }}
+                  placeholder="密码"
+                  className={fieldCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((s) => !s)}
+                  aria-label="显示/隐藏密码"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-300 flex items-center justify-center transition-colors"
+                >
+                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {err && (
+                <p className="flex items-center gap-1.5 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  {err}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 active:scale-[0.98] transition-transform disabled:opacity-50"
+              >
+                {busy ? "验证中…" : "员工登录"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(needsPasswordSetup() ? "setup" : "login");
+                  setErr("");
+                }}
+                className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
+              >
+                返回老板登录
+              </button>
             </form>
           ) : mode === "login" ? (
             <form onSubmit={handleLogin} className="space-y-3.5">
@@ -238,6 +349,16 @@ export default function Login({ onDone }: { onDone: () => void }) {
               >
                 修改密码
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("staff");
+                  setErr("");
+                }}
+                className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors border-t border-white/5 mt-1 pt-3"
+              >
+                我是员工，进入员工端 →
+              </button>
             </form>
           ) : (
             <form onSubmit={handleChange} className="space-y-3.5">
@@ -303,6 +424,16 @@ export default function Login({ onDone }: { onDone: () => void }) {
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
                 返回登录
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("staff");
+                  setErr("");
+                }}
+                className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
+              >
+                我是员工，进入员工端 →
               </button>
             </form>
           )}

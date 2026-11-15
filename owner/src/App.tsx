@@ -35,6 +35,12 @@ import { ToastHost } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isAuthed, clearAuthed } from "./lib/auth";
 import { isConfigured, STORE_NAME } from "./lib/supabase";
+import {
+  loadStaffSession,
+  clearStaffSession,
+  type StaffSession,
+} from "./lib/staffOps";
+import { Main as StaffMain } from "./staff/App";
 import { fetchSettings } from "./lib/data";
 import { initCloudSync } from "./lib/cloudSync";
 import {
@@ -82,6 +88,10 @@ function mergeRecent(prev: any[], c: OrderChange): any[] {
 
 export default function App() {
   const [authed, setAuthed] = useState(() => isAuthed());
+  const [staffSession, setStaffSession] = useState<Omit<
+    StaffSession,
+    "exp"
+  > | null>(() => (isAuthed() ? null : loadStaffSession()));
   const [tab, setTab] = useState<OwnerTab>("dashboard");
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -211,9 +221,27 @@ export default function App() {
   }, [authed, load]);
 
   if (!authed) {
+    if (staffSession) {
+      // 员工已登录（老板端登录页进入），直接展示员工界面
+      return (
+        <>
+          <StaffMain
+            session={staffSession}
+            onLogout={() => {
+              clearStaffSession();
+              setStaffSession(null);
+            }}
+          />
+          <ToastHost />
+        </>
+      );
+    }
     return (
       <>
-        <Login onDone={() => setAuthed(true)} />
+        <Login
+          onDone={() => setAuthed(true)}
+          onStaffOk={(s) => setStaffSession(s)}
+        />
         <ToastHost />
       </>
     );

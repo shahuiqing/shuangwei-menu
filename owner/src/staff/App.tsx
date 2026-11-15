@@ -170,7 +170,8 @@ function Login({ onOk }: { onOk: (s: StaffInfo) => void }) {
 
 // ───────────────────────── 主框架 ─────────────────────────
 
-function Main({
+/** 员工主界面：员工端(/staff.html)与老板端登录页共用 */
+export function Main({
   session,
   onLogout,
 }: {
