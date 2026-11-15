@@ -9,6 +9,8 @@ import {
   History,
   User as UserIcon,
   Save,
+  ArrowRightLeft,
+  Eye,
 } from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
@@ -23,8 +25,25 @@ import {
   reviewStocktakeTask,
   pickDailyStocktakeItems,
   stocktakeDiff,
+  fetchStaffMembers,
+  fetchStocktakeCategoryRules,
+  upsertStocktakeCategoryRule,
+  deleteStocktakeCategoryRule,
+  fetchLastCountedBy,
+  autoAssignStocktakes,
+  applyStocktakeAutoAssign,
+  resetStocktakeAssignments,
+  transferStocktakeTasks,
+  ROLE_LABEL,
+  SPLIT_MODE_LABEL,
+  ASSIGN_REASON_LABEL,
   type StocktakeRule,
   type StocktakeTask,
+  type StocktakeCategoryRule,
+  type SplitMode,
+  type Role,
+  type StaffMember,
+  type AutoAssignResult,
 } from "../lib/staffOps";
 
 const STK_CLS: Record<string, string> = {
@@ -56,6 +75,14 @@ export default function Stocktake() {
   const [historyDate, setHistoryDate] = useState(todayStr());
   const [history, setHistory] = useState<StocktakeTask[] | null>(null);
   const [adHocItemId, setAdHocItemId] = useState("");
+  // 分类自动派发
+  const [catRules, setCatRules] = useState<StocktakeCategoryRule[]>([]);
+  const [members, setMembers] = useState<StaffMember[]>([]);
+  const [preview, setPreview] = useState<AutoAssignResult | null>(null);
+  const [dispatching, setDispatching] = useState(false);
+  const [newCat, setNewCat] = useState("");
+  const [transferFrom, setTransferFrom] = useState("");
+  const [transferTo, setTransferTo] = useState("");
 
   const today = todayStr();
   const todayTasks = useMemo(
@@ -65,14 +92,18 @@ export default function Stocktake() {
 
   const load = async () => {
     setLoading(true);
-    const [r, inv, t] = await Promise.all([
+    const [r, inv, t, cr, m] = await Promise.all([
       fetchStocktakeRule(),
       fetchInventory(),
       fetchStocktakeTasks(),
+      fetchStocktakeCategoryRules(),
+      fetchStaffMembers(),
     ]);
     setRule(r);
     setItems(inv);
     setTasks(t);
+    setCatRules(cr);
+    setMembers(m);
     setLoading(false);
   };
 
@@ -141,17 +172,126 @@ export default function Stocktake() {
       load();
   };
 
-  // 员工名单（指派用）
-  const [staffList, setStaffList] = useState<{ id: string; name: string }[]>(
-    [],
+  // 员工名单（指派下拉用）
+  const staffList = useMemo(
+    () =>
+      members
+        .filter((m) => m.status === "active")
+        .map((m) => ({ id: m.id, name: m.name })),
+    [members],
   );
-  useEffect(() => {
-    (async () => {
-      const { fetchStaffMembers } = await import("../lib/staffOps");
-      const s = await fetchStaffMembers();
-      setStaffList(s.filter((x) => x.status === "active"));
-    })();
-  }, []);
+
+  // ─────────── 分类→角色→人 自动派发 ───────────
+
+  /** 参与自动派发的物品：今日未指派且未开始的任务 */
+  const autoItems = useMemo(
+    () =>
+      todayTasks
+        .filter(
+          (t) =>
+            !t.assigned_to &&
+            (t.status === "pending" || t.status === "drafted"),
+        )
+        .map((t) => {
+          const inv = items.find((i) => i.id === t.item_id);
+          return {
+            itemId: t.item_id,
+            category: inv?.category || "",
+            zone: t.zone || inv?.zone || "",
+            lastStaffId: null as string | null,
+          };
+        }),
+    [todayTasks, items],
+  );
+
+  /** 生成当前映射下的分配结果（不写库） */
+  const computeAssign = async (): Promise<AutoAssignResult> => {
+    const lastBy = await fetchLastCountedBy(autoItems.map((i) => i.itemId));
+    return autoAssignStocktakes(
+      autoItems.map((it) => ({
+        ...it,
+        lastStaffId: lastBy[it.itemId] || null,
+      })),
+      catRules,
+      members,
+      today,
+    );
+  };
+
+  const runPreview = async () => {
+    const res = await computeAssign();
+    setPreview(res);
+    if (autoItems.length === 0)
+      toast.info("今日没有待派发的盘点任务，先生成清单");
+  };
+
+  /** 一键派发；reset=true 时先撤回今日未开始的指派再重派 */
+  const dispatch = async (reset: boolean) => {
+    if (reset) {
+      const n = await resetStocktakeAssignments(today);
+      if (n > 0) toast.info(`已撤回 ${n} 条未开始任务的指派`);
+    }
+    setDispatching(true);
+    const res = await computeAssign();
+    const n = await applyStocktakeAutoAssign(today, res.assignments);
+    setDispatching(false);
+    setPreview(res);
+    n > 0
+      ? toast.success(`已按分类派发 ${n} 条到人`)
+      : toast.error(
+          res.assignments.length > 0
+            ? "没有可派发的任务（可能都已指派）"
+            : "未匹配到派发结果，请检查映射和在职员工",
+        );
+    load();
+  };
+
+  /** 保存单条映射（改角色/拆分方式/启用开关即时保存） */
+  const saveCatRule = async (r: StocktakeCategoryRule) => {
+    const ok = await upsertStocktakeCategoryRule(r);
+    if (!ok) return toast.error("映射保存失败");
+    setCatRules(await fetchStocktakeCategoryRules());
+  };
+
+  const removeCatRule = async (r: StocktakeCategoryRule) => {
+    if (!r.id) return toast.error("该映射还未保存过，直接修改即可");
+    if (!confirm(`删除「${r.category}」的派发映射？`)) return;
+    if (await deleteStocktakeCategoryRule(r.id))
+      setCatRules(await fetchStocktakeCategoryRules());
+    else toast.error("删除失败");
+  };
+
+  const addCatRule = async () => {
+    const cat = newCat.trim();
+    if (!cat) return toast.error("填写分类名");
+    if (catRules.some((r) => r.category === cat))
+      return toast.error("该分类已有映射");
+    await saveCatRule({
+      category: cat,
+      roles: [],
+      split_mode: "average",
+      enabled: true,
+    });
+    setNewCat("");
+  };
+
+  const doTransfer = async () => {
+    if (!transferFrom || !transferTo) return toast.error("选择转出和接收人");
+    if (transferFrom === transferTo) return toast.error("不能转给自己");
+    const from = members.find((m) => m.id === transferFrom);
+    const to = members.find((m) => m.id === transferTo);
+    if (!from || !to) return;
+    if (!confirm(`把「${from.name}」所有未完成的盘点任务转给「${to.name}」？`))
+      return;
+    const n = await transferStocktakeTasks(from.id, {
+      id: to.id,
+      name: to.name,
+    });
+    n > 0
+      ? toast.success(`已转派 ${n} 条任务给「${to.name}」`)
+      : toast.error("没有可转派的任务");
+    load();
+  };
 
   const review = async (t: StocktakeTask, approve: boolean) => {
     let note = "";
@@ -273,6 +413,21 @@ export default function Stocktake() {
               {rule.show_book_qty ? "✓ 显示账面数" : "不显示账面数"}
             </button>
             <button
+              onClick={() =>
+                setRule({
+                  ...rule,
+                  auto_by_category: !rule.auto_by_category,
+                })
+              }
+              className={`px-3 py-2 rounded-xl text-xs font-semibold ${
+                rule.auto_by_category
+                  ? "bg-orange-500/15 text-orange-400"
+                  : "bg-zinc-950 border border-white/5 text-zinc-500"
+              }`}
+            >
+              {rule.auto_by_category ? "✓ 按分类自动派发" : "按分类自动派发"}
+            </button>
+            <button
               onClick={saveRule}
               disabled={savingRule}
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-500 rounded-xl disabled:opacity-50"
@@ -287,6 +442,236 @@ export default function Stocktake() {
           </div>
         </ChartCard>
       )}
+
+      {/* 按分类自动派发：分类→责任角色→拆分到人 */}
+      <ChartCard
+        title="按分类自动派发"
+        subtitle="食品类→帮厨，餐具/卫生用品→服务员；按角色在职人数拆分，责任到人"
+        action={<Wand2 size={18} className="text-orange-500" />}
+      >
+        {/* 映射编辑 */}
+        <div className="space-y-2">
+          {catRules.map((r) => (
+            <div
+              key={r.category}
+              className={`bg-zinc-950 rounded-xl px-3.5 py-3 flex flex-wrap items-center gap-2 ${
+                r.enabled ? "" : "opacity-50"
+              }`}
+            >
+              <span className="text-sm font-semibold text-zinc-100 min-w-[56px]">
+                {r.category}
+              </span>
+              <span className="text-zinc-600 text-xs">→</span>
+              {(["waiter", "helper", "cleaner", "other"] as Role[]).map(
+                (role) => (
+                  <button
+                    key={role}
+                    onClick={() =>
+                      saveCatRule({
+                        ...r,
+                        roles: r.roles.includes(role)
+                          ? r.roles.filter((x) => x !== role)
+                          : [...r.roles, role],
+                      })
+                    }
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                      r.roles.includes(role)
+                        ? "bg-orange-600/20 text-orange-400"
+                        : "bg-zinc-900 border border-white/5 text-zinc-500"
+                    }`}
+                  >
+                    {ROLE_LABEL[role]}
+                  </button>
+                ),
+              )}
+              <select
+                value={r.split_mode}
+                onChange={(e) =>
+                  saveCatRule({ ...r, split_mode: e.target.value as SplitMode })
+                }
+                className="bg-zinc-900 border border-white/5 rounded-lg px-2 py-1.5 text-xs text-white ml-auto"
+              >
+                {(Object.keys(SPLIT_MODE_LABEL) as SplitMode[]).map((m) => (
+                  <option key={m} value={m}>
+                    {SPLIT_MODE_LABEL[m]}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => saveCatRule({ ...r, enabled: !r.enabled })}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
+                  r.enabled
+                    ? "bg-green-500/15 text-green-400"
+                    : "bg-zinc-900 border border-white/5 text-zinc-500"
+                }`}
+                title={r.enabled ? "点击=今天排除该分类" : "点击=恢复派发"}
+              >
+                {r.enabled ? "启用" : "已排除"}
+              </button>
+              <button
+                onClick={() => removeCatRule(r)}
+                className="p-1.5 text-zinc-600 hover:text-rose-400"
+                title="删除映射"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <input
+            value={newCat}
+            onChange={(e) => setNewCat(e.target.value)}
+            placeholder="新增分类映射，如：餐具 / 清洁工具"
+            className="flex-1 bg-zinc-950 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500/60"
+          />
+          <button
+            onClick={addCatRule}
+            className="flex items-center gap-1 px-3 py-2 text-sm text-zinc-200 bg-zinc-800 hover:bg-zinc-700 rounded-xl"
+          >
+            <Plus size={14} /> 添加
+          </button>
+        </div>
+        <div className="mt-1.5 text-[11px] text-zinc-600">
+          拆分方式：平均=轮流分给该角色每人；按区域=同货架整块给一人；整组=整个分类给任务最少的人；随机=当天随机但结果稳定；轮换=上次谁盘还谁盘（均衡分摊）。停用某分类=当天不自动派发它。
+        </div>
+
+        {/* 预览 / 派发 / 重派 */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          <button
+            onClick={runPreview}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 rounded-xl"
+          >
+            <Eye size={15} /> 预览今日分配
+          </button>
+          <button
+            onClick={() => dispatch(false)}
+            disabled={dispatching}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-500 rounded-xl disabled:opacity-50"
+          >
+            <Wand2 size={15} /> {dispatching ? "派发中…" : "一键派发"}
+          </button>
+          <button
+            onClick={() => dispatch(true)}
+            disabled={dispatching}
+            className="px-4 py-2 text-sm font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 rounded-xl disabled:opacity-50"
+          >
+            撤回重派
+          </button>
+        </div>
+        <div className="mt-1.5 text-[11px] text-zinc-600">
+          一键派发只分配「未指派」的任务；已指派/已提交的不动。要整体重新分配请用「撤回重派」。
+        </div>
+
+        {/* 预览结果 */}
+        {preview && (
+          <div className="mt-3 space-y-2">
+            <div className="text-xs font-semibold text-zinc-300">
+              分配预览（{preview.assignments.length} 条可派 ·{" "}
+              {preview.unassigned.length} 条未派发）
+            </div>
+            {(() => {
+              const groups = new Map<
+                string,
+                { name: string; count: number; items: string[] }[]
+              >();
+              for (const a of preview.assignments) {
+                const cat =
+                  items.find((i) => i.id === a.itemId)?.category || "";
+                if (!groups.has(cat)) groups.set(cat, []);
+                const g = groups.get(cat)!;
+                const row = g.find((x) => x.name === a.staffName);
+                if (row) {
+                  row.count++;
+                } else {
+                  g.push({ name: a.staffName, count: 1, items: [a.itemId] });
+                }
+              }
+              if (groups.size === 0)
+                return (
+                  <div className="text-xs text-zinc-500">
+                    本轮没有可自动派发的物品
+                  </div>
+                );
+              return [...groups.entries()].map(([cat, people]) => (
+                <div
+                  key={cat}
+                  className="bg-zinc-950 rounded-xl px-3.5 py-2.5 text-xs space-y-1"
+                >
+                  <div className="text-zinc-200 font-semibold">
+                    {cat || "待分类"}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {people.map((p) => (
+                      <span
+                        key={p.name}
+                        className="px-2 py-0.5 rounded-full bg-orange-600/15 text-orange-400"
+                      >
+                        {p.name} · {p.count} 项
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
+            {preview.unassigned.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl px-3.5 py-2.5 space-y-1">
+                <div className="text-xs font-semibold text-amber-400">
+                  未派发 {preview.unassigned.length}{" "}
+                  条（点击物品去库存管理处理）
+                </div>
+                {preview.unassigned.map((u) => (
+                  <div key={u.itemId} className="text-[11px] text-amber-300/80">
+                    {items.find((i) => i.id === u.itemId)?.name || u.itemId}
+                    {u.category ? `（${u.category}）` : ""}：
+                    {ASSIGN_REASON_LABEL[u.reason]}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 转派（员工请假/停用/离职时使用） */}
+        <div className="mt-4 pt-3 border-t border-white/5">
+          <div className="flex flex-wrap items-center gap-2">
+            <ArrowRightLeft size={15} className="text-zinc-500" />
+            <span className="text-xs text-zinc-400">员工请假/离职转派：</span>
+            <select
+              value={transferFrom}
+              onChange={(e) => setTransferFrom(e.target.value)}
+              className="bg-zinc-950 border border-white/5 rounded-lg px-2 py-1.5 text-xs text-white"
+            >
+              <option value="">转出人…</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                  {m.status === "disabled" ? "（已停用）" : ""}
+                </option>
+              ))}
+            </select>
+            <span className="text-zinc-600 text-xs">→</span>
+            <select
+              value={transferTo}
+              onChange={(e) => setTransferTo(e.target.value)}
+              className="bg-zinc-950 border border-white/5 rounded-lg px-2 py-1.5 text-xs text-white"
+            >
+              <option value="">接收人…</option>
+              {staffList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={doTransfer}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+            >
+              转派未完成任务
+            </button>
+          </div>
+        </div>
+      </ChartCard>
 
       {/* 今日清单 */}
       <ChartCard

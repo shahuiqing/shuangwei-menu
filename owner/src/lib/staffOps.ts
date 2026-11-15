@@ -96,6 +96,74 @@ export interface StocktakeRule {
   require_photo: boolean;
   show_book_qty: boolean;
   allow_draft: boolean;
+  auto_by_category?: boolean; // 按分类自动派发总开关（老数据无此列）
+}
+
+/** 分类拆分方式 */
+export type SplitMode =
+  | "average" // 平均拆分（轮流，负载均衡）
+  | "zone" // 按区域/货架拆分（同区整块给一人）
+  | "category_group" // 整组一人（整个分类给任务最少的人）
+  | "random" // 随机拆分（按日期种子，结果稳定）
+  | "rotate"; // 按上次责任人轮换
+
+export const SPLIT_MODE_LABEL: Record<SplitMode, string> = {
+  average: "平均拆分",
+  zone: "按区域/货架拆分",
+  category_group: "整组给一人",
+  random: "随机拆分",
+  rotate: "按上次责任人轮换",
+};
+
+export interface StocktakeCategoryRule {
+  id?: string;
+  category: string; // 规范分类（中文键）
+  roles: Role[]; // 责任角色，可多选
+  split_mode: SplitMode;
+  enabled: boolean; // 停用=该分类当天不自动派发
+  updated_at?: string;
+}
+
+/** 内置默认映射（数据库无记录时兜底；与 SQL 6.6 默认值一致） */
+export const DEFAULT_CATEGORY_RULES: StocktakeCategoryRule[] = [
+  { category: "蔬菜", roles: ["helper"], split_mode: "average", enabled: true },
+  { category: "肉类", roles: ["helper"], split_mode: "average", enabled: true },
+  { category: "水产", roles: ["helper"], split_mode: "average", enabled: true },
+  { category: "调料", roles: ["helper"], split_mode: "average", enabled: true },
+  { category: "粮油", roles: ["helper"], split_mode: "average", enabled: true },
+  { category: "饮料", roles: ["helper"], split_mode: "average", enabled: true },
+  { category: "耗材", roles: ["waiter"], split_mode: "average", enabled: true },
+  { category: "其他", roles: [], split_mode: "average", enabled: true },
+];
+
+/** 自动派发的物品输入 */
+export interface AutoAssignItem {
+  itemId: string;
+  category: string;
+  zone: string;
+  lastStaffId?: string | null; // 上次盘点责任人（rotate 模式用）
+}
+
+/** 自动派发的员工输入 */
+export interface AutoAssignStaff {
+  id: string;
+  name: string;
+  roles: Role[];
+  status: "active" | "disabled";
+}
+
+/** 未派发原因 */
+export type AssignReason = "no_category" | "no_rule" | "no_staff";
+
+export const ASSIGN_REASON_LABEL: Record<AssignReason, string> = {
+  no_category: "物品未分类，请先在库存管理补分类",
+  no_rule: "该分类未配置/已停用责任角色",
+  no_staff: "该分类对应角色无在职员工",
+};
+
+export interface AutoAssignResult {
+  assignments: { itemId: string; staffId: string; staffName: string }[];
+  unassigned: { itemId: string; category: string; reason: AssignReason }[];
 }
 
 export interface StocktakeTask {
@@ -239,6 +307,160 @@ export function pickDailyStocktakeItems(
     candidates = [...pool].sort(byStale);
   }
   return candidates.slice(0, Math.max(1, rule.items_per_day));
+}
+
+// ────────────────────────── 分类→角色→人 自动派发 ──────────────────────────
+
+/** 确定性伪随机（与 pickDailyStocktakeItems 同款 LCG，seed 可传日期保证当天结果稳定） */
+function seededRand(seedStr: string) {
+  let seed = 0;
+  for (const ch of seedStr) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  return () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0xffffffff;
+  };
+}
+
+/**
+ * 按库存分类自动派发盘点任务：
+ * 1. 物品按分类分组；无分类 → no_category
+ * 2. 查「分类→责任角色」映射；无映射/映射停用/角色为空 → no_rule
+ * 3. 取该角色在职员工；无 → no_staff
+ * 4. 按拆分方式分到人（跨分类做全局负载均衡，一人多角色不重复派同一物品）
+ */
+export function autoAssignStocktakes(
+  items: AutoAssignItem[],
+  rules: StocktakeCategoryRule[],
+  staff: AutoAssignStaff[],
+  seed = "",
+): AutoAssignResult {
+  const result: AutoAssignResult = {
+    assignments: [],
+    unassigned: [],
+  };
+  const active = staff.filter((s) => s.status === "active");
+  const ruleByCat = new Map(rules.map((r) => [r.category, r]));
+
+  // 每人当前负载（跨分类累计，保证多分类之间也均衡）
+  const load = new Map<string, number>();
+
+  // 分类名稳定排序，保证结果确定性
+  const categories = [...new Set(items.map((it) => it.category || ""))].sort(
+    (a, b) => a.localeCompare(b, "zh"),
+  );
+
+  for (const cat of categories) {
+    const catItems = items.filter((it) => (it.category || "") === cat);
+    if (!cat) {
+      for (const it of catItems)
+        result.unassigned.push({
+          itemId: it.itemId,
+          category: cat,
+          reason: "no_category",
+        });
+      continue;
+    }
+    const rule = ruleByCat.get(cat);
+    if (!rule || !rule.enabled || rule.roles.length === 0) {
+      for (const it of catItems)
+        result.unassigned.push({
+          itemId: it.itemId,
+          category: cat,
+          reason: "no_rule",
+        });
+      continue;
+    }
+    // 该分类责任角色下的在职员工（按姓名稳定排序）
+    const eligible = active
+      .filter((s) => s.roles.some((r) => rule.roles.includes(r)))
+      .sort((a, b) => a.name.localeCompare(b.name, "zh"));
+    if (eligible.length === 0) {
+      for (const it of catItems)
+        result.unassigned.push({
+          itemId: it.itemId,
+          category: cat,
+          reason: "no_staff",
+        });
+      continue;
+    }
+
+    const pick = (staffId: string, itemId: string) => {
+      result.assignments.push({
+        itemId,
+        staffId,
+        staffName: eligible.find((s) => s.id === staffId)?.name || "",
+      });
+      load.set(staffId, (load.get(staffId) || 0) + 1);
+    };
+    const leastLoaded = (pool = eligible) =>
+      pool
+        .slice()
+        .sort((a, b) => (load.get(a.id) || 0) - (load.get(b.id) || 0))[0].id;
+    const roundRobin = (ordered: AutoAssignItem[]) => {
+      let i = 0;
+      for (const it of ordered) {
+        // 轮流 + 负载校正：选当前负载最小的，先按轮转顺序打破平局
+        const minLoad = Math.min(...eligible.map((s) => load.get(s.id) || 0));
+        const candidates = eligible.filter(
+          (s) => (load.get(s.id) || 0) === minLoad,
+        );
+        pick(candidates[i % candidates.length].id, it.itemId);
+        i++;
+      }
+    };
+
+    if (rule.split_mode === "category_group") {
+      const target = leastLoaded();
+      for (const it of catItems) pick(target, it.itemId);
+      continue;
+    }
+
+    if (rule.split_mode === "zone") {
+      // 同区（zone）整块给同一人；无 zone 信息时退化为平均拆分
+      const zones = [...new Set(catItems.map((it) => it.zone || ""))];
+      if (zones.length <= 1 && (zones[0] || "") === "") {
+        roundRobin([...catItems]);
+        continue;
+      }
+      // 区块大的优先，整块塞给当前负载最小的人
+      const blocks = zones
+        .map((z) => ({
+          z,
+          items: catItems.filter((it) => (it.zone || "") === z),
+        }))
+        .sort((a, b) => b.items.length - a.items.length);
+      for (const b of blocks) {
+        const target = leastLoaded();
+        for (const it of b.items) pick(target, it.itemId);
+      }
+      continue;
+    }
+
+    if (rule.split_mode === "random") {
+      const rand = seededRand(seed + "|" + cat);
+      roundRobin([...catItems].sort(() => rand() - 0.5));
+      continue;
+    }
+
+    if (rule.split_mode === "rotate") {
+      // 上次盘过且还在职的人优先接着盘；其余负载均衡轮流
+      const byLast: AutoAssignItem[] = [];
+      const rest: AutoAssignItem[] = [];
+      const eligibleIds = new Set(eligible.map((s) => s.id));
+      for (const it of catItems) {
+        if (it.lastStaffId && eligibleIds.has(it.lastStaffId)) byLast.push(it);
+        else rest.push(it);
+      }
+      for (const it of byLast) pick(it.lastStaffId!, it.itemId);
+      roundRobin(rest);
+      continue;
+    }
+
+    // average（默认）
+    roundRobin([...catItems]);
+  }
+
+  return result;
 }
 
 // ───────────────────────── 错误包装 ─────────────────────────
@@ -490,6 +712,151 @@ export async function saveStocktakeRule(rule: StocktakeRule): Promise<boolean> {
   const { error } = await supabase.from("stocktake_rules").insert(patch);
   if (!warn("insertStocktakeRule", error)) return false;
   return true;
+}
+
+/** 分类→责任角色映射（表为空时回退内置默认） */
+export async function fetchStocktakeCategoryRules(): Promise<
+  StocktakeCategoryRule[]
+> {
+  if (!supabase) return DEFAULT_CATEGORY_RULES;
+  const { data, error } = await supabase
+    .from("stocktake_category_rules")
+    .select("*")
+    .order("category", { ascending: true });
+  if (!warn("fetchStocktakeCategoryRules", error) || !data || data.length === 0)
+    return DEFAULT_CATEGORY_RULES;
+  return data as StocktakeCategoryRule[];
+}
+
+export async function upsertStocktakeCategoryRule(
+  r: StocktakeCategoryRule,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const patch = { ...r, updated_at: new Date().toISOString() };
+  if (r.id) {
+    const { error } = await supabase
+      .from("stocktake_category_rules")
+      .update(patch)
+      .eq("id", r.id);
+    return warn("upsertStocktakeCategoryRule", error);
+  }
+  delete (patch as any).id;
+  const { error } = await supabase
+    .from("stocktake_category_rules")
+    .upsert(patch, { onConflict: "category" });
+  return warn("insertStocktakeCategoryRule", error);
+}
+
+export async function deleteStocktakeCategoryRule(
+  id: string,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("stocktake_category_rules")
+    .delete()
+    .eq("id", id);
+  return warn("deleteStocktakeCategoryRule", error);
+}
+
+/** 每个物品上次盘点责任人（rotate 拆分用）：item_id → staff_id */
+export async function fetchLastCountedBy(
+  itemIds: string[],
+): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  if (!supabase || itemIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from("stocktake_tasks")
+    .select("item_id, assigned_to, created_at")
+    .in("item_id", itemIds)
+    .not("assigned_to", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (!warn("fetchLastCountedBy", error)) return out;
+  for (const row of data || []) {
+    if (!(row.item_id in out)) out[row.item_id] = row.assigned_to;
+  }
+  return out;
+}
+
+/**
+ * 把自动分配结果写入今日任务。
+ * 只覆盖「未指派且未开始」（pending + assigned_to 为空）的任务；
+ * 已指派/已提交的不动——要整体重派请先调 resetStocktakeAssignments。
+ */
+export async function applyStocktakeAutoAssign(
+  countDate: string,
+  assignments: { itemId: string; staffId: string; staffName: string }[],
+): Promise<number> {
+  if (!supabase || assignments.length === 0) return 0;
+  // 按人分批更新（一员工一批 in 查询）
+  const byStaff = new Map<string, string[]>();
+  for (const a of assignments) {
+    if (!byStaff.has(a.staffId)) byStaff.set(a.staffId, []);
+    byStaff.get(a.staffId)!.push(a.itemId);
+  }
+  let n = 0;
+  for (const [staffId, itemIds] of byStaff) {
+    const name =
+      assignments.find((a) => a.staffId === staffId)?.staffName || "";
+    const { data, error } = await supabase
+      .from("stocktake_tasks")
+      .update({
+        assigned_to: staffId,
+        assignee_name: name,
+      })
+      .eq("count_date", countDate)
+      .in("item_id", itemIds)
+      .in("status", ["pending", "drafted"])
+      .is("assigned_to", null)
+      .select("id");
+    if (error) {
+      warn("applyStocktakeAutoAssign", error);
+      continue;
+    }
+    n += data?.length || 0;
+  }
+  return n;
+}
+
+/** 撤回重派：把当日未开始的任务清空指派（已提交/已校准不受影响） */
+export async function resetStocktakeAssignments(
+  countDate: string,
+): Promise<number> {
+  if (!supabase) return 0;
+  const { data, error } = await supabase
+    .from("stocktake_tasks")
+    .update({ assigned_to: null, assignee_name: "" })
+    .eq("count_date", countDate)
+    .in("status", ["pending", "drafted"])
+    .not("assigned_to", "is", null)
+    .select("id");
+  if (error) {
+    warn("resetStocktakeAssignments", error);
+    return 0;
+  }
+  return data?.length || 0;
+}
+
+/** 转派：把某人未完成（pending/drafted）的盘点任务转给另一人 */
+export async function transferStocktakeTasks(
+  fromStaffId: string,
+  to: { id: string; name: string },
+  countDate?: string,
+): Promise<number> {
+  if (!supabase || !fromStaffId) return 0;
+  let q = supabase
+    .from("stocktake_tasks")
+    .update({ assigned_to: to.id, assignee_name: to.name })
+    .eq("assigned_to", fromStaffId)
+    .in("status", ["pending", "drafted"])
+    .select("id");
+  if (countDate) q = q.eq("count_date", countDate);
+  const { data, error } = await q;
+  if (error) {
+    warn("transferStocktakeTasks", error);
+    return 0;
+  }
+  return data?.length || 0;
 }
 
 export async function fetchStocktakeTasks(

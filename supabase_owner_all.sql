@@ -949,6 +949,43 @@ CREATE INDEX IF NOT EXISTS idx_stocktake_tasks_date ON public.stocktake_tasks (c
 CREATE INDEX IF NOT EXISTS idx_purchase_requests_status ON public.purchase_requests (status, created_at);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.6 盘点按分类自动派发：库存分类 → 责任角色 → 按在职人数拆分到人
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.stocktake_category_rules (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  category VARCHAR(50) NOT NULL UNIQUE,           -- 规范分类（中文键，同 inventory_items.category）
+  roles TEXT[] NOT NULL DEFAULT '{}',             -- 责任角色（waiter/helper/cleaner/other，可多选）
+  split_mode VARCHAR(20) NOT NULL DEFAULT 'average', -- average / zone / category_group / random / rotate
+  enabled BOOLEAN NOT NULL DEFAULT true,          -- 当天排除该分类时临时停用
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 自动派发总开关（关=维持现状：生成后老板手动指派）
+ALTER TABLE public.stocktake_rules
+  ADD COLUMN IF NOT EXISTS auto_by_category BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE public.stocktake_category_rules ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all_stocktake_category_rules" ON public.stocktake_category_rules;
+CREATE POLICY "anon_all_stocktake_category_rules" ON public.stocktake_category_rules
+  FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON public.stocktake_category_rules TO anon, authenticated;
+
+-- 默认映射：食品类→帮厨，耗材→服务员；「其他」留空由老板指定
+INSERT INTO public.stocktake_category_rules (category, roles, split_mode)
+VALUES
+  ('蔬菜', ARRAY['helper'], 'average'),
+  ('肉类', ARRAY['helper'], 'average'),
+  ('水产', ARRAY['helper'], 'average'),
+  ('调料', ARRAY['helper'], 'average'),
+  ('粮油', ARRAY['helper'], 'average'),
+  ('饮料', ARRAY['helper'], 'average'),
+  ('耗材', ARRAY['waiter'], 'average'),
+  ('其他', ARRAY[]::TEXT[], 'average')
+ON CONFLICT (category) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS idx_stocktake_category_rules_cat ON public.stocktake_category_rules (category);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';
