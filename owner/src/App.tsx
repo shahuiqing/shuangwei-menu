@@ -354,6 +354,7 @@ export default function App() {
             recentOrders={recentOrders}
             settings={settings}
             version={vOf(id)}
+            onTab={switchTab}
           />
         );
     }

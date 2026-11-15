@@ -25,10 +25,11 @@ import {
 import { useOpsSignals } from "../lib/useOpsSignals";
 import { buildDailyBrief } from "../lib/brief";
 import {
-  buildRuleDiagnosis,
-  diagnosisPrompt,
-  type DiagnosisFacts,
-} from "../lib/diagnosis";
+  buildAdvice,
+  advisorPrompt,
+  AREA_LABEL,
+  type AdviceItem,
+} from "../lib/advisor";
 import { type OpsFacts } from "../lib/assistant";
 import {
   loadBusinessSnapshot,
@@ -54,10 +55,12 @@ export default function Assistant({
   recentOrders,
   settings,
   version = 0,
+  onTab,
 }: {
   recentOrders: any[];
   settings: any;
   version?: number;
+  onTab?: (tab: any) => void;
 }) {
   const ops = useOpsSignals(version);
   const [q, setQ] = useState("");
@@ -67,11 +70,12 @@ export default function Assistant({
   const [chatBusy, setChatBusy] = useState(false);
   const [snapshot, setSnapshot] = useState<BusinessSnapshot | null>(null);
   const [draft, setDraft] = useState<string[] | null>(null);
-  const [diag, setDiag] = useState<{
-    source: "ai" | "rule";
-    lines: string[];
-  } | null>(null);
-  const [diagBusy, setDiagBusy] = useState(false);
+  const [advice, setAdvice] = useState<
+    | { source: "rule"; items: AdviceItem[] }
+    | { source: "ai"; text: string }
+    | null
+  >(null);
+  const [advBusy, setAdvBusy] = useState(false);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -279,49 +283,45 @@ export default function Assistant({
     }
   };
 
-  /** 诊断用的结构化事实（销售/成本/库存/损耗/员工任务） */
-  const diagFacts = useMemo<DiagnosisFacts>(
-    () => ({
-      revenue: data.revenue,
-      orders: data.orders,
-      aov: data.aov,
-      foodCost: data.foodCost,
-      foodCostRate: data.foodCostRate,
-      profit: data.profit,
-      waste: data.waste,
-      lowStock: opsFacts.lowStock,
-      priceAlerts: opsFacts.priceAlerts,
-      pendingTasks: staffFacts.pendingTasks,
-      overdueTasks: staffFacts.overdueTasks,
-      pendingStocktakes: staffFacts.pendingStocktakes,
-      pendingRequests: staffFacts.pendingRequests,
-    }),
-    [data, opsFacts, staffFacts],
-  );
-
-  const runDiagnosis = async () => {
-    if (diagBusy) return;
-    setDiagBusy(true);
+  /** 生成经营顾问建议：优先 AI，失败/未配置用规则版 */
+  const runAdvice = async () => {
+    if (advBusy) return;
+    setAdvBusy(true);
+    let snap = snapshot;
+    if (!snap) {
+      snap = await loadBusinessSnapshot();
+      setSnapshot(snap);
+    }
     if (hasLlm()) {
-      const { system, user } = diagnosisPrompt(diagFacts);
+      const { system, user } = advisorPrompt(snap);
       const reply = await chatLLM(system, user);
       if (reply) {
-        setDiag({ source: "ai", lines: [reply] });
-        setDiagBusy(false);
+        setAdvice({ source: "ai", text: reply });
+        setAdvBusy(false);
         return;
       }
-      toast.info("AI 暂不可用，已用规则版诊断");
+      toast.info("AI 暂不可用，已用规则版建议");
     }
-    setDiag({ source: "rule", lines: buildRuleDiagnosis(diagFacts) });
-    setDiagBusy(false);
+    setAdvice({ source: "rule", items: buildAdvice(snap) });
+    setAdvBusy(false);
   };
 
-  const copyDiag = () => {
-    if (!diag) return;
-    const text = diag.lines.join("\n");
+  const copyAdvice = () => {
+    if (!advice) return;
+    const text =
+      advice.source === "ai"
+        ? advice.text
+        : advice.items
+            .map(
+              (it, i) =>
+                `${i + 1}. 【${AREA_LABEL[it.area]}】${it.title}\n${it.finding}\n` +
+                it.actions.map((a) => `· ${a}`).join("\n") +
+                (it.impact ? `\n影响：${it.impact}` : ""),
+            )
+            .join("\n\n");
     try {
       navigator.clipboard?.writeText(text).then(
-        () => toast.success("诊断已复制"),
+        () => toast.success("建议已复制"),
         () => toast.error("复制失败"),
       );
     } catch {
@@ -353,60 +353,92 @@ export default function Assistant({
       </ChartCard>
 
       <ChartCard
-        title="AI 经营诊断"
-        subtitle="综合销售、成本、库存、损耗和员工任务，给出今天的优先行动"
+        title="经营顾问建议"
+        subtitle="按板块给出发现、建议动作和预期影响 · 可直接去处理"
         action={
           <button
-            onClick={runDiagnosis}
-            disabled={diagBusy}
+            onClick={runAdvice}
+            disabled={advBusy}
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full btn-brand text-white disabled:opacity-60"
           >
             <Sparkles size={13} />
-            {diagBusy ? "诊断中…" : diag ? "重新生成" : "生成诊断"}
+            {advBusy ? "分析中…" : advice ? "重新生成" : "生成建议"}
           </button>
         }
       >
-        {!diag ? (
+        {!advice ? (
           <div className="rounded-xl bg-zinc-950 px-4 py-4 text-sm text-zinc-500">
             {hasLlm()
-              ? "点右上角「生成诊断」，AI 会结合当天数据给出 3-5 条可执行建议。"
-              : "未配置 AI 接口，将用规则版诊断（同样按优先级给出建议）。点右上角生成。"}
+              ? "点右上角「生成建议」，AI 会按销售、菜单、成本、库存、采购、损耗、员工给出可执行建议。"
+              : "点右上角生成，系统会按真实数据给出优先级建议（未配置 AI 时为规则版）。"}
           </div>
-        ) : (
+        ) : advice.source === "ai" ? (
           <div className="rounded-xl bg-zinc-950 px-4 py-3.5 space-y-2">
             <div className="flex items-center gap-2">
-              <span
-                className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                  diag.source === "ai"
-                    ? "bg-orange-500 text-white"
-                    : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {diag.source === "ai" ? "AI" : "规则版"}
+              <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500 text-white">
+                AI
               </span>
               <button
-                onClick={copyDiag}
+                onClick={copyAdvice}
                 className="ml-auto inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
               >
                 <Copy size={12} /> 复制
               </button>
             </div>
-            {diag.source === "ai" ? (
-              <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
-                {diag.lines[0]}
+            <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+              {advice.text}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                规则版
+              </span>
+              <button
+                onClick={copyAdvice}
+                className="ml-auto inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
+              >
+                <Copy size={12} /> 复制全部
+              </button>
+            </div>
+            {advice.items.map((it, i) => (
+              <div
+                key={i}
+                className="bg-zinc-950 rounded-xl px-3.5 py-3 space-y-1.5"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 font-bold">
+                    {AREA_LABEL[it.area]}
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-100">
+                    {it.title}
+                  </span>
+                  {onTab && (
+                    <button
+                      onClick={() => onTab(it.tab)}
+                      className="ml-auto text-[11px] text-orange-400 hover:text-orange-300"
+                    >
+                      去处理 →
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs text-zinc-400">{it.finding}</div>
+                <ul className="space-y-1">
+                  {it.actions.map((a, j) => (
+                    <li key={j} className="flex gap-1.5 text-xs text-zinc-300">
+                      <span className="text-orange-400">·</span>
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+                {it.impact && (
+                  <div className="text-[11px] text-zinc-500">
+                    预期影响：{it.impact}
+                  </div>
+                )}
               </div>
-            ) : (
-              <ol className="space-y-1.5">
-                {diag.lines.map((line, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-zinc-200">
-                    <span className="text-orange-400 font-bold shrink-0">
-                      {i + 1}.
-                    </span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
+            ))}
           </div>
         )}
       </ChartCard>
