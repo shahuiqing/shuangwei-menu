@@ -25,6 +25,11 @@ import {
 import { useOpsSignals } from "../lib/useOpsSignals";
 import { buildDailyBrief } from "../lib/brief";
 import {
+  buildRuleDiagnosis,
+  diagnosisPrompt,
+  type DiagnosisFacts,
+} from "../lib/diagnosis";
+import {
   ask,
   PRESET_QUESTIONS,
   llmSystemPrompt,
@@ -48,6 +53,11 @@ export default function Assistant({
   const [aiAnswer, setAiAnswer] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [draft, setDraft] = useState<string[] | null>(null);
+  const [diag, setDiag] = useState<{
+    source: "ai" | "rule";
+    lines: string[];
+  } | null>(null);
+  const [diagBusy, setDiagBusy] = useState(false);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -207,6 +217,56 @@ export default function Assistant({
     }
   };
 
+  /** 诊断用的结构化事实（销售/成本/库存/损耗/员工任务） */
+  const diagFacts = useMemo<DiagnosisFacts>(
+    () => ({
+      revenue: data.revenue,
+      orders: data.orders,
+      aov: data.aov,
+      foodCost: data.foodCost,
+      foodCostRate: data.foodCostRate,
+      profit: data.profit,
+      waste: data.waste,
+      lowStock: opsFacts.lowStock,
+      priceAlerts: opsFacts.priceAlerts,
+      pendingTasks: staffFacts.pendingTasks,
+      overdueTasks: staffFacts.overdueTasks,
+      pendingStocktakes: staffFacts.pendingStocktakes,
+      pendingRequests: staffFacts.pendingRequests,
+    }),
+    [data, opsFacts, staffFacts],
+  );
+
+  const runDiagnosis = async () => {
+    if (diagBusy) return;
+    setDiagBusy(true);
+    if (hasLlm()) {
+      const { system, user } = diagnosisPrompt(diagFacts);
+      const reply = await chatLLM(system, user);
+      if (reply) {
+        setDiag({ source: "ai", lines: [reply] });
+        setDiagBusy(false);
+        return;
+      }
+      toast.info("AI 暂不可用，已用规则版诊断");
+    }
+    setDiag({ source: "rule", lines: buildRuleDiagnosis(diagFacts) });
+    setDiagBusy(false);
+  };
+
+  const copyDiag = () => {
+    if (!diag) return;
+    const text = diag.lines.join("\n");
+    try {
+      navigator.clipboard?.writeText(text).then(
+        () => toast.success("诊断已复制"),
+        () => toast.error("复制失败"),
+      );
+    } catch {
+      toast.error("复制失败");
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <ChartCard
@@ -228,6 +288,65 @@ export default function Assistant({
             </p>
           ))}
         </div>
+      </ChartCard>
+
+      <ChartCard
+        title="AI 经营诊断"
+        subtitle="综合销售、成本、库存、损耗和员工任务，给出今天的优先行动"
+        action={
+          <button
+            onClick={runDiagnosis}
+            disabled={diagBusy}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full btn-brand text-white disabled:opacity-60"
+          >
+            <Sparkles size={13} />
+            {diagBusy ? "诊断中…" : diag ? "重新生成" : "生成诊断"}
+          </button>
+        }
+      >
+        {!diag ? (
+          <div className="rounded-xl bg-zinc-950 px-4 py-4 text-sm text-zinc-500">
+            {hasLlm()
+              ? "点右上角「生成诊断」，AI 会结合当天数据给出 3-5 条可执行建议。"
+              : "未配置 AI 接口，将用规则版诊断（同样按优先级给出建议）。点右上角生成。"}
+          </div>
+        ) : (
+          <div className="rounded-xl bg-zinc-950 px-4 py-3.5 space-y-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  diag.source === "ai"
+                    ? "bg-orange-500 text-white"
+                    : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {diag.source === "ai" ? "AI" : "规则版"}
+              </span>
+              <button
+                onClick={copyDiag}
+                className="ml-auto inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
+              >
+                <Copy size={12} /> 复制
+              </button>
+            </div>
+            {diag.source === "ai" ? (
+              <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                {diag.lines[0]}
+              </div>
+            ) : (
+              <ol className="space-y-1.5">
+                {diag.lines.map((line, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-zinc-200">
+                    <span className="text-orange-400 font-bold shrink-0">
+                      {i + 1}.
+                    </span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
       </ChartCard>
 
       <ChartCard
