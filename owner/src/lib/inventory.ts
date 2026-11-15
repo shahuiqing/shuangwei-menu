@@ -14,6 +14,10 @@ export interface InventoryItem {
   price: number;
   /** 保质期天数（空/0 = 不设保质期，不参与临期预警） */
   shelf_life_days?: number;
+  /** 存放区域（每日抽盘按区域轮换用） */
+  zone?: string;
+  /** 上次盘点校准时间（久未盘优先抽盘） */
+  last_counted_at?: string;
   updated_at?: string;
 }
 

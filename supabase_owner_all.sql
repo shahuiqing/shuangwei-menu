@@ -811,6 +811,144 @@ GRANT EXECUTE ON FUNCTION public.owner_menu_restore(text) TO anon, authenticated
 GRANT EXECUTE ON FUNCTION public.owner_menu_snapshot_delete(text) TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 6.5 员工协同：员工账号 / 任务派发 / 每日抽盘 / 采购申报（幂等）
+-- 员工端(/staff.html)与老板端共用 anon key，故沿用 anon 全放行策略；
+-- 敏感数据（营收/成本/供应商）仍在老板端独有表中，员工端根本不查询。
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- 员工账号（岗位多选：waiter 服务员 / helper 帮厨 / cleaner 保洁 / other 其他）
+CREATE TABLE IF NOT EXISTS public.staff_members (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name VARCHAR(50) NOT NULL,
+  roles TEXT[] NOT NULL DEFAULT '{}',
+  status VARCHAR(20) NOT NULL DEFAULT 'active',   -- active 在职 / disabled 停用
+  phone VARCHAR(30) DEFAULT '',
+  password_hash TEXT NOT NULL DEFAULT '',          -- bcrypt，客户端比对（与现有 adminPasswordHash 同方案）
+  note TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 任务模板（检查项 JSONB 字符串数组）
+CREATE TABLE IF NOT EXISTS public.task_templates (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  task_type VARCHAR(20) NOT NULL DEFAULT 'daily',  -- daily / weekly / monthly / adhoc
+  roles TEXT[] NOT NULL DEFAULT '{}',
+  checklist JSONB NOT NULL DEFAULT '[]'::jsonb,
+  require_photo BOOLEAN NOT NULL DEFAULT false,
+  due_hours INTEGER NOT NULL DEFAULT 8,
+  description TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 派发任务：责任到人，一次派多人 = 多行（batch_id 同批）
+CREATE TABLE IF NOT EXISTS public.staff_tasks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  batch_id UUID,
+  template_id UUID,
+  title VARCHAR(100) NOT NULL,
+  description TEXT DEFAULT '',
+  checklist JSONB NOT NULL DEFAULT '[]'::jsonb,    -- [{text, done}]
+  require_photo BOOLEAN NOT NULL DEFAULT false,
+  priority VARCHAR(10) NOT NULL DEFAULT 'normal',  -- low / normal / high
+  assigned_to UUID REFERENCES public.staff_members(id) ON DELETE SET NULL,
+  assignee_name VARCHAR(50) DEFAULT '',
+  assignee_roles TEXT[] NOT NULL DEFAULT '{}',
+  due_at TIMESTAMPTZ,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',   -- pending / submitted / approved / rejected / cancelled
+  note TEXT DEFAULT '',
+  photos TEXT[] NOT NULL DEFAULT '{}',
+  submitted_at TIMESTAMPTZ,
+  review_note TEXT DEFAULT '',
+  reviewed_at TIMESTAMPTZ,
+  resubmit_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 盘点规则（单行，UI upsert）
+CREATE TABLE IF NOT EXISTS public.stocktake_rules (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  enabled BOOLEAN NOT NULL DEFAULT false,
+  items_per_day INTEGER NOT NULL DEFAULT 5,
+  strategy VARCHAR(30) NOT NULL DEFAULT 'stale_first', -- stale_first / zone_rotate / random
+  zones TEXT[] NOT NULL DEFAULT '{}',
+  due_time VARCHAR(5) NOT NULL DEFAULT '22:00',
+  require_photo BOOLEAN NOT NULL DEFAULT false,
+  show_book_qty BOOLEAN NOT NULL DEFAULT false,
+  allow_draft BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 每日盘点任务：UNIQUE(count_date,item_id) 防同日重复
+CREATE TABLE IF NOT EXISTS public.stocktake_tasks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  count_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  item_id VARCHAR(50) NOT NULL,
+  item_name VARCHAR(100) NOT NULL DEFAULT '',
+  unit VARCHAR(20) DEFAULT '',
+  zone VARCHAR(50) DEFAULT '',
+  book_qty DECIMAL(10,2),
+  actual_qty DECIMAL(10,2),
+  note TEXT DEFAULT '',
+  photos TEXT[] NOT NULL DEFAULT '{}',
+  assigned_to UUID REFERENCES public.staff_members(id) ON DELETE SET NULL,
+  assignee_name VARCHAR(50) DEFAULT '',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',   -- pending / drafted / submitted / rejected / calibrated / cancelled
+  submitted_at TIMESTAMPTZ,
+  review_note TEXT DEFAULT '',
+  reviewed_at TIMESTAMPTZ,
+  calibrated_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(count_date, item_id)
+);
+
+-- 采购申报（员工端发起，老板审批）
+CREATE TABLE IF NOT EXISTS public.purchase_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  staff_id UUID REFERENCES public.staff_members(id) ON DELETE SET NULL,
+  staff_name VARCHAR(50) DEFAULT '',
+  item_name VARCHAR(100) NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
+  unit VARCHAR(20) DEFAULT '',
+  category VARCHAR(50) DEFAULT '',
+  urgency VARCHAR(10) NOT NULL DEFAULT 'normal',   -- normal / urgent
+  expected_date DATE,
+  note TEXT DEFAULT '',
+  photos TEXT[] NOT NULL DEFAULT '{}',
+  status VARCHAR(15) NOT NULL DEFAULT 'pending',   -- pending / approved / rejected / purchased
+  reject_reason TEXT DEFAULT '',
+  decided_at TIMESTAMPTZ,
+  purchased_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 库存表补充：区域（按区域轮换抽盘用）+ 上次盘点时间（久未盘优先用）
+ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS zone VARCHAR(50) DEFAULT '';
+ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS last_counted_at TIMESTAMPTZ;
+
+-- RLS：与既有 anon_all_* 策略保持一致
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['staff_members','task_templates','staff_tasks','stocktake_rules','stocktake_tasks','purchase_requests']
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "anon_all_%1$s" ON public.%1$s', t);
+    EXECUTE format('CREATE POLICY "anon_all_%1$s" ON public.%1$s FOR ALL USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
+
+-- 默认盘点规则（不存在才插入）
+INSERT INTO public.stocktake_rules (enabled, items_per_day, strategy, due_time)
+SELECT false, 5, 'stale_first', '22:00'
+WHERE NOT EXISTS (SELECT 1 FROM public.stocktake_rules);
+
+CREATE INDEX IF NOT EXISTS idx_staff_tasks_assignee ON public.staff_tasks (assigned_to, status);
+CREATE INDEX IF NOT EXISTS idx_stocktake_tasks_date ON public.stocktake_tasks (count_date, status);
+CREATE INDEX IF NOT EXISTS idx_purchase_requests_status ON public.purchase_requests (status, created_at);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';

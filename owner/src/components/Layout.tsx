@@ -23,6 +23,7 @@ import {
   Sparkles,
   Route,
   LayoutGrid,
+  Send,
 } from "lucide-react";
 import { useTheme, THEMES, type Theme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
@@ -43,6 +44,9 @@ export type OwnerTab =
   | "cost"
   | "consumption"
   | "staff"
+  | "dispatch"
+  | "stocktake"
+  | "requests"
   | "settings"
   | "tasks"
   | "assistant";
@@ -61,6 +65,9 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
   { id: "cost", label: "成本毛利", icon: BadgeDollarSign },
   { id: "consumption", label: "用料消耗", icon: Flame },
   { id: "staff", label: "员工管理", icon: Users },
+  { id: "dispatch", label: "任务派发", icon: Send },
+  { id: "stocktake", label: "盘点管理", icon: Boxes },
+  { id: "requests", label: "采购申报", icon: ClipboardCheck },
   { id: "settings", label: "系统设置", icon: SettingsIcon },
   { id: "tasks", label: "任务中心", icon: ClipboardCheck },
   { id: "assistant", label: "AI 助手", icon: Sparkles },
@@ -76,7 +83,8 @@ export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
     items: ["procurement", "inventory", "trace", "waste"],
   },
   { title: "成本", items: ["cost", "consumption"] },
-  { title: "系统", items: ["staff", "settings"] },
+  { title: "员工协同", items: ["staff", "dispatch", "stocktake", "requests"] },
+  { title: "系统", items: ["settings"] },
 ];
 
 // 移动端底部主导航：只放每天最常用的 4 个页面，其余统一进「全部」
@@ -106,6 +114,9 @@ const SUBTITLE: Partial<Record<OwnerTab, string>> = {
   cost: "配方成本 × 单价的毛利核算",
   consumption: "按订单反推的用料流水",
   staff: "账号与权限",
+  dispatch: "给员工派任务并验收",
+  stocktake: "每日抽盘 · 责任到人 · 库存校准",
+  requests: "员工申报采购 · 老板审批",
   settings: "店铺信息与系统参数",
   tasks: "问题→任务→解决闭环",
   assistant: "简报与经营问答",

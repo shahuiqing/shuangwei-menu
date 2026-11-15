@@ -1,0 +1,900 @@
+/**
+ * 员工协同数据层：员工账号 / 任务派发 / 每日抽盘 / 采购申报
+ *
+ * 表：staff_members, task_templates, staff_tasks, stocktake_rules,
+ *     stocktake_tasks, purchase_requests（见 supabase_owner_all.sql 6.5 节）
+ * 员工端(/staff.html)只查询这几张表，绝不触碰经营/成本/供应商数据。
+ */
+import bcrypt from "bcryptjs";
+import { supabase, isConfigured } from "./supabase";
+
+// ───────────────────────── 类型 ─────────────────────────
+
+export const ROLES = ["waiter", "helper", "cleaner", "other"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const ROLE_LABEL: Record<Role, string> = {
+  waiter: "服务员",
+  helper: "帮厨",
+  cleaner: "保洁",
+  other: "其他",
+};
+
+export const TASK_STATUSES = [
+  "pending",
+  "submitted",
+  "approved",
+  "rejected",
+  "cancelled",
+] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  pending: "待完成",
+  submitted: "待验收",
+  approved: "已通过",
+  rejected: "已驳回",
+  cancelled: "已取消",
+};
+
+export interface ChecklistItem {
+  text: string;
+  done?: boolean;
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  roles: Role[];
+  status: "active" | "disabled";
+  phone: string;
+  note: string;
+  created_at?: string;
+}
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  task_type: "daily" | "weekly" | "monthly" | "adhoc";
+  roles: Role[];
+  checklist: ChecklistItem[];
+  require_photo: boolean;
+  due_hours: number;
+  description: string;
+}
+
+export interface StaffTask {
+  id: string;
+  batch_id: string | null;
+  template_id: string | null;
+  title: string;
+  description: string;
+  checklist: ChecklistItem[];
+  require_photo: boolean;
+  priority: "low" | "normal" | "high";
+  assigned_to: string | null;
+  assignee_name: string;
+  assignee_roles: Role[];
+  due_at: string | null;
+  status: TaskStatus;
+  note: string;
+  photos: string[];
+  submitted_at: string | null;
+  review_note: string;
+  reviewed_at: string | null;
+  resubmit_count: number;
+  created_at: string;
+}
+
+export interface StocktakeRule {
+  id?: string;
+  enabled: boolean;
+  items_per_day: number;
+  strategy: "stale_first" | "zone_rotate" | "random";
+  zones: string[];
+  due_time: string;
+  require_photo: boolean;
+  show_book_qty: boolean;
+  allow_draft: boolean;
+}
+
+export interface StocktakeTask {
+  id: string;
+  count_date: string;
+  item_id: string;
+  item_name: string;
+  unit: string;
+  zone: string;
+  book_qty: number | null;
+  actual_qty: number | null;
+  note: string;
+  photos: string[];
+  assigned_to: string | null;
+  assignee_name: string;
+  status:
+    | "pending"
+    | "drafted"
+    | "submitted"
+    | "rejected"
+    | "calibrated"
+    | "cancelled";
+  submitted_at: string | null;
+  review_note: string;
+  reviewed_at: string | null;
+  calibrated_at: string | null;
+}
+
+export type PurchaseStatus = "pending" | "approved" | "rejected" | "purchased";
+
+export const PURCHASE_STATUS_LABEL: Record<PurchaseStatus, string> = {
+  pending: "待审批",
+  approved: "已通过",
+  rejected: "已驳回",
+  purchased: "已采购",
+};
+
+export interface PurchaseRequest {
+  id: string;
+  staff_id: string | null;
+  staff_name: string;
+  item_name: string;
+  quantity: number;
+  unit: string;
+  category: string;
+  urgency: "normal" | "urgent";
+  expected_date: string | null;
+  note: string;
+  photos: string[];
+  status: PurchaseStatus;
+  reject_reason: string;
+  created_at: string;
+}
+
+// ───────────────────────── 纯函数（可测） ─────────────────────────
+
+/** 按岗位展开指派人：岗位里的每个在职员工各得一条任务（责任到人） */
+export function expandRoleAssignees(
+  roles: Role[],
+  staff: StaffMember[],
+): StaffMember[] {
+  const active = staff.filter((s) => s.status === "active");
+  const picked = active.filter((s) => s.roles.some((r) => roles.includes(r)));
+  // 去重（同一员工可能被多岗位命中）
+  const seen = new Set<string>();
+  return picked.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
+}
+
+/** 截止时间：dueHours 小时后 */
+export function dueFromHours(hours: number, now = Date.now()): string {
+  return new Date(now + hours * 3600_000).toISOString();
+}
+
+/** 任务/盘点是否逾期 */
+export function isOverdue(dueAt: string | null, now = Date.now()): boolean {
+  if (!dueAt) return false;
+  return new Date(dueAt).getTime() < now;
+}
+
+/** 实盘与账面差异数量（null 表示未填） */
+export function stocktakeDiff(
+  book: number | null,
+  actual: number | null,
+): number | null {
+  if (book === null || actual === null) return null;
+  return Math.round((actual - book) * 100) / 100;
+}
+
+/**
+ * 每日抽盘选品：
+ * - stale_first：上次盘点最久优先（从未盘过视为最久），同分按名称稳定排序
+ * - zone_rotate：按 zones 顺序轮换，取该 zone 的物品（先久未盘）
+ * - random：随机抽 n 个（用 countDate 作种子，同一天结果稳定，可复现）
+ * 排除：今天已生成过盘点任务的物品
+ */
+export function pickDailyStocktakeItems(
+  items: {
+    id: string;
+    name: string;
+    zone: string;
+    lastCountedAt: string | null;
+  }[],
+  rule: Pick<StocktakeRule, "items_per_day" | "strategy" | "zones">,
+  countDate: string,
+  alreadyPlannedIds: string[] = [],
+): typeof items {
+  const planned = new Set(alreadyPlannedIds);
+  const pool = items.filter((it) => !planned.has(it.id));
+  if (pool.length === 0) return [];
+
+  const byStale = (a: (typeof pool)[number], b: (typeof pool)[number]) => {
+    const ta = a.lastCountedAt ? new Date(a.lastCountedAt).getTime() : 0;
+    const tb = b.lastCountedAt ? new Date(b.lastCountedAt).getTime() : 0;
+    if (ta !== tb) return ta - tb; // 0(从未盘) 最前
+    return a.name.localeCompare(b.name, "zh");
+  };
+
+  let candidates: typeof pool;
+  if (rule.strategy === "zone_rotate" && rule.zones.length > 0) {
+    // 按 countDate 距 epoch 天数决定今天轮到第几个 zone
+    const dayIndex = Math.floor(
+      new Date(countDate + "T00:00:00").getTime() / 86400_000,
+    );
+    const zone = rule.zones[dayIndex % rule.zones.length];
+    const inZone = pool.filter((it) => it.zone === zone);
+    candidates = inZone.length > 0 ? inZone.sort(byStale) : pool.sort(byStale);
+  } else if (rule.strategy === "random") {
+    // 稳定随机：countDate 做种子的 LCG
+    let seed = 0;
+    for (const ch of countDate) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    candidates = [...pool].sort(() => rand() - 0.5);
+  } else {
+    candidates = [...pool].sort(byStale);
+  }
+  return candidates.slice(0, Math.max(1, rule.items_per_day));
+}
+
+// ───────────────────────── 错误包装 ─────────────────────────
+
+/** crypto.randomUUID 在非 HTTPS 环境可能不存在，兜底 */
+function uuid(): string {
+  try {
+    if (
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+    )
+      return crypto.randomUUID();
+  } catch {
+    /* ignore */
+  }
+  return (
+    "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)
+  );
+}
+
+function warn(op: string, error: { message: string } | null): boolean {
+  if (error) {
+    console.warn(`[staffOps] ${op}:`, error.message);
+    return false;
+  }
+  return true;
+}
+
+// ───────────────────────── 员工账号 ─────────────────────────
+
+export async function fetchStaffMembers(): Promise<StaffMember[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("staff_members")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (!warn("fetchStaffMembers", error)) return [];
+  return (data || []).map((s: any) => ({
+    ...s,
+    roles: Array.isArray(s.roles) ? s.roles : [],
+  }));
+}
+
+/** 新增/更新员工；password 传值时才重设密码（bcrypt） */
+export async function upsertStaffMember(
+  member: Partial<StaffMember> & { id?: string; name: string },
+  password?: string,
+): Promise<{ ok: boolean; id?: string }> {
+  if (!supabase) return { ok: false };
+  const patch: Record<string, unknown> = {
+    name: member.name.trim(),
+    roles: member.roles || [],
+    status: member.status || "active",
+    phone: member.phone || "",
+    note: member.note || "",
+    updated_at: new Date().toISOString(),
+  };
+  if (password && password.trim()) {
+    patch.password_hash = await bcrypt.hash(password.trim(), 10);
+  }
+  if (member.id) {
+    const { error } = await supabase
+      .from("staff_members")
+      .update(patch)
+      .eq("id", member.id);
+    return { ok: warn("upsertStaffMember", error), id: member.id };
+  }
+  const { data, error } = await supabase
+    .from("staff_members")
+    .insert(patch)
+    .select("id")
+    .single();
+  if (!warn("insertStaffMember", error)) return { ok: false };
+  return { ok: true, id: data?.id };
+}
+
+export async function deleteStaffMember(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("staff_members").delete().eq("id", id);
+  return warn("deleteStaffMember", error);
+}
+
+// ───────────────────────── 任务模板 ─────────────────────────
+
+export async function fetchTaskTemplates(): Promise<TaskTemplate[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("task_templates")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (!warn("fetchTaskTemplates", error)) return [];
+  return data || [];
+}
+
+export async function upsertTaskTemplate(
+  tpl: Partial<TaskTemplate> & { id?: string; name: string },
+): Promise<boolean> {
+  if (!supabase) return false;
+  const patch = {
+    name: tpl.name.trim(),
+    task_type: tpl.task_type || "daily",
+    roles: tpl.roles || [],
+    checklist: tpl.checklist || [],
+    require_photo: !!tpl.require_photo,
+    due_hours: tpl.due_hours ?? 8,
+    description: tpl.description || "",
+  };
+  if (tpl.id) {
+    const { error } = await supabase
+      .from("task_templates")
+      .update(patch)
+      .eq("id", tpl.id);
+    return warn("upsertTaskTemplate", error);
+  }
+  const { error } = await supabase.from("task_templates").insert(patch);
+  return warn("insertTaskTemplate", error);
+}
+
+export async function deleteTaskTemplate(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("task_templates").delete().eq("id", id);
+  return warn("deleteTaskTemplate", error);
+}
+
+// ───────────────────────── 任务派发 ─────────────────────────
+
+export interface DispatchInput {
+  title: string;
+  description?: string;
+  checklist?: ChecklistItem[];
+  require_photo?: boolean;
+  priority?: "low" | "normal" | "high";
+  roles?: Role[]; // 按岗位派发（展开到人）
+  assigneeIds?: string[]; // 或指定员工
+  due_hours?: number;
+  template_id?: string;
+}
+
+/** 派发：按岗位展开为每人一条；返回成功条数 */
+export async function dispatchTasks(input: DispatchInput): Promise<number> {
+  if (!supabase || !isConfigured) return 0;
+  const staff = await fetchStaffMembers();
+  let targets: StaffMember[];
+  if (input.assigneeIds && input.assigneeIds.length > 0) {
+    targets = staff.filter(
+      (s) => s.status === "active" && input.assigneeIds!.includes(s.id),
+    );
+  } else {
+    targets = expandRoleAssignees(input.roles || [], staff);
+  }
+  if (targets.length === 0) return 0;
+  const batchId = uuid();
+  const now = new Date().toISOString();
+  const rows = targets.map((s) => ({
+    batch_id: batchId,
+    template_id: input.template_id || null,
+    title: input.title.trim(),
+    description: input.description || "",
+    checklist: (input.checklist || []).map((c) => ({
+      text: c.text,
+      done: false,
+    })),
+    require_photo: !!input.require_photo,
+    priority: input.priority || "normal",
+    assigned_to: s.id,
+    assignee_name: s.name,
+    assignee_roles: s.roles,
+    due_at: dueFromHours(input.due_hours ?? 8),
+    status: "pending",
+    created_at: now,
+  }));
+  const { error } = await supabase.from("staff_tasks").insert(rows);
+  if (!warn("dispatchTasks", error)) return 0;
+  return rows.length;
+}
+
+export async function fetchStaffTasks(): Promise<StaffTask[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("staff_tasks")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (!warn("fetchStaffTasks", error)) return [];
+  return data || [];
+}
+
+/** 验收：通过 / 驳回（驳回后员工端可重新提交） */
+export async function reviewStaffTask(
+  id: string,
+  approve: boolean,
+  note = "",
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("staff_tasks")
+    .update({
+      status: approve ? "approved" : "rejected",
+      review_note: note,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  return warn("reviewStaffTask", error);
+}
+
+export async function cancelStaffTask(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("staff_tasks")
+    .update({ status: "cancelled" })
+    .eq("id", id);
+  return warn("cancelStaffTask", error);
+}
+
+// ───────────────────────── 盘点 ─────────────────────────
+
+export async function fetchStocktakeRule(): Promise<StocktakeRule> {
+  const fallback: StocktakeRule = {
+    enabled: false,
+    items_per_day: 5,
+    strategy: "stale_first",
+    zones: [],
+    due_time: "22:00",
+    require_photo: false,
+    show_book_qty: false,
+    allow_draft: true,
+  };
+  if (!supabase) return fallback;
+  const { data, error } = await supabase
+    .from("stocktake_rules")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+  if (!warn("fetchStocktakeRule", error) || !data) return fallback;
+  return data as StocktakeRule;
+}
+
+export async function saveStocktakeRule(rule: StocktakeRule): Promise<boolean> {
+  if (!supabase) return false;
+  const patch = { ...rule, updated_at: new Date().toISOString() };
+  if (rule.id) {
+    const { error } = await supabase
+      .from("stocktake_rules")
+      .update(patch)
+      .eq("id", rule.id);
+    return warn("saveStocktakeRule", error);
+  }
+  delete (patch as any).id;
+  const { error } = await supabase.from("stocktake_rules").insert(patch);
+  if (!warn("insertStocktakeRule", error)) return false;
+  return true;
+}
+
+export async function fetchStocktakeTasks(
+  countDate?: string,
+): Promise<StocktakeTask[]> {
+  if (!supabase) return [];
+  let q = supabase
+    .from("stocktake_tasks")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (countDate) q = q.eq("count_date", countDate);
+  const { data, error } = await q;
+  if (!warn("fetchStocktakeTasks", error)) return [];
+  return data || [];
+}
+
+/** 生成今日盘点清单（含账面数量快照）；返回创建条数 */
+export async function createStocktakeTasks(
+  countDate: string,
+  items: {
+    id: string;
+    name: string;
+    unit: string;
+    zone?: string;
+    stock: number;
+  }[],
+  assignedTo?: { id: string; name: string } | null,
+): Promise<number> {
+  if (!supabase || items.length === 0) return 0;
+  const rows = items.map((it) => ({
+    count_date: countDate,
+    item_id: it.id,
+    item_name: it.name,
+    unit: it.unit,
+    zone: it.zone || "",
+    book_qty: it.stock,
+    assigned_to: assignedTo?.id || null,
+    assignee_name: assignedTo?.name || "",
+    status: "pending",
+  }));
+  // 同日重复的物品跳过：先查已存在
+  const existing = await fetchStocktakeTasks(countDate);
+  const existIds = new Set(existing.map((t) => t.item_id));
+  const fresh = rows.filter((r) => !existIds.has(r.item_id));
+  if (fresh.length === 0) return 0;
+  const { error } = await supabase.from("stocktake_tasks").insert(fresh);
+  if (!warn("createStocktakeTasks", error)) return 0;
+  return fresh.length;
+}
+
+/** 指派/转派（必须具体到人） */
+export async function assignStocktakeTask(
+  id: string,
+  member: { id: string; name: string } | null,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("stocktake_tasks")
+    .update({
+      assigned_to: member?.id || null,
+      assignee_name: member?.name || "",
+    })
+    .eq("id", id);
+  return warn("assignStocktakeTask", error);
+}
+
+export async function cancelStocktakeTask(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("stocktake_tasks")
+    .update({ status: "cancelled" })
+    .eq("id", id);
+  return warn("cancelStocktakeTask", error);
+}
+
+/** 盘点审核：通过即校准库存（diff 写入库存流水），驳回则退回员工复核 */
+export async function reviewStocktakeTask(
+  task: StocktakeTask,
+  approve: boolean,
+  item: { id: string; stock: number; price: number } | undefined,
+  reviewNote = "",
+): Promise<boolean> {
+  if (!supabase) return false;
+  if (!approve) {
+    const { error } = await supabase
+      .from("stocktake_tasks")
+      .update({
+        status: "rejected",
+        review_note: reviewNote,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", task.id);
+    return warn("reviewStocktakeTask", error);
+  }
+  // 通过：若差异 ≠ 0，校准库存
+  if (item && task.actual_qty !== null && task.actual_qty !== item.stock) {
+    const delta = Math.round((task.actual_qty - item.stock) * 100) / 100;
+    const { adjustStock } = await import("./inventory");
+    const ok = await adjustStock(
+      { ...item, stock: item.stock } as any,
+      delta,
+      "adjustment",
+      `每日抽盘校准 ${task.count_date} · 盘点人 ${task.assignee_name || "未署名"}`,
+      "stocktake",
+    );
+    if (!ok) return false;
+  }
+  const now = new Date().toISOString();
+  const { error: e2 } = await supabase
+    .from("stocktake_tasks")
+    .update({
+      status: "calibrated",
+      book_qty: item ? item.stock : task.book_qty, // 校准前账面留档
+      review_note: reviewNote,
+      reviewed_at: now,
+      calibrated_at: now,
+    })
+    .eq("id", task.id);
+  if (!warn("calibrateStocktakeTask", e2)) return false;
+  // 记录物品上次盘点时间
+  await supabase
+    .from("inventory_items")
+    .update({ last_counted_at: now })
+    .eq("id", task.item_id);
+  return true;
+}
+
+// ───────────────────────── 采购申报 ─────────────────────────
+
+export async function fetchPurchaseRequests(): Promise<PurchaseRequest[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("purchase_requests")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (!warn("fetchPurchaseRequests", error)) return [];
+  return data || [];
+}
+
+export async function reviewPurchaseRequest(
+  id: string,
+  approve: boolean,
+  rejectReason = "",
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("purchase_requests")
+    .update({
+      status: approve ? "approved" : "rejected",
+      reject_reason: rejectReason,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  return warn("reviewPurchaseRequest", error);
+}
+
+export async function markPurchasePurchased(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("purchase_requests")
+    .update({ status: "purchased", purchased_at: new Date().toISOString() })
+    .eq("id", id);
+  return warn("markPurchasePurchased", error);
+}
+
+// ───────────────────────── 员工端（登录/提交） ─────────────────────────
+
+/** 员工侧：我的任务（只查派给自己的） */
+export async function fetchMyTasks(staffId: string): Promise<StaffTask[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("staff_tasks")
+    .select("*")
+    .eq("assigned_to", staffId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (!warn("fetchMyTasks", error)) return [];
+  return data || [];
+}
+
+/** 员工侧：我的盘点任务（默认今天，含待复核） */
+export async function fetchMyStocktakes(
+  staffId: string,
+  countDate?: string,
+): Promise<StocktakeTask[]> {
+  if (!supabase) return [];
+  let q = supabase
+    .from("stocktake_tasks")
+    .select("*")
+    .eq("assigned_to", staffId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (countDate) q = q.eq("count_date", countDate);
+  const { data, error } = await q;
+  if (!warn("fetchMyStocktakes", error)) return [];
+  return data || [];
+}
+
+/** 员工侧：我的采购申报 */
+export async function fetchMyPurchaseRequests(
+  staffId: string,
+): Promise<PurchaseRequest[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("purchase_requests")
+    .select("*")
+    .eq("staff_id", staffId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (!warn("fetchMyPurchaseRequests", error)) return [];
+  return data || [];
+}
+
+export interface StaffSession {
+  staffId: string;
+  name: string;
+  roles: Role[];
+  exp: number;
+}
+
+const SESSION_KEY = "staff_session";
+const SESSION_MS = 7 * 86400_000;
+
+export function loadStaffSession(): Omit<StaffSession, "exp"> | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as StaffSession;
+    if (!s.staffId || Date.now() > s.exp) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return { staffId: s.staffId, name: s.name, roles: s.roles || [] };
+  } catch {
+    return null;
+  }
+}
+
+export function saveStaffSession(s: Omit<StaffSession, "exp">) {
+  localStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({ ...s, exp: Date.now() + SESSION_MS }),
+  );
+}
+
+export function clearStaffSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+/** 员工登录：姓名+密码，bcrypt 客户端比对（复用现有方案） */
+export async function staffLogin(
+  name: string,
+  password: string,
+): Promise<Omit<StaffSession, "exp"> | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("staff_members")
+    .select("id,name,roles,status,password_hash")
+    .eq("name", name.trim())
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  const member = data[0] as any;
+  if (member.status !== "active" || !member.password_hash) return null;
+  const ok = await bcrypt.compare(password, member.password_hash);
+  if (!ok) return null;
+  return {
+    staffId: member.id,
+    name: member.name,
+    roles: Array.isArray(member.roles) ? member.roles : [],
+  };
+}
+
+/** 员工提交任务完成情况 */
+export async function submitStaffTask(
+  taskId: string,
+  checklist: ChecklistItem[],
+  note: string,
+  photos: string[],
+  resubmitting: boolean,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("staff_tasks")
+    .update({
+      checklist,
+      note,
+      photos,
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
+      ...(resubmitting ? { resubmit_count: 1 } : {}),
+    })
+    .eq("id", taskId);
+  return warn("submitStaffTask", error);
+}
+
+/** 员工提交盘点（actual 为空视为暂存 drafted） */
+export async function submitStocktakeTask(
+  taskId: string,
+  actualQty: number | null,
+  note: string,
+  photos: string[],
+  allowDraft: boolean,
+): Promise<"drafted" | "submitted" | false> {
+  if (!supabase) return false;
+  const status =
+    actualQty === null ? (allowDraft ? "drafted" : "submitted") : "submitted";
+  const { error } = await supabase
+    .from("stocktake_tasks")
+    .update({
+      actual_qty: actualQty,
+      note,
+      photos,
+      status,
+      submitted_at: actualQty === null ? null : new Date().toISOString(),
+    })
+    .eq("id", taskId);
+  if (!warn("submitStocktakeTask", error)) return false;
+  return status;
+}
+
+/** 员工新建采购申报 */
+export async function createPurchaseRequest(
+  session: { staffId: string; name: string },
+  input: {
+    item_name: string;
+    quantity: number;
+    unit: string;
+    category: string;
+    urgency: "normal" | "urgent";
+    expected_date: string | null;
+    note: string;
+    photos: string[];
+  },
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("purchase_requests").insert({
+    staff_id: session.staffId,
+    staff_name: session.name,
+    ...input,
+    status: "pending",
+  });
+  return warn("createPurchaseRequest", error);
+}
+
+/** 员工侧改报被驳回的申报 → 重置为待审批 */
+export async function resubmitPurchaseRequest(
+  id: string,
+  patch: Partial<
+    Pick<
+      PurchaseRequest,
+      | "item_name"
+      | "quantity"
+      | "unit"
+      | "category"
+      | "urgency"
+      | "expected_date"
+      | "note"
+      | "photos"
+    >
+  >,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("purchase_requests")
+    .update({
+      ...patch,
+      status: "pending",
+      reject_reason: "",
+      decided_at: null,
+    })
+    .eq("id", id);
+  return warn("resubmitPurchaseRequest", error);
+}
+
+// ───────────────────────── 图片压缩（员工端拍照） ─────────────────────────
+
+/** 压缩到 ~200KB 以内的 jpeg dataURL，避免 JSONB 行过大 */
+export async function compressPhoto(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  try {
+    const bitmap = await createImageBitmap(
+      await fetch(dataUrl).then((r) => r.blob()),
+    );
+    const scale = Math.min(1, 900 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas
+      .getContext("2d")
+      ?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    let q = 0.7;
+    let out = canvas.toDataURL("image/jpeg", q);
+    while (out.length > 280_000 && q > 0.3) {
+      q -= 0.15;
+      out = canvas.toDataURL("image/jpeg", q);
+    }
+    return out;
+  } catch {
+    return dataUrl;
+  }
+}

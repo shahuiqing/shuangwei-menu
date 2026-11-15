@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { uploadBase64ToStorage } from "../../utils/storage";
-import { api } from "../../api";
 import { safeSetItem } from "../../utils/storage";
 import type {
   MenuCategory,

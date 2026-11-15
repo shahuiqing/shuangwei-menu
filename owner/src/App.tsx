@@ -27,6 +27,9 @@ const StaffView = lazy(() => import("./views/Staff"));
 const Settings = lazy(() => import("./views/Settings"));
 const Tasks = lazy(() => import("./views/Tasks"));
 const Assistant = lazy(() => import("./views/Assistant"));
+const StaffTasks = lazy(() => import("./views/StaffTasks"));
+const Stocktake = lazy(() => import("./views/Stocktake"));
+const PurchaseRequests = lazy(() => import("./views/PurchaseRequests"));
 import { Layout, type OwnerTab } from "./components/Layout";
 import { ToastHost } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -301,6 +304,9 @@ export default function App() {
               {tab === "cost" && <CostReport version={version} />}
               {tab === "consumption" && <Consumption version={version} />}
               {tab === "staff" && <StaffView />}
+              {tab === "dispatch" && <StaffTasks />}
+              {tab === "stocktake" && <Stocktake />}
+              {tab === "requests" && <PurchaseRequests />}
               {tab === "settings" && (
                 <Settings settings={settings} onSaved={load} />
               )}
