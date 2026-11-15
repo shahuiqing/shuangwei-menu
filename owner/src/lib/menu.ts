@@ -99,6 +99,66 @@ async function saveCategories(cats: MenuCategory[]): Promise<boolean> {
   return true;
 }
 
+/* ============ 促销位（settings.promotions，顾客端首页展示） ============ */
+
+export interface Promotion {
+  id: string;
+  isActive: boolean;
+  title: string;
+  enTitle?: string;
+  frTitle?: string;
+  arTitle?: string;
+  maTitle?: string;
+  description?: string;
+  enDescription?: string;
+  frDescription?: string;
+  arDescription?: string;
+  maDescription?: string;
+  image?: string;
+}
+
+export async function fetchPromotions(): Promise<Promotion[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("settings")
+    .select("promotions")
+    .eq("id", "global")
+    .maybeSingle();
+  if (error) {
+    console.warn("[owner] fetchPromotions:", error.message);
+    return [];
+  }
+  return Array.isArray(data?.promotions)
+    ? (data!.promotions as Promotion[])
+    : [];
+}
+
+/** 保存促销位并通知顾客端刷新 */
+export async function savePromotions(list: Promotion[]): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("settings")
+    .update({ promotions: list })
+    .eq("id", "global");
+  if (error) {
+    console.warn("[owner] savePromotions:", error.message);
+    return false;
+  }
+  try {
+    const ch = supabase.channel("owner-menu");
+    await ch.subscribe();
+    await ch.send({
+      type: "broadcast",
+      event: "settings_changed",
+      payload: {},
+    });
+    supabase.removeChannel(ch);
+  } catch {
+    /* 广播失败不影响写入 */
+  }
+  return true;
+}
+
 /** 内部：读取-修改-写回，避免整表覆盖丢并发改动 */
 async function mutate(
   fn: (cats: MenuCategory[]) => { cats?: MenuCategory[]; deletedId?: string },

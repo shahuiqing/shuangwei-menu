@@ -25,12 +25,16 @@ import {
   deleteCategory,
   deleteDish,
   fetchCategories,
+  fetchPromotions,
+  genId,
   parsePrice,
   renameCategory,
+  savePromotions,
   updateDish,
   type MenuCategory,
   type MenuItem,
   type MenuItemAddon,
+  type Promotion,
 } from "../lib/menu";
 import {
   LANGS,
@@ -110,6 +114,8 @@ function addonDraftToMenuSafe(drafts: AddonDraft[]): {
 
 export default function Dishes({ version = 0 }: { version?: number }) {
   const [cats, setCats] = useState<MenuCategory[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promoModal, setPromoModal] = useState<Promotion | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
@@ -141,7 +147,9 @@ export default function Dishes({ version = 0 }: { version?: number }) {
 
   const load = async () => {
     setLoading(true);
-    setCats(await fetchCategories());
+    const [c, p] = await Promise.all([fetchCategories(), fetchPromotions()]);
+    setCats(c);
+    setPromotions(p);
     setLoading(false);
   };
 
@@ -175,6 +183,56 @@ export default function Dishes({ version = 0 }: { version?: number }) {
       toast.success(okMsg);
       load();
     } else toast.error("操作失败（检查数据库权限）");
+  };
+
+  const emptyPromo = (): Promotion => ({
+    id: genId("promo"),
+    isActive: true,
+    title: "",
+    frTitle: "",
+    arTitle: "",
+    description: "",
+    frDescription: "",
+    arDescription: "",
+    image: "",
+  });
+
+  const submitPromo = () =>
+    run(
+      async () => {
+        if (!promoModal?.title.trim()) {
+          toast.error("促销标题不能为空");
+          return false;
+        }
+        const exists = promotions.some((p) => p.id === promoModal.id);
+        const next = exists
+          ? promotions.map((p) => (p.id === promoModal.id ? promoModal : p))
+          : [...promotions, promoModal];
+        return savePromotions(next);
+      },
+      promoModal && promotions.some((p) => p.id === promoModal.id)
+        ? "促销已更新"
+        : "促销已创建",
+    ).then(() => setPromoModal(null));
+
+  const togglePromo = async (p: Promotion) => {
+    const next = promotions.map((x) =>
+      x.id === p.id ? { ...x, isActive: !x.isActive } : x,
+    );
+    setPromotions(next);
+    if (!(await savePromotions(next))) {
+      toast.error("保存失败");
+      load();
+    }
+  };
+
+  const removePromo = async (p: Promotion) => {
+    if (!(await askConfirm(`删除促销「${p.title}」？`, { danger: true })))
+      return;
+    if (await savePromotions(promotions.filter((x) => x.id !== p.id))) {
+      toast.success("已删除");
+      load();
+    } else toast.error("删除失败");
   };
 
   const submitCat = () =>
@@ -534,6 +592,81 @@ export default function Dishes({ version = 0 }: { version?: number }) {
         </div>
       )}
 
+      {/* 促销位（顾客端首页展示） */}
+      <ChartCard
+        title="促销位"
+        subtitle={`${promotions.filter((p) => p.isActive).length} 个生效中 · 显示在顾客端首页`}
+        action={
+          <button
+            onClick={() => setPromoModal(emptyPromo())}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full btn-brand text-white"
+          >
+            <Plus size={13} /> 新建促销
+          </button>
+        }
+      >
+        {promotions.length === 0 ? (
+          <EmptyState
+            text="还没有促销"
+            hint="新建一个（如招牌菜立减、套餐优惠），顾客端首页会展示"
+          />
+        ) : (
+          <div className="space-y-2">
+            {promotions.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-3 bg-zinc-950 rounded-xl px-3.5 py-2.5"
+              >
+                {p.image ? (
+                  <img
+                    src={p.image}
+                    alt=""
+                    className="w-12 h-12 rounded-lg object-cover border border-white/10 shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-white/5 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-zinc-100 truncate">
+                    {p.title || "未命名促销"}
+                  </div>
+                  <div className="text-[11px] text-zinc-500 truncate">
+                    {[p.frTitle && "FR", p.arTitle && "AR"]
+                      .filter(Boolean)
+                      .join(" · ") || "仅中文"}
+                    {p.description ? ` · ${p.description}` : ""}
+                  </div>
+                </div>
+                <button
+                  onClick={() => togglePromo(p)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    p.isActive
+                      ? "bg-green-500/15 text-green-400"
+                      : "bg-zinc-800 text-zinc-500"
+                  }`}
+                >
+                  {p.isActive ? "生效中" : "已停用"}
+                </button>
+                <button
+                  onClick={() => setPromoModal({ ...p })}
+                  className="shrink-0 p-1.5 text-zinc-500 hover:text-white"
+                  title="编辑"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => removePromo(p)}
+                  className="shrink-0 p-1.5 text-zinc-500 hover:text-red-400"
+                  title="删除"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </ChartCard>
+
       {/* 分类弹窗 */}
       <Sheet
         open={!!catModal}
@@ -553,6 +686,71 @@ export default function Dishes({ version = 0 }: { version?: number }) {
               className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
             >
               <Save size={16} /> 保存
+            </button>
+          </>
+        )}
+      </Sheet>
+
+      {/* 促销位编辑 */}
+      <Sheet
+        open={!!promoModal}
+        title={
+          promoModal && promotions.some((p) => p.id === promoModal.id)
+            ? "编辑促销"
+            : "新建促销"
+        }
+        onClose={() => setPromoModal(null)}
+      >
+        {promoModal && (
+          <>
+            <SheetField
+              label="标题（中文）"
+              value={promoModal.title}
+              onChange={(v) => setPromoModal({ ...promoModal, title: v })}
+            />
+            <SheetField
+              label="法语标题（选填）"
+              value={promoModal.frTitle || ""}
+              onChange={(v) => setPromoModal({ ...promoModal, frTitle: v })}
+            />
+            <SheetField
+              label="阿拉伯语标题（选填）"
+              value={promoModal.arTitle || ""}
+              onChange={(v) => setPromoModal({ ...promoModal, arTitle: v })}
+            />
+            <SheetField
+              label="描述（选填）"
+              value={promoModal.description || ""}
+              onChange={(v) => setPromoModal({ ...promoModal, description: v })}
+            />
+            <SheetField
+              label="图片 URL（选填）"
+              value={promoModal.image || ""}
+              onChange={(v) => setPromoModal({ ...promoModal, image: v })}
+            />
+            <button
+              onClick={() =>
+                setPromoModal({
+                  ...promoModal,
+                  isActive: !promoModal.isActive,
+                })
+              }
+              className={`mt-2 w-full py-2.5 rounded-xl text-sm font-semibold ${
+                promoModal.isActive
+                  ? "bg-green-500/15 text-green-400"
+                  : "bg-zinc-800 text-zinc-400"
+              }`}
+            >
+              {promoModal.isActive
+                ? "生效中（点击停用）"
+                : "已停用（点击启用）"}
+            </button>
+            <button
+              disabled={busy}
+              onClick={submitPromo}
+              className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              <Save size={16} /> 保存促销
             </button>
           </>
         )}
