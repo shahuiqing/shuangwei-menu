@@ -1,59 +1,11 @@
 /**
  * 员工端三语支持：中文 / Français / العربية
- * 轻量方案：模块级当前语言 + 订阅刷新；不含 boss 端界面。
+ * 复用 ../i18n/engine 的轻量引擎；员工端词条与老板端相互独立。
  * 阿拉伯语调用方需在容器上设 dir="rtl"（见 Main / Login 员工表单）。
  */
+import { createI18n, type Dict, type Lang } from "../i18n/engine";
 
-export type Lang = "zh" | "fr" | "ar";
-
-const LANG_KEY = "staff_lang";
-
-function detect(): Lang {
-  try {
-    const saved = localStorage.getItem(LANG_KEY) as Lang | null;
-    if (saved === "zh" || saved === "fr" || saved === "ar") return saved;
-  } catch {
-    /* ignore */
-  }
-  return "zh";
-}
-
-let lang: Lang = detect();
-const listeners = new Set<() => void>();
-
-export function getLang(): Lang {
-  return lang;
-}
-
-export function setLang(l: Lang) {
-  if (l === lang) return;
-  lang = l;
-  try {
-    localStorage.setItem(LANG_KEY, l);
-  } catch {
-    /* ignore */
-  }
-  listeners.forEach((f) => f());
-}
-
-/** 组件订阅语言变化以触发重渲染 */
-export function onLangChange(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
-}
-
-/** 该语言的本地日期/时间格式 */
-export function localeOf(l: Lang = lang): string {
-  return l === "zh" ? "zh-CN" : l === "fr" ? "fr-FR" : "ar-MA";
-}
-
-export function isRtl(l: Lang = lang): boolean {
-  return l === "ar";
-}
-
-type Dict = Record<string, string>;
+export type { Lang };
 
 const zh: Dict = {
   "lang.self": "中文",
@@ -504,22 +456,12 @@ const ar: Dict = {
   "cat.其他": "أخرى",
 };
 
-const DICTS: Record<Lang, Dict> = { zh, fr, ar };
+const api = createI18n("staff_lang", { zh, fr, ar });
 
-/** 取词条；支持 {n}/{d}/{u}/{q}/{note}/{r} 占位符 */
-export function t(key: string, vars?: Record<string, string | number>): string {
-  let s = DICTS[lang][key] ?? zh[key] ?? key;
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) {
-      s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
-    }
-  }
-  return s;
-}
-
-/** 语言切换按钮组（三语） */
-export const LANGS: { id: Lang; label: string }[] = [
-  { id: "zh", label: "中文" },
-  { id: "fr", label: "Français" },
-  { id: "ar", label: "العربية" },
-];
+export const t = api.t;
+export const getLang = api.getLang;
+export const setLang = api.setLang;
+export const onLangChange = api.onLangChange;
+export const localeOf = api.localeOf;
+export const isRtl = api.isRtl;
+export const LANGS = api.LANGS;

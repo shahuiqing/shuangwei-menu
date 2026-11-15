@@ -24,11 +24,21 @@ import {
   Route,
   LayoutGrid,
   Send,
+  Languages,
 } from "lucide-react";
 import { useTheme, THEMES, type Theme } from "../lib/theme";
 import { useOnline } from "../lib/offline";
 import { cacheUsedAt, onCacheUse } from "../lib/snapshot";
 import { Sheet } from "./Sheet";
+import {
+  t,
+  LANGS,
+  getLang,
+  setLang,
+  onLangChange,
+  isRtl,
+  localeOf,
+} from "../i18n";
 
 export type OwnerTab =
   | "dashboard"
@@ -74,17 +84,23 @@ export const NAV: { id: OwnerTab; label: string; icon: LucideIcon }[] = [
 ];
 
 // 侧栏分组：按业务域分组，作为桌面侧栏与「全部功能」的统一入口数据源
-export const NAV_GROUPS: { title: string; items: OwnerTab[] }[] = [
-  { title: "经营", items: ["dashboard", "reports", "assistant"] },
-  { title: "订单与任务", items: ["orders", "tasks"] },
-  { title: "菜品", items: ["dishes", "menu", "recipe"] },
+// 分组标题（key 用于三语翻译，title 作为中文兜底）
+export const NAV_GROUPS: { key: string; title: string; items: OwnerTab[] }[] = [
+  { key: "biz", title: "经营", items: ["dashboard", "reports", "assistant"] },
+  { key: "ops", title: "订单与任务", items: ["orders", "tasks"] },
+  { key: "dishes", title: "菜品", items: ["dishes", "menu", "recipe"] },
   {
+    key: "stock",
     title: "采购与库存",
     items: ["procurement", "inventory", "trace", "waste"],
   },
-  { title: "成本", items: ["cost", "consumption"] },
-  { title: "员工协同", items: ["staff", "dispatch", "stocktake", "requests"] },
-  { title: "系统", items: ["settings"] },
+  { key: "cost", title: "成本", items: ["cost", "consumption"] },
+  {
+    key: "team",
+    title: "员工协同",
+    items: ["staff", "dispatch", "stocktake", "requests"],
+  },
+  { key: "sys", title: "系统", items: ["settings"] },
 ];
 
 // 移动端底部主导航：只放每天最常用的 4 个页面，其余统一进「全部」
@@ -99,28 +115,7 @@ export const PRIMARY_NAV: {
   { id: "cost", label: "成本", icon: BadgeDollarSign },
 ];
 
-// 页面副标题（移动端大标题下方的一行说明）
-const SUBTITLE: Partial<Record<OwnerTab, string>> = {
-  dashboard: "今日经营概览 · 实时数据",
-  orders: "接单、出餐与历史订单",
-  reports: "营收趋势与经营分析",
-  dishes: "上架、改价与售卖状态",
-  menu: "单品盈利与销量排行",
-  procurement: "进货记录与供应商",
-  inventory: "原料库存与预警",
-  trace: "订单→菜品→原料→采购批次",
-  waste: "报损登记与损耗率",
-  recipe: "菜品用料与成本基准",
-  cost: "配方成本 × 单价的毛利核算",
-  consumption: "按订单反推的用料流水",
-  staff: "账号与权限",
-  dispatch: "给员工派任务并验收",
-  stocktake: "每日抽盘 · 责任到人 · 库存校准",
-  requests: "员工申报采购 · 老板审批",
-  settings: "店铺信息与系统参数",
-  tasks: "问题→任务→解决闭环",
-  assistant: "简报与经营问答",
-};
+// 页面副标题现在统一走 i18n 词条 sub.<tab>（见 src/i18n/*）
 
 /** 移动端下拉刷新：仅在页面顶部、向下拖动超过阈值时触发刷新 */
 function usePullToRefresh(onRefresh: () => void, enabled: boolean) {
@@ -234,8 +229,36 @@ export function InstallButton() {
       className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-orange-300 bg-orange-500/10 ring-1 ring-orange-500/25 hover:bg-orange-500/15 transition-colors"
     >
       <Download size={16} />
-      安装到主屏幕
+      {t("shell.install")}
     </button>
+  );
+}
+
+/** 语言切换（中文 / Français / العربية） */
+export function LangSwitch({ className = "" }: { className?: string }) {
+  const [, force] = useState(0);
+  useEffect(() => onLangChange(() => force((v) => v + 1)), []);
+  return (
+    <div
+      dir="ltr"
+      className={`flex items-center gap-0.5 rounded-full bg-zinc-900 border border-white/5 px-1 py-0.5 ${className}`}
+    >
+      <Languages size={12} className="text-zinc-500 mx-1 shrink-0" />
+      {LANGS.map((l) => (
+        <button
+          key={l.id}
+          type="button"
+          onClick={() => setLang(l.id)}
+          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
+            getLang() === l.id
+              ? "bg-orange-600 text-white"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -264,6 +287,8 @@ export function Layout({
 }) {
   const { theme, setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [, force] = useState(0);
+  useEffect(() => onLangChange(() => force((v) => v + 1)), []);
   const active = NAV.find((n) => n.id === tab);
   const primaryActive = PRIMARY_NAV.some((n) => n.id === tab);
   const go = (t: OwnerTab) => {
@@ -289,12 +314,12 @@ export function Layout({
   }, []);
 
   const statusText = !online
-    ? "离线 · 显示缓存"
+    ? t("shell.offline")
     : live
-      ? "实时同步中"
+      ? t("shell.live")
       : lastUpdated
-        ? `更新于 ${lastUpdated}`
-        : "同步中…";
+        ? t("shell.updated", { t: lastUpdated })
+        : t("shell.syncing");
 
   const statusColor = !online
     ? "bg-amber-400"
@@ -305,7 +330,10 @@ export function Layout({
         : "bg-rose-500";
 
   return (
-    <div className="min-h-full bg-zinc-950 lg:flex">
+    <div
+      dir={isRtl() ? "rtl" : "ltr"}
+      className="min-h-full bg-zinc-950 lg:flex"
+    >
       {/* 桌面侧栏：所有页面常驻可见，移动端由底部导航承载 */}
       <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col sticky top-0 h-screen border-r border-white/[0.07] bg-zinc-950/80 backdrop-blur">
         <button
@@ -319,15 +347,17 @@ export function Layout({
             <div className="font-serif text-[15px] font-semibold text-white truncate leading-tight">
               {storeName}
             </div>
-            <div className="text-[10px] text-zinc-500 mt-0.5">老板管理端</div>
+            <div className="text-[10px] text-zinc-500 mt-0.5">
+              {t("shell.bossConsole")}
+            </div>
           </div>
         </button>
 
         <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-4">
           {NAV_GROUPS.map((g) => (
-            <div key={g.title}>
+            <div key={g.key}>
               <div className="px-2 mb-1 text-[10px] font-semibold tracking-[0.12em] text-zinc-600">
-                {g.title}
+                {t(`navg.${g.key}`)}
               </div>
               <div className="space-y-0.5">
                 {g.items.map((id) => {
@@ -350,7 +380,7 @@ export function Layout({
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-orange-500" />
                       )}
                       <Icon size={16} className="shrink-0" />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(`nav.${item.id}`)}</span>
                     </button>
                   );
                 })}
@@ -364,22 +394,23 @@ export function Layout({
             <span
               className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}
             />
-            {configured ? "已连接数据库" : "未配置数据库"}
+            {configured ? t("shell.connected") : t("shell.noDb")}
           </div>
           <InstallButton />
+          <LangSwitch className="w-full justify-center" />
           <button
             onClick={() => setMenuOpen(true)}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-300 hover:text-white hover:bg-white/[0.05] transition-colors"
           >
             <LayoutGrid size={16} />
-            主题与全部功能
+            {t("shell.themeAll")}
           </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-500 hover:text-red-400 hover:bg-red-500/[0.08] transition-colors"
           >
             <LogOut size={16} />
-            退出登录
+            {t("shell.logout")}
           </button>
         </div>
       </aside>
@@ -425,10 +456,10 @@ export function Layout({
             {/* 桌面端：当前页面标题 */}
             <div className="hidden lg:block min-w-0">
               <h1 className="font-serif text-xl font-semibold tracking-tight text-white leading-tight truncate">
-                {active?.label}
+                {active ? t(`nav.${active.id}`) : ""}
               </h1>
               <p className="text-[13px] text-zinc-500 mt-0.5 leading-snug truncate">
-                {SUBTITLE[tab]}
+                {t(`sub.${tab}`)}
               </p>
             </div>
 
@@ -446,16 +477,16 @@ export function Layout({
               </span>
               <button
                 onClick={() => setMenuOpen(true)}
-                aria-label="主题与全部功能"
-                title="主题与全部功能"
+                aria-label={t("shell.themeAll")}
+                title={t("shell.themeAll")}
                 className="hidden lg:flex active:scale-90 transition-transform w-9 h-9 items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
               >
                 <SettingsIcon size={16} />
               </button>
               <button
                 onClick={onRefresh}
-                title="刷新"
-                aria-label="刷新"
+                title={t("shell.refresh")}
+                aria-label={t("shell.refresh")}
                 className="active:scale-90 transition-transform w-9 h-9 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 bg-white/5 rounded-lg ring-1 ring-white/10"
               >
                 <RefreshCw
@@ -469,10 +500,15 @@ export function Layout({
           {!online && (
             <div className="flex items-center gap-2 px-4 lg:px-7 py-1.5 text-[11px] font-medium text-amber-400 bg-amber-500/10 border-t border-amber-500/25">
               <WifiOff size={12} className="shrink-0" />
-              网络已断开，当前显示缓存数据
+              {t("shell.disconnected")}
               {cacheAt &&
-                `（数据快照 ${new Date(cacheAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}）`}
-              ；恢复联网后自动刷新
+                `（${t("shell.snapshot", {
+                  t: new Date(cacheAt).toLocaleTimeString(localeOf(), {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                })}）`}
+              {t("shell.restored")}
             </div>
           )}
         </header>
@@ -500,7 +536,7 @@ export function Layout({
               className="text-[11px] text-zinc-500 mt-1"
               style={{ transform: `translateY(${Math.min(pull, 64) - 34}px)` }}
             >
-              {ready ? "松开刷新" : "下拉刷新"}
+              {ready ? t("shell.release") : t("shell.pull")}
             </span>
           </div>
 
@@ -513,10 +549,10 @@ export function Layout({
           >
             <div className="lg:hidden pb-3.5">
               <h1 className="font-serif text-[22px] font-bold tracking-tight text-white leading-tight">
-                {active?.label}
+                {active ? t(`nav.${active.id}`) : ""}
               </h1>
               <p className="text-[12px] text-zinc-500 mt-1 leading-snug">
-                {SUBTITLE[tab] ?? " "}
+                {t(`sub.${tab}`) === `sub.${tab}` ? " " : t(`sub.${tab}`)}
               </p>
             </div>
             {children}
@@ -526,7 +562,7 @@ export function Layout({
 
       {/* 移动端底部主导航：4 个高频页面 + 全部功能 */}
       <nav
-        aria-label="主导航"
+        aria-label={t("shell.mainNav")}
         className="lg:hidden fixed inset-x-0 bottom-0 z-40 glass-bar border-t border-white/[0.08] pb-[var(--sab)]"
       >
         <div className="grid grid-cols-5 h-[60px]">
@@ -548,7 +584,7 @@ export function Layout({
                 )}
                 <Icon size={20} strokeWidth={on ? 2.4 : 1.8} />
                 <span className="text-[10.5px] leading-none font-medium">
-                  {item.label}
+                  {t(`nav.${item.id}`)}
                 </span>
               </button>
             );
@@ -556,7 +592,7 @@ export function Layout({
           <button
             data-tab="more"
             onClick={() => setMenuOpen(true)}
-            aria-label="全部功能"
+            aria-label={t("shell.allFeatures")}
             className={`relative flex flex-col items-center justify-center gap-1 transition-colors ${
               !primaryActive || menuOpen
                 ? "text-orange-400"
@@ -567,22 +603,24 @@ export function Layout({
               <span className="absolute top-0 h-0.5 w-8 rounded-full bg-orange-500" />
             )}
             <LayoutGrid size={20} strokeWidth={!primaryActive ? 2.4 : 1.8} />
-            <span className="text-[10.5px] leading-none font-medium">全部</span>
+            <span className="text-[10.5px] leading-none font-medium">
+              {t("shell.more")}
+            </span>
           </button>
         </div>
       </nav>
 
       <Sheet
         open={menuOpen}
-        title="全部功能"
-        subtitle={`${storeName} · 选择页面、主题与账号`}
+        title={t("shell.allFeatures")}
+        subtitle={`${storeName} · ${t("shell.menuSubtitle")}`}
         onClose={() => setMenuOpen(false)}
         maxW="max-w-lg"
       >
         <div className="space-y-5">
           <div>
             <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500 mb-2">
-              主题
+              {t("shell.theme")}
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {THEMES.map((t) => (
@@ -612,20 +650,20 @@ export function Layout({
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="text-[11px] font-semibold tracking-[0.08em] text-zinc-500">
-                全部功能
+                {t("shell.allFeatures")}
               </div>
               <button
                 onClick={() => go("dashboard")}
                 className="text-[11px] text-zinc-500 hover:text-orange-400"
               >
-                回到看板
+                {t("shell.backToDash")}
               </button>
             </div>
             <div className="space-y-3">
               {NAV_GROUPS.map((g) => (
-                <div key={g.title}>
+                <div key={g.key}>
                   <div className="text-[11px] tracking-[0.06em] text-zinc-600 mb-1.5">
-                    {g.title}
+                    {t(`navg.${g.key}`)}
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     {g.items.map((id) => {
@@ -644,7 +682,9 @@ export function Layout({
                           }`}
                         >
                           <Icon size={15} className="shrink-0" />
-                          <span className="truncate">{item.label}</span>
+                          <span className="truncate">
+                            {t(`nav.${item.id}`)}
+                          </span>
                         </button>
                       );
                     })}
@@ -658,9 +698,10 @@ export function Layout({
             <span
               className={`w-2 h-2 rounded-full ${configured ? "bg-green-500" : "bg-red-500"}`}
             />
-            {configured ? "已连接数据库" : "未配置数据库"}
+            {configured ? t("shell.connected") : t("shell.noDb")}
           </div>
           <InstallButton />
+          <LangSwitch className="justify-center" />
           <button
             onClick={() => {
               setMenuOpen(false);
@@ -668,7 +709,7 @@ export function Layout({
             }}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/30 text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/15 transition-colors"
           >
-            <LogOut size={15} /> 退出登录
+            <LogOut size={15} /> {t("shell.logout")}
           </button>
         </div>
       </Sheet>

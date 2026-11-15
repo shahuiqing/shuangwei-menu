@@ -23,7 +23,7 @@ import {
   saveStaffSession,
   type StaffSession,
 } from "../lib/staffOps";
-import { t, getLang, setLang, onLangChange, isRtl, LANGS } from "../staff/i18n";
+import { t, getLang, setLang, onLangChange, isRtl, LANGS } from "../i18n";
 
 const fieldCls =
   "w-full bg-zinc-950/80 border border-white/[0.07] rounded-xl pl-11 pr-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/70 focus:ring-4 focus:ring-orange-500/15 focus:bg-zinc-950 transition-all";
@@ -49,8 +49,8 @@ export default function Login({
   const [, force] = useState(0);
   useEffect(() => onLangChange(() => force((v) => v + 1)), []);
 
-  /** 员工登录页的语言切换（三语） */
-  const staffLangSwitch = (
+  /** 语言切换（三语，老板端与员工表单共用） */
+  const langSwitch = (
     <div
       dir="ltr"
       className="flex items-center justify-center gap-1 bg-zinc-900 border border-white/5 rounded-full px-1 py-0.5 w-fit mx-auto"
@@ -76,7 +76,7 @@ export default function Login({
   const handleStaffLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!staffName.trim() || !staffPw) {
-      setErr(t("login.fill"));
+      setErr(t("login.errFill"));
       return;
     }
     setBusy(true);
@@ -86,22 +86,22 @@ export default function Login({
       saveStaffSession(s);
       onStaffOk(s);
     } else {
-      setErr(t("login.fail"));
+      setErr(t("login.errStaffFail"));
     }
   };
 
   const handleSetup = (e: FormEvent) => {
     e.preventDefault();
     if (pw.length < MIN_PASSWORD_LEN) {
-      setErr(`密码至少 ${MIN_PASSWORD_LEN} 位`);
+      setErr(t("login.errPwLen", { n: MIN_PASSWORD_LEN }));
       return;
     }
     if (pw !== pw2) {
-      setErr("两次输入的密码不一致");
+      setErr(t("login.errPwMismatch"));
       return;
     }
     if (!setupOwnerPassword(pw)) {
-      setErr("设置失败，请重试");
+      setErr(t("login.errSetFail"));
       return;
     }
     markAuthed();
@@ -117,7 +117,7 @@ export default function Login({
       markAuthed();
       onDone();
     } else {
-      setErr("密码错误 / Incorrect password");
+      setErr(t("login.errPwWrong"));
     }
   };
 
@@ -127,18 +127,16 @@ export default function Login({
     const ok = await verifyOwnerPassword(pw);
     setBusy(false);
     if (!ok) {
-      setErr("当前密码错误 / Current password incorrect");
+      setErr(t("login.errCurrentWrong"));
       return;
     }
     if (newPw.trim().length < MIN_PASSWORD_LEN) {
-      setErr(
-        `新密码至少 ${MIN_PASSWORD_LEN} 位 / At least ${MIN_PASSWORD_LEN} chars`,
-      );
+      setErr(t("login.errNewPwLen", { n: MIN_PASSWORD_LEN }));
       return;
     }
     const r = await changeOwnerPassword(pw, newPw.trim());
     if (!r.ok) {
-      setErr(`新密码至少 ${MIN_PASSWORD_LEN} 位`);
+      setErr(t("login.errPwLen", { n: MIN_PASSWORD_LEN }));
       return;
     }
     markAuthed();
@@ -146,7 +144,10 @@ export default function Login({
   };
 
   return (
-    <div className="min-h-full relative flex items-center justify-center p-6 bg-zinc-950 overflow-hidden">
+    <div
+      dir={isRtl() ? "rtl" : "ltr"}
+      className="min-h-full relative flex items-center justify-center p-6 bg-zinc-950 overflow-hidden"
+    >
       <div className="pointer-events-none absolute -top-32 right-[-10%] w-[420px] h-[420px] rounded-full bg-orange-500/[0.08] blur-[110px]" />
 
       <div className="relative w-full max-w-sm animate-rise">
@@ -157,18 +158,17 @@ export default function Login({
           <h1 className="font-serif text-2xl font-bold tracking-[0.12em] text-white">
             {STORE_NAME}
           </h1>
-          <p className="text-zinc-500 text-sm mt-1">
-            老板管理端 · Owner Console
-          </p>
+          <p className="text-zinc-500 text-sm mt-1">{t("login.bossConsole")}</p>
         </div>
+
+        <div className="mb-3">{langSwitch}</div>
 
         <div className="card-surface p-6 sm:p-7">
           {mode === "setup" ? (
             <form onSubmit={handleSetup} className="space-y-3.5">
               <div className="flex items-start gap-2 text-[12px] text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                首次使用：系统无内置默认密码，请设置老板密码（至少{" "}
-                {MIN_PASSWORD_LEN} 位）。
+                {t("login.setupHint", { n: MIN_PASSWORD_LEN })}
               </div>
               <div className="relative">
                 <Lock
@@ -183,13 +183,13 @@ export default function Login({
                     setPw(e.target.value);
                     setErr("");
                   }}
-                  placeholder={`设置密码（至少 ${MIN_PASSWORD_LEN} 位）`}
+                  placeholder={t("login.setupPw", { n: MIN_PASSWORD_LEN })}
                   className={fieldCls}
                 />
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
-                  aria-label="显示/隐藏密码"
+                  aria-label={t("common.showPw")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-300 flex items-center justify-center transition-colors"
                 >
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -207,7 +207,7 @@ export default function Login({
                     setPw2(e.target.value);
                     setErr("");
                   }}
-                  placeholder="再次输入密码"
+                  placeholder={t("login.pwAgain")}
                   className={fieldCls}
                 />
               </div>
@@ -221,7 +221,7 @@ export default function Login({
                 type="submit"
                 className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 active:scale-[0.98] transition-transform"
               >
-                设置并进入
+                {t("login.setAndEnter")}
               </button>
               <button
                 type="button"
@@ -231,7 +231,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                已有密码？直接登录
+                {t("login.hasPw")}
               </button>
               <button
                 type="button"
@@ -241,7 +241,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                我是员工，进入员工端 →
+                {t("login.staffEntry")}
               </button>
             </form>
           ) : mode === "staff" ? (
@@ -256,10 +256,9 @@ export default function Login({
               >
                 <User size={16} className="text-orange-500" />
                 <span className="text-center">
-                  {t("login.title")} · {t("login.note")}
+                  {t("login.staffTitle")} · {t("login.staffHint")}
                 </span>
               </div>
-              {staffLangSwitch}
               <input
                 value={staffName}
                 autoFocus
@@ -267,7 +266,7 @@ export default function Login({
                   setStaffName(e.target.value);
                   setErr("");
                 }}
-                placeholder={t("login.namePlaceholder")}
+                placeholder={t("login.name")}
                 className={fieldCls.replace("pl-11", "pl-4")}
               />
               <div className="relative">
@@ -288,7 +287,7 @@ export default function Login({
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
-                  aria-label="显示/隐藏密码"
+                  aria-label={t("common.showPw")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-300 flex items-center justify-center transition-colors"
                 >
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -305,7 +304,7 @@ export default function Login({
                 disabled={busy}
                 className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 active:scale-[0.98] transition-transform disabled:opacity-50"
               >
-                {busy ? t("login.busy") : t("login.submit")}
+                {busy ? t("login.verifying") : t("login.staffTitle")}
               </button>
               <button
                 type="button"
@@ -315,7 +314,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                {t("login.back")}
+                {t("login.backToOwner")}
               </button>
             </form>
           ) : mode === "login" ? (
@@ -333,13 +332,13 @@ export default function Login({
                     setPw(e.target.value);
                     setErr("");
                   }}
-                  placeholder="请输入管理密码"
+                  placeholder={t("login.ownerPw")}
                   className={fieldCls}
                 />
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
-                  aria-label="显示/隐藏密码"
+                  aria-label={t("common.showPw")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-300 flex items-center justify-center transition-colors"
                 >
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -348,7 +347,7 @@ export default function Login({
 
               {needsPasswordSetup() && (
                 <p className="text-[12px] text-zinc-500 bg-zinc-950 border border-white/5 rounded-lg px-3 py-2">
-                  本机尚未设置过密码；若服务端已配置密码可直接登录，否则请
+                  {t("login.localNotSet")}
                   <button
                     type="button"
                     onClick={() => {
@@ -357,9 +356,8 @@ export default function Login({
                     }}
                     className="text-orange-400 hover:text-orange-300 underline underline-offset-2 mx-0.5"
                   >
-                    设置密码
+                    {t("login.setPwLink")}
                   </button>
-                  。
                 </p>
               )}
 
@@ -375,7 +373,7 @@ export default function Login({
                 disabled={busy}
                 className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 active:scale-[0.98] transition-transform disabled:opacity-50"
               >
-                {busy ? "验证中…" : "登 录"}
+                {busy ? t("login.verifying") : t("login.login")}
               </button>
               <button
                 type="button"
@@ -385,7 +383,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                修改密码
+                {t("login.changePw")}
               </button>
               <button
                 type="button"
@@ -395,7 +393,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors border-t border-white/5 mt-1 pt-3"
               >
-                我是员工，进入员工端 →
+                {t("login.staffEntry")}
               </button>
             </form>
           ) : (
@@ -412,7 +410,7 @@ export default function Login({
                     setPw(e.target.value);
                     setErr("");
                   }}
-                  placeholder="当前密码"
+                  placeholder={t("login.currentPw")}
                   className={fieldCls}
                 />
               </div>
@@ -428,13 +426,13 @@ export default function Login({
                     setNewPw(e.target.value);
                     setErr("");
                   }}
-                  placeholder="新密码"
+                  placeholder={t("login.newPw")}
                   className={fieldCls}
                 />
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
-                  aria-label="显示/隐藏密码"
+                  aria-label={t("common.showPw")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-300 flex items-center justify-center transition-colors"
                 >
                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -451,7 +449,8 @@ export default function Login({
                 disabled={busy}
                 className="w-full btn-brand text-white font-bold rounded-xl px-4 py-3.5 transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <ShieldCheck size={18} /> {busy ? "验证中…" : "确认修改并登录"}
+                <ShieldCheck size={18} />{" "}
+                {busy ? t("login.verifying") : t("login.confirmChange")}
               </button>
               <button
                 type="button"
@@ -461,7 +460,7 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                返回登录
+                {t("login.backToLogin")}
               </button>
               <button
                 type="button"
@@ -471,14 +470,14 @@ export default function Login({
                 }}
                 className="w-full text-zinc-500 hover:text-zinc-300 text-xs py-1 transition-colors"
               >
-                我是员工，进入员工端 →
+                {t("login.staffEntry")}
               </button>
             </form>
           )}
         </div>
 
         <p className="text-[11px] text-zinc-600 text-center mt-5">
-          密码存于本机浏览器，不依赖数据库
+          {t("login.localNote")}
         </p>
       </div>
     </div>
