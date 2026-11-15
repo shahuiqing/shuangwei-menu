@@ -57,6 +57,14 @@ import {
 import { chatLLM, hasLlm } from "../lib/llm";
 import { actionDraft } from "../lib/actionDraft";
 import { createTask } from "../lib/tasks";
+import {
+  loadAiPrefs,
+  saveAiPrefs,
+  FOCUS_LABEL,
+  STYLE_LABEL,
+  type AiPrefs,
+  type AiFocus,
+} from "../lib/aiPrefs";
 
 const CHAT_SUGGESTIONS = [
   "今天最该先处理什么？",
@@ -105,17 +113,21 @@ export default function Assistant({
   const [reviewBusy, setReviewBusy] = useState(false);
   /** 派工弹窗 */
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [dispatchItem, setDispatchItem] = useState<{
-    title: string;
-    desc: string;
-    checklist: string[];
-    tab: string;
-  } | null>(null);
+  const [dispatchQueue, setDispatchQueue] = useState<
+    { title: string; desc: string; checklist: string[]; tab: string }[] | null
+  >(null);
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [pickedRoles, setPickedRoles] = useState<Role[]>([]);
   const [dueHours, setDueHours] = useState(8);
   const [alsoTask, setAlsoTask] = useState(true);
   const [dispatching, setDispatching] = useState(false);
+  /** 助手偏好（关注点/回答风格） */
+  const [prefs, setPrefs] = useState<AiPrefs>(() => loadAiPrefs());
+  const updatePrefs = (patch: Partial<AiPrefs>) => {
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    saveAiPrefs(next);
+  };
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -273,7 +285,7 @@ export default function Assistant({
 
     if (hasLlm()) {
       const reply = await chatLLM(
-        buildChatSystemPrompt(snap),
+        buildChatSystemPrompt(snap, prefs),
         buildChatUserMessage(history, question),
       );
       if (reply) {
@@ -349,7 +361,19 @@ export default function Assistant({
     checklist: string[];
     tab: string;
   }) => {
-    setDispatchItem(item);
+    setDispatchQueue([item]);
+    setPickedIds([]);
+    setPickedRoles([]);
+    setDueHours(8);
+    setAlsoTask(true);
+  };
+
+  /** 批量派发（如复盘的下期重点） */
+  const openBatchDispatch = (
+    items: { title: string; desc: string; checklist: string[]; tab: string }[],
+  ) => {
+    if (items.length === 0) return;
+    setDispatchQueue(items);
     setPickedIds([]);
     setPickedRoles([]);
     setDueHours(8);
@@ -357,29 +381,32 @@ export default function Assistant({
   };
 
   const submitDispatch = async () => {
-    if (!dispatchItem) return;
+    const queue = dispatchQueue;
+    if (!queue || queue.length === 0) return;
     if (pickedIds.length === 0 && pickedRoles.length === 0)
       return toast.error("请选择岗位或员工");
     setDispatching(true);
-    const n = await dispatchTasks({
-      title: dispatchItem.title,
-      description: dispatchItem.desc,
-      checklist: dispatchItem.checklist.map((text) => ({ text })),
-      due_hours: dueHours,
-      roles: pickedIds.length > 0 ? undefined : pickedRoles,
-      assigneeIds: pickedIds.length > 0 ? pickedIds : undefined,
-    });
-    if (alsoTask)
-      addTask(
-        dispatchItem.title,
-        dispatchItem.desc,
-        dispatchItem.checklist,
-        dispatchItem.tab,
-      );
+    let total = 0;
+    for (const item of queue) {
+      const n = await dispatchTasks({
+        title: item.title,
+        description: item.desc,
+        checklist: item.checklist.map((text) => ({ text })),
+        due_hours: dueHours,
+        roles: pickedIds.length > 0 ? undefined : pickedRoles,
+        assigneeIds: pickedIds.length > 0 ? pickedIds : undefined,
+      });
+      total += n;
+      if (alsoTask) addTask(item.title, item.desc, item.checklist, item.tab);
+    }
     setDispatching(false);
-    if (n > 0) {
-      toast.success(`已派给 ${n} 人${alsoTask ? "，并加入你的任务中心" : ""}`);
-      setDispatchItem(null);
+    if (total > 0) {
+      toast.success(
+        `已派发 ${queue.length} 项任务（共 ${total} 条到人）${
+          alsoTask ? "，并加入你的任务中心" : ""
+        }`,
+      );
+      setDispatchQueue(null);
     } else {
       toast.error("派发失败：该岗位可能没有在职员工");
     }
@@ -407,7 +434,7 @@ export default function Assistant({
       setSnapshot(snap);
     }
     if (hasLlm()) {
-      const { system, user } = advisorPrompt(snap);
+      const { system, user } = advisorPrompt(snap, prefs);
       const reply = await chatLLM(system, user);
       if (reply) {
         setAdvice({ source: "ai", text: reply });
@@ -486,7 +513,7 @@ export default function Assistant({
           .map((a) => a.actions[0] || a.title)
       : [];
     if (hasLlm()) {
-      const { system, user } = reviewPrompt(facts, nextActions);
+      const { system, user } = reviewPrompt(facts, nextActions, prefs);
       const reply = await chatLLM(system, user);
       if (reply) {
         setReview({ source: "ai", text: reply, period });
@@ -671,6 +698,23 @@ export default function Assistant({
                       </li>
                     ))}
                   </ol>
+                  <button
+                    onClick={() =>
+                      openBatchDispatch(
+                        review.report.next.map((x) => ({
+                          title: x,
+                          desc: `${
+                            reviewPeriod === "week" ? "周报" : "月报"
+                          }·下期重点：${x}`,
+                          checklist: [],
+                          tab: "ai-review",
+                        })),
+                      )
+                    }
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-sky-400 hover:text-sky-300"
+                  >
+                    <Send size={11} /> 批量派发下期重点
+                  </button>
                 </div>
               </div>
             )}
@@ -975,6 +1019,42 @@ export default function Assistant({
       >
         {messages.length === 0 ? (
           <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
+              <span>关注：</span>
+              {(Object.keys(FOCUS_LABEL) as AiFocus[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() =>
+                    updatePrefs({
+                      focus: prefs.focus.includes(f)
+                        ? prefs.focus.filter((x) => x !== f)
+                        : [...prefs.focus, f],
+                    })
+                  }
+                  className={`px-2 py-0.5 rounded-full font-semibold ${
+                    prefs.focus.includes(f)
+                      ? "bg-orange-600/20 text-orange-400"
+                      : "bg-zinc-900 border border-white/5 text-zinc-500"
+                  }`}
+                >
+                  {FOCUS_LABEL[f]}
+                </button>
+              ))}
+              <span className="ml-2">风格：</span>
+              {(["brief", "detailed"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updatePrefs({ style: s })}
+                  className={`px-2 py-0.5 rounded-full font-semibold ${
+                    prefs.style === s
+                      ? "bg-orange-600/20 text-orange-400"
+                      : "bg-zinc-900 border border-white/5 text-zinc-500"
+                  }`}
+                >
+                  {STYLE_LABEL[s]}
+                </button>
+              ))}
+            </div>
             <div className="rounded-xl bg-zinc-950 px-4 py-3.5 text-sm text-zinc-400">
               {snapshot
                 ? "直接问经营问题即可，回答会结合全店数据；也可以追问上一句。"
@@ -1106,18 +1186,36 @@ export default function Assistant({
 
       {/* 派工弹窗：把建议/复盘重点变成员工任务 */}
       <Sheet
-        open={!!dispatchItem}
+        open={!!dispatchQueue}
         title="派给员工"
-        subtitle={dispatchItem?.title}
-        onClose={() => setDispatchItem(null)}
+        subtitle={
+          dispatchQueue
+            ? dispatchQueue.length === 1
+              ? dispatchQueue[0].title
+              : `批量派发 ${dispatchQueue.length} 项`
+            : undefined
+        }
+        onClose={() => setDispatchQueue(null)}
       >
-        {dispatchItem && (
+        {dispatchQueue && (
           <>
-            <SheetField
-              label="任务标题"
-              value={dispatchItem.title}
-              onChange={(v) => setDispatchItem({ ...dispatchItem, title: v })}
-            />
+            {dispatchQueue.length === 1 ? (
+              <SheetField
+                label="任务标题"
+                value={dispatchQueue[0].title}
+                onChange={(v) =>
+                  setDispatchQueue([{ ...dispatchQueue[0], title: v }])
+                }
+              />
+            ) : (
+              <ul className="space-y-1">
+                {dispatchQueue.map((it, i) => (
+                  <li key={i} className="text-xs text-zinc-300">
+                    {i + 1}. {it.title}
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <div className="mt-3">
               <div className="text-xs text-zinc-500 mb-1.5">按岗位派发</div>
@@ -1202,11 +1300,12 @@ export default function Assistant({
               同时加入我的任务中心（跟进这条建议）
             </label>
 
-            {dispatchItem.checklist.length > 0 && (
-              <div className="mt-3 text-[11px] text-zinc-600 leading-relaxed">
-                检查项：{dispatchItem.checklist.join(" / ")}
-              </div>
-            )}
+            {dispatchQueue.length === 1 &&
+              dispatchQueue[0].checklist.length > 0 && (
+                <div className="mt-3 text-[11px] text-zinc-600 leading-relaxed">
+                  检查项：{dispatchQueue[0].checklist.join(" / ")}
+                </div>
+              )}
 
             <button
               disabled={dispatching}

@@ -10,6 +10,7 @@ import { dishMargins } from "./cost";
 import { loadStocktakeHistory } from "./stocktakeHistory";
 import { fetchStaffTasks } from "./staffOps";
 import { fmtMoney } from "./format";
+import { prefsPrompt, type AiPrefs } from "./aiPrefs";
 
 /**
  * 周报 / 月报复盘：
@@ -249,13 +250,17 @@ export function buildReview(
 export function reviewPrompt(
   f: ReviewFacts,
   nextActions: string[] = [],
+  prefs?: AiPrefs,
 ): { system: string; user: string } {
   const system = [
     "你是餐厅老板的经营分析师。",
     "根据本期数据写一份简洁复盘，结构固定为三段：",
     "一、本期结论（营收/订单/成本/损耗，带环比）；二、亮点与问题（2-3 条，带具体菜品或品类）；三、下期重点（2-3 条可执行动作）。",
     "总字数 350 字以内，只使用给出的数据，不编造；只输出复盘正文。",
-  ].join("\n");
+    prefs ? prefsPrompt(prefs) : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const user = [
     `周期：${f.label}（${f.range.start.slice(0, 10)} ~ ${f.range.end.slice(0, 10)}）`,
     `营业额 ${fmtMoney(f.revenue)}（环比 ${f.revenueChangePct >= 0 ? "+" : ""}${f.revenueChangePct}%，上期 ${fmtMoney(f.prevRevenue)}）`,

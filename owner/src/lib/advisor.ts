@@ -1,5 +1,6 @@
 import { fmtMoney } from "./format";
 import { snapshotToPrompt, type BusinessSnapshot } from "./aiContext";
+import { prefsPrompt, type AiPrefs } from "./aiPrefs";
 
 /**
  * 经营顾问建议：
@@ -310,7 +311,10 @@ export function buildAdvice(
 }
 
 /** AI 顾问报告提示词：要求按板块给结论与动作 */
-export function advisorPrompt(s: BusinessSnapshot): {
+export function advisorPrompt(
+  s: BusinessSnapshot,
+  prefs?: AiPrefs,
+): {
   system: string;
   user: string;
 } {
@@ -321,8 +325,11 @@ export function advisorPrompt(s: BusinessSnapshot): {
     "格式要求：按板块分段，每段包含：",
     "① 一句结论（带具体数字）；② 2-3 条可执行动作（动词开头）；③ 一句预期影响。",
     "总共不超过 6 个板块、400 字；不要编造数据，不要重复罗列数字。",
+    prefs ? prefsPrompt(prefs) : "",
     "只输出报告正文，不要开场白。",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   const user = [snapshotToPrompt(s), "", "请按上述格式给出经营建议报告。"].join(
     "\n",
   );

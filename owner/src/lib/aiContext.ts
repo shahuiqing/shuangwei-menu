@@ -22,6 +22,7 @@ import {
   isOverdue,
 } from "./staffOps";
 import { loadSiteAudit, type SiteAudit } from "./siteAudit";
+import { prefsPrompt, type AiPrefs } from "./aiPrefs";
 
 /**
  * 全店经营快照：给 AI 助手用的结构化上下文。
@@ -350,7 +351,10 @@ export interface ChatTurn {
 }
 
 /** 系统提示：角色、数据、回答规范 */
-export function buildChatSystemPrompt(s: BusinessSnapshot): string {
+export function buildChatSystemPrompt(
+  s: BusinessSnapshot,
+  prefs?: AiPrefs,
+): string {
   return [
     "你是餐厅老板的全能经营助手，懂销售、菜单、成本、库存、采购、损耗和员工协同。",
     "回答规范：",
@@ -358,10 +362,13 @@ export function buildChatSystemPrompt(s: BusinessSnapshot): string {
     "- 先给结论，再给 2-3 条可执行动作；总字数 250 字以内。",
     "- 涉及数字时引用具体值，不要泛泛而谈。",
     "- 用中文回答。",
+    prefs ? prefsPrompt(prefs) : "",
     "",
     "全店经营快照：",
     snapshotToPrompt(s),
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** 把最近对话拼进用户消息（chatLLM 只支持单轮 user） */
