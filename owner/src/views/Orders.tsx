@@ -17,6 +17,7 @@ import { EmptyState, SkeletonTable } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { fmtDateTime, fmtMoney, STATUS_TEXT } from "../lib/format";
 import { todayKey } from "../lib/businessDay";
 import { lateOrders, useLateConfig } from "../lib/lateOrders";
@@ -314,7 +315,12 @@ export default function Orders({
   const removeOrder = async () => {
     if (!detail) return;
     const id = String(detail.id || detail._id);
-    if (!confirm(`删除订单「${detail.orderNumber || id}」？此操作不可恢复。`))
+    if (
+      !(await askConfirm(
+        `删除订单「${detail.orderNumber || id}」？此操作不可恢复。`,
+        { danger: true },
+      ))
+    )
       return;
     setBusy(true);
     const ok = await deleteOrder(id);
@@ -333,7 +339,7 @@ export default function Orders({
     if (!detail) return;
     if (
       (s === "completed" || s === "cancelled") &&
-      !confirm(`确认将订单设为「${STATUS_TEXT[s]}」？`)
+      !(await askConfirm(`确认将订单设为「${STATUS_TEXT[s]}」？`))
     )
       return;
     setBusy(true);
@@ -401,7 +407,7 @@ export default function Orders({
       parsed.mode === "summary"
         ? "\n（汇总模式：只有金额，无菜品明细，菜品报表不含这些单）"
         : "";
-    const ok = confirm(
+    const ok = await askConfirm(
       `解析到 ${parsed.orders.length} 单 · ${days.size} 天 · 合计 ${fmtMoney(sum)}` +
         `${ext ? ` · 平台 ${ext} 单` : ""}` +
         `${parsed.skipped ? `\n跳过 ${parsed.skipped} 行` : ""}` +

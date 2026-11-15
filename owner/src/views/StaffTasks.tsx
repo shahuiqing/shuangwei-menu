@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import {
   fetchTaskTemplates,
   upsertTaskTemplate,
@@ -346,7 +347,12 @@ export default function StaffTasks({ version = 0 }: { version?: number }) {
                     </button>
                     <button
                       onClick={async () => {
-                        if (!confirm(`删除模板「${t.name}」？`)) return;
+                        if (
+                          !(await askConfirm(`删除模板「${t.name}」？`, {
+                            danger: true,
+                          }))
+                        )
+                          return;
                         if (await deleteTaskTemplate(t.id)) load();
                         else toast.error("删除失败");
                       }}
@@ -682,7 +688,7 @@ export default function StaffTasks({ version = 0 }: { version?: number }) {
                       {t.status === "pending" && (
                         <button
                           onClick={async () => {
-                            if (!confirm("取消该任务？")) return;
+                            if (!(await askConfirm("取消该任务？"))) return;
                             if (await cancelStaffTask(t.id)) load();
                           }}
                           className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800 text-zinc-400"

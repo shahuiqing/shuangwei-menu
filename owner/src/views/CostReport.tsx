@@ -18,6 +18,7 @@ import {
   Legend,
 } from "recharts";
 import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
+import { askConfirm } from "../components/Confirm";
 import { Segmented } from "../components/Segmented";
 import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
@@ -221,7 +222,7 @@ export default function CostReport({ version = 0 }: { version?: number }) {
     setFcNote("");
   };
   const removeFixedCost = async (id: string) => {
-    if (!confirm("删除这项固定成本？")) return;
+    if (!(await askConfirm("删除这项固定成本？", { danger: true }))) return;
     if (!(await deleteFixedCost(id))) return;
     setFixedCosts(await fetchFixedCosts());
   };

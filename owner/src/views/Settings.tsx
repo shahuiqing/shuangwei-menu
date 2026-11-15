@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { ChartCard, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import {
   getLlmConfig,
   setLlmConfig,
@@ -228,7 +229,7 @@ export default function Settings({
   };
 
   const deleteBf = async (day: string) => {
-    if (!confirm(`删除 ${day} 的补录？`)) return;
+    if (!(await askConfirm(`删除 ${day} 的补录？`, { danger: true }))) return;
     const ok = await deleteBackfill(day);
     if (!ok) return toast.error("删除失败：请确认已执行 backfill SQL");
     setBackfills(await fetchBackfill());
@@ -385,9 +386,9 @@ export default function Settings({
 
   const doRestore = async (s: MenuSnapshot) => {
     if (
-      !confirm(
+      !(await askConfirm(
         `恢复菜单到「${s.name}」？\n（${fmtDateTime(s.created_at)} · ${s.item_count} 个菜品）\n当前菜单会被覆盖。`,
-      )
+      ))
     )
       return;
     setRestoring(true);
@@ -405,7 +406,8 @@ export default function Settings({
   };
 
   const doDeleteSnap = async (s: MenuSnapshot) => {
-    if (!confirm(`删除快照「${s.name}」？`)) return;
+    if (!(await askConfirm(`删除快照「${s.name}」？`, { danger: true })))
+      return;
     const ok = await deleteMenuSnapshot(s.id);
     if (ok) {
       toast.success("已删除");
@@ -521,9 +523,10 @@ export default function Settings({
 
   const runPrune = async () => {
     if (
-      !confirm(
+      !(await askConfirm(
         `将删除 ${ordersDays} 天前的已结账/已取消订单，以及 ${txnsDays} 天前的库存流水。此操作不可恢复，确定继续？`,
-      )
+        { danger: true },
+      ))
     )
       return;
     setPruning(true);
@@ -1224,8 +1227,12 @@ export default function Settings({
             </button>
             {logs.length > 0 && (
               <button
-                onClick={() => {
-                  if (confirm("清空操作日志（本机与云端）？")) {
+                onClick={async () => {
+                  if (
+                    await askConfirm("清空操作日志（本机与云端）？", {
+                      danger: true,
+                    })
+                  ) {
                     clearAuditLog();
                     void clearCloudAudit();
                     setLogs([]);

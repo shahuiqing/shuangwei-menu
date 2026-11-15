@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { fmtMoney } from "../lib/format";
 import {
   deleteBom,
@@ -250,7 +251,12 @@ export default function Recipe({
                             </span>
                             <button
                               onClick={async () => {
-                                if (!confirm("删除该配方项？")) return;
+                                if (
+                                  !(await askConfirm("删除该配方项？", {
+                                    danger: true,
+                                  }))
+                                )
+                                  return;
                                 const ok = await deleteBom(b.id);
                                 if (ok) {
                                   toast.success("已删除");

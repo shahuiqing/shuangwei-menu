@@ -38,6 +38,7 @@ import {
 } from "../lib/staffOps";
 import { isConfigured } from "../lib/supabase";
 import { todayKey } from "../lib/businessDay";
+import { ConfirmHost, askConfirm } from "../components/Confirm";
 import {
   t,
   getLang,
@@ -118,10 +119,15 @@ export default function App() {
     );
   }
 
-  return session ? (
-    <Main session={session} onLogout={() => setSession(null)} />
-  ) : (
-    <Login onOk={(s) => setSession(s)} />
+  return (
+    <>
+      {session ? (
+        <Main session={session} onLogout={() => setSession(null)} />
+      ) : (
+        <Login onOk={(s) => setSession(s)} />
+      )}
+      <ConfirmHost />
+    </>
   );
 }
 
@@ -245,8 +251,8 @@ export function Main({
           <RefreshCw size={16} />
         </button>
         <button
-          onClick={() => {
-            if (!confirm(t("common.logoutConfirm"))) return;
+          onClick={async () => {
+            if (!(await askConfirm(t("common.logoutConfirm")))) return;
             clearStaffSession();
             onLogout();
           }}

@@ -17,6 +17,7 @@ import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { fmtDateTime, fmtMoney } from "../lib/format";
 import {
   adjustStock,
@@ -270,9 +271,9 @@ export default function Inventory({ version = 0 }: { version?: number }) {
       return;
     }
     if (
-      !confirm(
+      !(await askConfirm(
         `将按实盘调整 ${adj.length} 项库存（流水原因：${STOCKTAKE_REASON}），\n净差异 ${fmtMoney(take.summary.diffValue)}（盘亏 ${fmtMoney(take.summary.lossValue)} / 盘盈 ${fmtMoney(take.summary.gainValue)}）。确定继续？`,
-      )
+      ))
     )
       return;
     setTaking(true);
@@ -318,9 +319,10 @@ export default function Inventory({ version = 0 }: { version?: number }) {
 
   const remove = async (i: InventoryItem) => {
     if (
-      !confirm(
+      !(await askConfirm(
         `删除原料「${i.name}」？若已被菜品配方引用，将一并移除相关配方项。`,
-      )
+        { danger: true },
+      ))
     )
       return;
     const r = await deleteInventoryItem(i.id);
@@ -702,8 +704,12 @@ export default function Inventory({ version = 0 }: { version?: number }) {
               ))}
             </div>
             <button
-              onClick={() => {
-                if (confirm("清空盘点记录（本机与云端）？")) {
+              onClick={async () => {
+                if (
+                  await askConfirm("清空盘点记录（本机与云端）？", {
+                    danger: true,
+                  })
+                ) {
                   clearStocktakeHistory();
                   void clearCloudStock();
                   setStocktakes([]);

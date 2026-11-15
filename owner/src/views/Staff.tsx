@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import {
   fetchStaffMembers,
   upsertStaffMember,
@@ -101,9 +102,10 @@ export default function StaffView({ version = 0 }: { version?: number }) {
       return;
     }
     if (
-      !confirm(
+      !(await askConfirm(
         `删除员工「${s.name}」？其名下任务记录将保留但不再显示姓名关联。`,
-      )
+        { danger: true },
+      ))
     )
       return;
     if (await deleteStaffMember(s.id)) {

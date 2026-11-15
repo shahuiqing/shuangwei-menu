@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ChartCard, EmptyState } from "../components/ui";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { fetchInventory, type InventoryItem } from "../lib/inventory";
 import { todayKey } from "../lib/businessDay";
 import {
@@ -298,7 +299,10 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
 
   const removeCatRule = async (r: StocktakeCategoryRule) => {
     if (!r.id) return toast.error("该映射还未保存过，直接修改即可");
-    if (!confirm(`删除「${r.category}」的派发映射？`)) return;
+    if (
+      !(await askConfirm(`删除「${r.category}」的派发映射？`, { danger: true }))
+    )
+      return;
     if (await deleteStocktakeCategoryRule(r.id))
       setCatRules(await fetchStocktakeCategoryRules());
     else toast.error("删除失败");
@@ -324,7 +328,11 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
     const from = members.find((m) => m.id === transferFrom);
     const to = members.find((m) => m.id === transferTo);
     if (!from || !to) return;
-    if (!confirm(`把「${from.name}」所有未完成的盘点任务转给「${to.name}」？`))
+    if (
+      !(await askConfirm(
+        `把「${from.name}」所有未完成的盘点任务转给「${to.name}」？`,
+      ))
+    )
       return;
     const n = await transferStocktakeTasks(from.id, {
       id: to.id,
@@ -916,7 +924,7 @@ export default function Stocktake({ version = 0 }: { version?: number }) {
                     {(t.status === "pending" || t.status === "drafted") && (
                       <button
                         onClick={async () => {
-                          if (!confirm("取消该盘点任务？")) return;
+                          if (!(await askConfirm("取消该盘点任务？"))) return;
                           if (await cancelStocktakeTask(t.id)) load();
                         }}
                         className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-400"

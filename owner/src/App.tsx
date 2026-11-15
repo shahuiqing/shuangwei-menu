@@ -32,6 +32,7 @@ const Stocktake = lazy(() => import("./views/Stocktake"));
 const PurchaseRequests = lazy(() => import("./views/PurchaseRequests"));
 import { Layout, type OwnerTab } from "./components/Layout";
 import { ToastHost } from "./components/Toast";
+import { ConfirmHost } from "./components/Confirm";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isAuthed, clearAuthed } from "./lib/auth";
 import { isConfigured, STORE_NAME } from "./lib/supabase";
@@ -278,6 +279,7 @@ export default function App() {
             }}
           />
           <ToastHost />
+          <ConfirmHost />
         </>
       );
     }
@@ -288,6 +290,7 @@ export default function App() {
           onStaffOk={(s) => setStaffSession(s)}
         />
         <ToastHost />
+        <ConfirmHost />
       </>
     );
   }
@@ -420,6 +423,7 @@ export default function App() {
         </div>
       </Layout>
       <ToastHost />
+      <ConfirmHost />
     </>
   );
 }

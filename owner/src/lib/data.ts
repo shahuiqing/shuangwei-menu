@@ -1,20 +1,6 @@
 import { supabase } from "./supabase";
 import { saveSnap, snapFallback } from "./snapshot";
 
-export async function fetchOrders(limit = 3000): Promise<any[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) {
-    console.warn("[owner] fetchOrders:", error.message);
-    return [];
-  }
-  return data || [];
-}
-
 export async function fetchSettings(): Promise<any | null> {
   if (!supabase) return null;
   const { data, error } = await supabase

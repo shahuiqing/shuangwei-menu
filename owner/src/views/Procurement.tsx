@@ -24,6 +24,7 @@ import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
 import { Segmented } from "../components/Segmented";
 import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { fmtDateTime, fmtMoney, dayKey } from "../lib/format";
 import { todayKey } from "../lib/businessDay";
 import {
@@ -784,13 +785,13 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       0,
     );
     if (
-      !confirm(
+      !(await askConfirm(
         `按计划采购 ${plan.rows.length} 项原料，合计约 ${fmtMoney(plan.totalCost)}？${
           reqCount > 0
             ? `\n其中 ${reqCount} 条员工申报将自动标记为已采购。`
             : ""
         }\n将生成采购记录并入库。`,
-      )
+      ))
     )
       return;
     setBulk(true);
@@ -961,9 +962,9 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       ? `\n其中 ${reviewFlags.price} 项价格异常，请确认已核对历史采购价。`
       : "";
     if (
-      !confirm(
+      !(await askConfirm(
         `确认将 ${payloads.length} 项采购入库，合计 ${fmtMoney(total)}？${priceNote}\n入库后库存与成本会立即更新。`,
-      )
+      ))
     )
       return;
 

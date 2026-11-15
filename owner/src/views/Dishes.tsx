@@ -16,6 +16,7 @@ import {
 import { ChartCard, EmptyState, SkeletonRows } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { fmtMoney } from "../lib/format";
 import { todayKey } from "../lib/businessDay";
 import {
@@ -347,8 +348,13 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                       <Pencil size={15} />
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm(`删除分类「${c.name}」及其下所有菜品？`))
+                      onClick={async () => {
+                        if (
+                          await askConfirm(
+                            `删除分类「${c.name}」及其下所有菜品？`,
+                            { danger: true },
+                          )
+                        )
                           run(() => deleteCategory(c.id), "分类已删除");
                       }}
                       className="p-2.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
@@ -497,8 +503,15 @@ export default function Dishes({ version = 0 }: { version?: number }) {
                               <Pencil size={15} />
                             </button>
                             <button
-                              onClick={() => {
-                                if (confirm(`删除菜品「${it.title}」？`))
+                              onClick={async () => {
+                                if (
+                                  await askConfirm(
+                                    `删除菜品「${it.title}」？`,
+                                    {
+                                      danger: true,
+                                    },
+                                  )
+                                )
                                   run(
                                     () => deleteDish(c.id, it.id),
                                     "菜品已删除",
