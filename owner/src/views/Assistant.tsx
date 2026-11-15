@@ -31,6 +31,13 @@ import {
   type AdviceItem,
 } from "../lib/advisor";
 import { buildSitePlan, sitePlanPrompt } from "../lib/siteAudit";
+import {
+  loadReviewFacts,
+  buildReview,
+  reviewPrompt,
+  type ReviewReport,
+  type ReviewPeriod,
+} from "../lib/review";
 import { type OpsFacts } from "../lib/assistant";
 import {
   loadBusinessSnapshot,
@@ -42,6 +49,7 @@ import {
 } from "../lib/aiContext";
 import { chatLLM, hasLlm } from "../lib/llm";
 import { actionDraft } from "../lib/actionDraft";
+import { createTask } from "../lib/tasks";
 
 const CHAT_SUGGESTIONS = [
   "今天最该先处理什么？",
@@ -81,6 +89,13 @@ export default function Assistant({
     { source: "rule"; lines: string[] } | { source: "ai"; text: string } | null
   >(null);
   const [siteBusy, setSiteBusy] = useState(false);
+  const [reviewPeriod, setReviewPeriod] = useState<ReviewPeriod>("week");
+  const [review, setReview] = useState<
+    | { source: "rule"; report: ReviewReport }
+    | { source: "ai"; text: string; period: ReviewPeriod }
+    | null
+  >(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -276,6 +291,26 @@ export default function Assistant({
     }
   };
 
+  /** 把建议转成任务中心的待办（自动同步云端） */
+  const addTask = (
+    title: string,
+    finding: string,
+    actions: string[],
+    kind: string,
+  ) => {
+    createTask({
+      id: `ai-${kind}`,
+      kind,
+      title,
+      desc: [finding, ...actions.map((a) => `· ${a}`)].join("\n"),
+      impact: 0,
+      evidence: [],
+      suggestion: actions[0] || "",
+      tab: kind,
+    });
+    toast.success("已加入任务中心，可在「任务中心」跟踪");
+  };
+
   const copyBrief = () => {
     const text = brief.join("\n");
     try {
@@ -366,6 +401,57 @@ export default function Assistant({
     }
   };
 
+  /** 周报/月报复盘 */
+  const runReview = async (period: ReviewPeriod = reviewPeriod) => {
+    if (reviewBusy) return;
+    setReviewBusy(true);
+    const facts = await loadReviewFacts(period);
+    const nextActions = snapshot
+      ? buildAdvice(snapshot)
+          .slice(0, 3)
+          .map((a) => a.actions[0] || a.title)
+      : [];
+    if (hasLlm()) {
+      const { system, user } = reviewPrompt(facts, nextActions);
+      const reply = await chatLLM(system, user);
+      if (reply) {
+        setReview({ source: "ai", text: reply, period });
+        setReviewBusy(false);
+        return;
+      }
+      toast.info("AI 暂不可用，已用规则版复盘");
+    }
+    setReview({
+      source: "rule",
+      report: buildReview(facts, nextActions),
+    });
+    setReviewBusy(false);
+  };
+
+  const copyReview = () => {
+    if (!review) return;
+    const text =
+      review.source === "ai"
+        ? review.text
+        : [
+            ...review.report.summary,
+            "",
+            "亮点与问题：",
+            ...review.report.highlights.map((x) => `· ${x}`),
+            "",
+            "下期重点：",
+            ...review.report.next.map((x, i) => `${i + 1}. ${x}`),
+          ].join("\n");
+    try {
+      navigator.clipboard?.writeText(text).then(
+        () => toast.success("复盘已复制"),
+        () => toast.error("复制失败"),
+      );
+    } catch {
+      toast.error("复制失败");
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <ChartCard
@@ -387,6 +473,119 @@ export default function Assistant({
             </p>
           ))}
         </div>
+      </ChartCard>
+
+      <ChartCard
+        title="周期复盘"
+        subtitle="周报 / 月报：本期结论、亮点与问题、下期重点"
+        action={
+          <span className="text-[11px] text-zinc-500">
+            {reviewBusy ? "分析中…" : "可复制发群"}
+          </span>
+        }
+      >
+        <div className="flex items-center gap-2 mb-3">
+          {(["week", "month"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => {
+                setReviewPeriod(p);
+                if (review) void runReview(p);
+              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                reviewPeriod === p
+                  ? "bg-orange-600 text-white"
+                  : "bg-zinc-950 border border-white/5 text-zinc-400"
+              }`}
+            >
+              {p === "week" ? "周报（近 7 天）" : "月报（近 30 天）"}
+            </button>
+          ))}
+          <button
+            onClick={() => runReview()}
+            disabled={reviewBusy}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold btn-brand text-white disabled:opacity-60"
+          >
+            <Sparkles size={13} />
+            {reviewBusy ? "生成中…" : review ? "重新生成" : "生成复盘"}
+          </button>
+        </div>
+
+        {!review ? (
+          <div className="rounded-xl bg-zinc-950 px-4 py-4 text-sm text-zinc-500">
+            选择周报或月报后点「生成复盘」，会对比上期数据，给出结论、问题和下期重点。
+          </div>
+        ) : (
+          <div className="rounded-xl bg-zinc-950 px-4 py-3.5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  review.source === "ai"
+                    ? "bg-orange-500 text-white"
+                    : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {review.source === "ai" ? "AI" : "规则版"} ·{" "}
+                {reviewPeriod === "week" ? "周报" : "月报"}
+              </span>
+              <button
+                onClick={copyReview}
+                className="ml-auto inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
+              >
+                <Copy size={12} /> 复制
+              </button>
+            </div>
+            {review.source === "ai" ? (
+              <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                {review.text}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  {review.report.summary.map((line, i) => (
+                    <p
+                      key={i}
+                      className="text-sm text-zinc-200 leading-relaxed"
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-zinc-400 mb-1">
+                    亮点与问题
+                  </div>
+                  <ul className="space-y-1">
+                    {review.report.highlights.map((x, i) => (
+                      <li
+                        key={i}
+                        className="flex gap-1.5 text-xs text-zinc-300"
+                      >
+                        <span className="text-orange-400">·</span>
+                        {x}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-zinc-400 mb-1">
+                    下期重点
+                  </div>
+                  <ol className="space-y-1">
+                    {review.report.next.map((x, i) => (
+                      <li key={i} className="flex gap-2 text-xs text-zinc-300">
+                        <span className="text-orange-400 font-bold">
+                          {i + 1}.
+                        </span>
+                        {x}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </ChartCard>
 
       <ChartCard
@@ -451,14 +650,24 @@ export default function Assistant({
                   <span className="text-sm font-semibold text-zinc-100">
                     {it.title}
                   </span>
-                  {onTab && (
+                  <div className="ml-auto flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => onTab(it.tab)}
-                      className="ml-auto text-[11px] text-orange-400 hover:text-orange-300"
+                      onClick={() =>
+                        addTask(it.title, it.finding, it.actions, it.area)
+                      }
+                      className="text-[11px] text-zinc-500 hover:text-zinc-300"
                     >
-                      去处理 →
+                      加入任务
                     </button>
-                  )}
+                    {onTab && (
+                      <button
+                        onClick={() => onTab(it.tab)}
+                        className="text-[11px] text-orange-400 hover:text-orange-300"
+                      >
+                        去处理 →
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="text-xs text-zinc-400">{it.finding}</div>
                 <ul className="space-y-1">
@@ -544,10 +753,27 @@ export default function Assistant({
                         <span className="text-sm text-zinc-100 font-medium">
                           {c.title}
                         </span>
+                        {c.tab && (
+                          <button
+                            onClick={() =>
+                              addTask(
+                                c.title,
+                                `${c.finding}\n建议：${c.recommendation}`,
+                                [c.recommendation],
+                                "site-audit",
+                              )
+                            }
+                            className="ml-auto text-[11px] text-zinc-500 hover:text-zinc-300"
+                          >
+                            加入任务
+                          </button>
+                        )}
                         {onTab && c.tab && (
                           <button
                             onClick={() => onTab(c.tab)}
-                            className="ml-auto text-[11px] text-orange-400 hover:text-orange-300"
+                            className={`${
+                              c.tab ? "" : "ml-auto "
+                            }text-[11px] text-orange-400 hover:text-orange-300`}
                           >
                             去处理 →
                           </button>
@@ -673,8 +899,22 @@ export default function Assistant({
                         {m.source === "ai" ? "AI" : "规则版"}
                       </span>
                       <button
+                        onClick={() =>
+                          addTask(
+                            m.content.split("\n")[0]?.slice(0, 60) ||
+                              "经营建议待处理",
+                            m.content,
+                            [],
+                            "ai-chat",
+                          )
+                        }
+                        className="ml-auto inline-flex items-center gap-1 text-[10px] text-zinc-500 hover:text-orange-400"
+                      >
+                        转成任务
+                      </button>
+                      <button
                         onClick={() => copyMessage(m.content)}
-                        className="ml-auto inline-flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300"
+                        className="inline-flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300"
                       >
                         <Copy size={11} /> 复制
                       </button>
