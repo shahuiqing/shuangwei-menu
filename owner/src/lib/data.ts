@@ -1,11 +1,6 @@
 import { supabase } from "./supabase";
 import { saveSnap, snapFallback } from "./snapshot";
 
-export interface Staff {
-  name: string;
-  password: string;
-}
-
 export async function fetchOrders(limit = 3000): Promise<any[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
@@ -46,38 +41,6 @@ export async function saveSettingsField(
   if (error) {
     console.warn("[owner] saveSettingsField:", error.message);
     return false;
-  }
-  return true;
-}
-
-export async function fetchStaff(): Promise<Staff[]> {
-  const s = await fetchSettings();
-  const list = s?.devicePasswordsHash || s?.devicePasswords || [];
-  return Array.isArray(list)
-    ? list.filter((x: any) => x && (x.name || x.password))
-    : [];
-}
-
-export async function saveStaff(list: Staff[]): Promise<boolean> {
-  if (!supabase) return false;
-  // 去空格、过滤空行，避免姓名/密码带前导空格写入
-  const clean = (list || [])
-    .filter((s) => s.name.trim() && s.password.trim())
-    .map((s) => ({ name: s.name.trim(), password: s.password.trim() }));
-  const { error } = await supabase
-    .from("settings")
-    .update({ devicePasswordsHash: clean, devicePasswords: clean })
-    .eq("id", "global");
-  if (error) {
-    // 若没有 devicePasswords 列，退一步只写 devicePasswordsHash
-    const r2 = await supabase
-      .from("settings")
-      .update({ devicePasswordsHash: clean })
-      .eq("id", "global");
-    if (r2.error) {
-      console.warn("[owner] saveStaff:", r2.error.message);
-      return false;
-    }
   }
   return true;
 }

@@ -104,12 +104,14 @@ ALTER TABLE public.inventory_transactions ADD COLUMN IF NOT EXISTS reason VARCHA
 CREATE INDEX IF NOT EXISTS idx_inv_txn_waste       ON public.inventory_transactions (type, created_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. 老板端登录密码哈希（初始 123456，登录后请尽快修改）
+-- 2. 老板端登录密码哈希（不再内置任何默认密码；首次使用由页面强制设置）
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS "ownerPasswordHash" TEXT DEFAULT '';
+-- 安全:清除历史版本内置的 123456 默认哈希（若你仍在使用 123456，下次登录需重新设置密码）
 UPDATE public.settings
-SET "ownerPasswordHash" = '$2b$10$HZU6z.ZHMcY46zBQM9R/kedujlwguLBtKzG4g8II9doyRQF5AOhP.'
-WHERE id = 'global' AND COALESCE("ownerPasswordHash", '') = '';
+SET "ownerPasswordHash" = ''
+WHERE id = 'global'
+  AND "ownerPasswordHash" = '$2b$10$HZU6z.ZHMcY46zBQM9R/kedujlwguLBtKzG4g8II9doyRQF5AOhP.';
 
 -- 允许匿名读取 settings（顾客端/老板端读取菜单、店名等；幂等，与 setup.sql 一致）
 DROP POLICY IF EXISTS "anon_read_settings" ON public.settings;
@@ -989,6 +991,112 @@ VALUES
 ON CONFLICT (category) DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_stocktake_category_rules_cat ON public.stocktake_category_rules (category);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 6.7 安全加固：员工密码哈希不再暴露给前端
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 1) 收回整表权限，只开放非密码列
+REVOKE ALL ON public.staff_members FROM anon, authenticated;
+GRANT SELECT (id, name, roles, status, phone, note, created_at, updated_at)
+  ON public.staff_members TO anon, authenticated;
+GRANT INSERT (id, name, roles, status, phone, note, created_at, updated_at)
+  ON public.staff_members TO anon, authenticated;
+-- 允许首次设置密码（空 → 有值）；修改已有密码由下方触发器拦截，必须走老板密码校验
+GRANT UPDATE (name, roles, status, phone, note, updated_at, password_hash)
+  ON public.staff_members TO anon, authenticated;
+GRANT DELETE ON public.staff_members TO anon, authenticated;
+
+-- 2) 触发器：前端直接改已有密码一律拒绝（SECURITY DEFINER 函数内部不受影响）
+CREATE OR REPLACE FUNCTION public.staff_password_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF current_user IN ('postgres', 'supabase_admin', 'service_role') THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.password_hash IS DISTINCT FROM OLD.password_hash
+     AND COALESCE(OLD.password_hash, '') <> '' THEN
+    RAISE EXCEPTION 'password change requires owner authorization';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS staff_password_guard ON public.staff_members;
+CREATE TRIGGER staff_password_guard
+  BEFORE UPDATE ON public.staff_members
+  FOR EACH ROW EXECUTE FUNCTION public.staff_password_guard();
+
+-- 3) 员工登录：bcrypt 比对在数据库内完成，哈希不出库
+CREATE OR REPLACE FUNCTION public.owner_verify_staff(p_name text, p_password text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE m record;
+BEGIN
+  SELECT id, name, roles, status, password_hash INTO m
+  FROM public.staff_members
+  WHERE lower(trim(name)) = lower(trim(p_name))
+  LIMIT 1;
+  IF m IS NULL OR m.status <> 'active' OR COALESCE(m.password_hash, '') = '' THEN
+    RETURN jsonb_build_object('ok', false);
+  END IF;
+  IF crypt(p_password, m.password_hash) = m.password_hash THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'staff', jsonb_build_object('id', m.id, 'name', m.name, 'roles', m.roles)
+    );
+  END IF;
+  RETURN jsonb_build_object('ok', false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.owner_verify_staff(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_verify_staff(text, text) TO anon, authenticated;
+
+-- 4) 设置/重置员工密码：必须提供正确的老板密码（云端 ownerPasswordHash）
+CREATE OR REPLACE FUNCTION public.owner_set_staff_password(
+  p_owner_password text,
+  p_staff_id uuid,
+  p_password text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE owner_h text; n int;
+BEGIN
+  IF length(coalesce(p_password, '')) < 4 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'password too short');
+  END IF;
+  SELECT "ownerPasswordHash" INTO owner_h
+  FROM public.settings WHERE id = 'global';
+  IF COALESCE(owner_h, '') = '' OR substr(owner_h, 1, 2) <> '$2' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'owner password not configured');
+  END IF;
+  IF crypt(p_owner_password, owner_h) <> owner_h THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'owner password incorrect');
+  END IF;
+  UPDATE public.staff_members
+  SET password_hash = crypt(p_password, gen_salt('bf', 10)),
+      updated_at = now()
+  WHERE id = p_staff_id;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'staff not found');
+  END IF;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.owner_set_staff_password(text, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_set_staff_password(text, uuid, text) TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. 刷新 PostgREST 缓存（新建函数后必须，否则仍报 could not find function）

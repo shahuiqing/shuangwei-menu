@@ -13,6 +13,7 @@ import { toast } from "../components/Toast";
 import {
   fetchStaffMembers,
   upsertStaffMember,
+  setStaffPassword,
   deleteStaffMember,
   ROLES,
   ROLE_LABEL,
@@ -48,6 +49,8 @@ export default function StaffView({ version = 0 }: { version?: number }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [pwPrompt, setPwPrompt] = useState<Draft | null>(null);
   const [pwValue, setPwValue] = useState("");
+  /** 设置员工密码需要当前老板密码授权（服务端校验） */
+  const [ownerPw, setOwnerPw] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -80,13 +83,13 @@ export default function StaffView({ version = 0 }: { version?: number }) {
     if (!s.name.trim()) return toast.error("请填写员工姓名");
     if (s.roles.length === 0) return toast.error("至少选择一个岗位");
     setSavingId(s.id || "new");
-    const res = await upsertStaffMember(s, s.password || undefined);
+    const res = await upsertStaffMember(s);
     setSavingId(null);
     if (res.ok) {
       toast.success(
         s.id
           ? `已保存「${s.name.trim()}」`
-          : `已添加员工「${s.name.trim()}」${s.password ? "" : "（尚未设置密码，点钥匙图标设置）"}`,
+          : `已添加员工「${s.name.trim()}」（尚未设置密码，点钥匙图标设置）`,
       );
       load();
     } else toast.error("保存失败（检查数据库权限）");
@@ -110,16 +113,29 @@ export default function StaffView({ version = 0 }: { version?: number }) {
   };
 
   const setPw = async () => {
-    if (!pwPrompt) return;
+    if (!pwPrompt || !pwPrompt.id) return;
     const p = pwValue.trim();
     if (p.length < 4) return toast.error("密码至少 4 位");
-    setPwPrompt(null);
-    setPwValue("");
+    if (!ownerPw) return toast.error("请输入老板密码（用于授权）");
     setSavingId(pwPrompt.id);
-    const res = await upsertStaffMember(pwPrompt, p);
+    const res = await setStaffPassword(pwPrompt.id, p, ownerPw);
     setSavingId(null);
-    if (res.ok) toast.success(`「${pwPrompt.name}」的登录密码已更新`);
-    else toast.error("密码保存失败");
+    if (res.ok) {
+      toast.success(`「${pwPrompt.name}」的登录密码已更新`);
+      setPwPrompt(null);
+      setPwValue("");
+      setOwnerPw("");
+    } else if (res.error?.includes("owner password incorrect")) {
+      toast.error("老板密码错误，请重试");
+    } else if (res.error?.includes("owner password not configured")) {
+      toast.error(
+        "云端尚未配置老板密码，请先在登录页设置/修改密码并联网同步后重试",
+      );
+    } else if (res.error?.includes("password too short")) {
+      toast.error("密码至少 4 位");
+    } else {
+      toast.error("密码保存失败");
+    }
   };
 
   const activeCount = list.filter((s) => s.status === "active").length;
@@ -193,6 +209,7 @@ export default function StaffView({ version = 0 }: { version?: number }) {
                 onClick={() => {
                   setPwPrompt(s);
                   setPwValue("");
+                  setOwnerPw("");
                 }}
                 title={s.id ? "设置/重置登录密码" : "新员工先保存后再设密码"}
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm border ${
@@ -268,13 +285,26 @@ export default function StaffView({ version = 0 }: { version?: number }) {
               autoFocus
               value={pwValue}
               onChange={(e) => setPwValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && setPw()}
-              placeholder="至少 4 位，输入后点确认"
+              placeholder="员工新密码：至少 4 位"
               className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
             />
+            <input
+              type="password"
+              value={ownerPw}
+              onChange={(e) => setOwnerPw(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && setPw()}
+              placeholder="老板密码（授权本次修改）"
+              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+            />
+            <p className="text-[11px] text-zinc-500">
+              密码在数据库内加密保存，前端和页面都不会回显；修改已有密码必须验证老板密码。
+            </p>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setPwPrompt(null)}
+                onClick={() => {
+                  setPwPrompt(null);
+                  setOwnerPw("");
+                }}
                 className="px-4 py-2 text-sm text-zinc-300 bg-zinc-800 rounded-xl"
               >
                 取消

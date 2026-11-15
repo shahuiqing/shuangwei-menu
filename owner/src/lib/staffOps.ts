@@ -5,7 +5,6 @@
  *     stocktake_tasks, purchase_requests（见 supabase_owner_all.sql 6.5 节）
  * 员工端(/staff.html)只查询这几张表，绝不触碰经营/成本/供应商数据。
  */
-import bcrypt from "bcryptjs";
 import { supabase, isConfigured } from "./supabase";
 
 // ───────────────────────── 类型 ─────────────────────────
@@ -495,11 +494,14 @@ function warn(op: string, error: { message: string } | null): boolean {
 
 // ───────────────────────── 员工账号 ─────────────────────────
 
+/** 员工表可读列（password_hash 已收回前端读取权限） */
+const STAFF_COLS = "id,name,roles,status,phone,note,created_at,updated_at";
+
 export async function fetchStaffMembers(): Promise<StaffMember[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("staff_members")
-    .select("*")
+    .select(STAFF_COLS)
     .order("created_at", { ascending: true });
   if (!warn("fetchStaffMembers", error)) return [];
   return (data || []).map((s: any) => ({
@@ -508,10 +510,12 @@ export async function fetchStaffMembers(): Promise<StaffMember[]> {
   }));
 }
 
-/** 新增/更新员工；password 传值时才重设密码（bcrypt） */
+/**
+ * 新增/更新员工资料（不含密码）。
+ * 密码必须通过 setStaffPassword 单独设置（需老板密码授权）。
+ */
 export async function upsertStaffMember(
   member: Partial<StaffMember> & { id?: string; name: string },
-  password?: string,
 ): Promise<{ ok: boolean; id?: string }> {
   if (!supabase) return { ok: false };
   const patch: Record<string, unknown> = {
@@ -522,9 +526,6 @@ export async function upsertStaffMember(
     note: member.note || "",
     updated_at: new Date().toISOString(),
   };
-  if (password && password.trim()) {
-    patch.password_hash = await bcrypt.hash(password.trim(), 10);
-  }
   if (member.id) {
     const { error } = await supabase
       .from("staff_members")
@@ -539,6 +540,30 @@ export async function upsertStaffMember(
     .single();
   if (!warn("insertStaffMember", error)) return { ok: false };
   return { ok: true, id: data?.id };
+}
+
+/**
+ * 设置/重置员工登录密码：由数据库函数校验老板密码（bcrypt 在库内完成），
+ * 哈希不会经过前端；老板密码不对或云端未配置时会返回明确错误。
+ */
+export async function setStaffPassword(
+  staffId: string,
+  password: string,
+  ownerPassword: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "not configured" };
+  const { data, error } = await supabase.rpc("owner_set_staff_password", {
+    p_owner_password: ownerPassword,
+    p_staff_id: staffId,
+    p_password: password,
+  });
+  if (error) {
+    warn("setStaffPassword", error);
+    return { ok: false, error: error.message };
+  }
+  const res = data as { ok?: boolean; error?: string } | null;
+  if (res?.ok) return { ok: true };
+  return { ok: false, error: res?.error || "failed" };
 }
 
 export async function deleteStaffMember(id: string): Promise<boolean> {
@@ -1180,26 +1205,32 @@ export function clearStaffSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-/** 员工登录：姓名+密码，bcrypt 客户端比对（复用现有方案） */
+/**
+ * 员工登录：姓名+密码。
+ * bcrypt 比对在数据库函数 owner_verify_staff 内完成（哈希不出库、前端无法读取）。
+ */
 export async function staffLogin(
   name: string,
   password: string,
 ): Promise<Omit<StaffSession, "exp"> | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("staff_members")
-    .select("id,name,roles,status,password_hash")
-    .eq("name", name.trim())
-    .limit(1);
-  if (error || !data || data.length === 0) return null;
-  const member = data[0] as any;
-  if (member.status !== "active" || !member.password_hash) return null;
-  const ok = await bcrypt.compare(password, member.password_hash);
-  if (!ok) return null;
+  const { data, error } = await supabase.rpc("owner_verify_staff", {
+    p_name: name.trim(),
+    p_password: password,
+  });
+  if (error) {
+    warn("staffLogin", error);
+    return null;
+  }
+  const res = data as {
+    ok?: boolean;
+    staff?: { id: string; name: string; roles?: string[] };
+  } | null;
+  if (!res?.ok || !res.staff) return null;
   return {
-    staffId: member.id,
-    name: member.name,
-    roles: Array.isArray(member.roles) ? member.roles : [],
+    staffId: res.staff.id,
+    name: res.staff.name,
+    roles: Array.isArray(res.staff.roles) ? (res.staff.roles as Role[]) : [],
   };
 }
 
