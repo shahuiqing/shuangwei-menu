@@ -67,6 +67,13 @@ import {
   type AiFocus,
 } from "../lib/aiPrefs";
 import {
+  loadAutoAdvice,
+  runAutoAdvice,
+  loadAutoAdviceCfg,
+  saveAutoAdviceCfg,
+  type AutoAdviceRecord,
+} from "../lib/autoAdvice";
+import {
   loadReplenishPlan,
   createReplenishPurchases,
   replenishSummary,
@@ -146,6 +153,39 @@ export default function Assistant({
     plan: PurchasePlan;
     summary: ReplenishSummary;
   } | null>(null);
+  /** 每日自动建议 */
+  const [autoRec, setAutoRec] = useState<AutoAdviceRecord | null>(() =>
+    loadAutoAdvice(),
+  );
+  const [autoCfg, setAutoCfgState] = useState(() => loadAutoAdviceCfg());
+  const [autoBusy, setAutoBusy] = useState(false);
+
+  const toggleAuto = () => {
+    const next = saveAutoAdviceCfg({ enabled: !autoCfg.enabled });
+    setAutoCfgState(next);
+    toast.info(
+      next.enabled
+        ? "每日自动建议已开启：紧急事项会自动派给帮厨"
+        : "每日自动建议已关闭：仍每天生成，但不再自动派发",
+    );
+  };
+
+  const rerunAuto = async () => {
+    if (autoBusy) return;
+    setAutoBusy(true);
+    try {
+      const rec = await runAutoAdvice({ force: true });
+      setAutoRec(rec);
+      toast.success(
+        rec && rec.dispatched.length > 0
+          ? `已重新生成并派发 ${rec.dispatched.length} 条`
+          : "已重新生成今日建议",
+      );
+    } catch {
+      toast.error("生成失败，请稍后重试");
+    }
+    setAutoBusy(false);
+  };
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -628,6 +668,55 @@ export default function Assistant({
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      <ChartCard
+        title="今日自动建议"
+        subtitle="每天首次打开系统自动生成，紧急事项自动派发"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={autoCfg.enabled}
+              onChange={toggleAuto}
+              className="accent-orange-500"
+            />
+            自动派发紧急建议（缺货 / 损耗 → 帮厨）
+          </label>
+          <button
+            onClick={rerunAuto}
+            disabled={autoBusy}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-60"
+          >
+            <Sparkles size={13} />
+            {autoBusy ? "生成中…" : "立即运行"}
+          </button>
+        </div>
+
+        {autoRec ? (
+          <div className="mt-2.5 rounded-lg bg-zinc-950 px-3 py-2 space-y-1">
+            <div className="text-[11px] text-zinc-500">
+              {autoRec.day} 自动生成 {autoRec.considered} 条建议
+              {autoRec.enabled ? "" : "（当时自动派发为关闭）"}
+            </div>
+            {autoRec.dispatched.length > 0 ? (
+              autoRec.dispatched.map((d, i) => (
+                <div key={i} className="text-xs text-zinc-300">
+                  · 已派发「{d.title}」→ {d.roles.join("、")}（{d.count} 人）
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-zinc-600">
+                没有需要自动派发的紧急事项。
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mt-2.5 text-[11px] text-zinc-600 leading-relaxed">
+            下次打开系统时会自动运行一次；也可以点「立即运行」马上生成。
+          </p>
+        )}
+      </ChartCard>
+
       <ChartCard
         title="一键补货"
         subtitle="低库存 + 30 天消耗 + 参考价 → 采购草稿"

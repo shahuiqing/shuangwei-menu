@@ -31,7 +31,7 @@ const StaffTasks = lazy(() => import("./views/StaffTasks"));
 const Stocktake = lazy(() => import("./views/Stocktake"));
 const PurchaseRequests = lazy(() => import("./views/PurchaseRequests"));
 import { Layout, type OwnerTab } from "./components/Layout";
-import { ToastHost } from "./components/Toast";
+import { ToastHost, toast } from "./components/Toast";
 import { ConfirmHost } from "./components/Confirm";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isAuthed, clearAuthed } from "./lib/auth";
@@ -43,6 +43,7 @@ import {
   type StaffSession,
 } from "./lib/staffOps";
 import { syncTasks } from "./lib/tasks";
+import { runAutoAdvice, autoAdviceDoneToday } from "./lib/autoAdvice";
 import { todayKey } from "./lib/businessDay";
 import { Main as StaffMain } from "./staff/App";
 import { fetchSettings } from "./lib/data";
@@ -175,6 +176,25 @@ export default function App() {
         /* ignore */
       }
       if (res.count > 0) console.info(`[owner] 自动派发任务 ${res.count} 条`);
+    })();
+  }, [authed]);
+
+  // AI 每日自动经营建议：每天首次打开自动生成；紧急事项按开关自动派给员工
+  // 失败不标记，下次打开重试
+  useEffect(() => {
+    if (!authed || !isConfigured) return;
+    if (autoAdviceDoneToday()) return;
+    (async () => {
+      try {
+        const rec = await runAutoAdvice();
+        if (rec && rec.dispatched.length > 0) {
+          toast.info(
+            `今日经营建议已生成，自动派发 ${rec.dispatched.length} 条给员工`,
+          );
+        }
+      } catch {
+        /* 忽略，下次打开重试 */
+      }
     })();
   }, [authed]);
 
