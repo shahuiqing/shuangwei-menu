@@ -7,19 +7,11 @@ import {
   Wallet,
   Truck,
   AlertTriangle,
-  CalendarDays,
-  Scale,
   Camera,
   X,
   ScanLine,
-  Sparkles,
-  FileText,
-  Ruler,
-  TrendingUp,
-  Languages,
 } from "lucide-react";
-import { ChartCard, EmptyState, KpiCard, SkeletonRows } from "../components/ui";
-import { Segmented } from "../components/Segmented";
+import { ChartCard, KpiCard } from "../components/ui";
 import { Sheet } from "../components/Sheet";
 import { toast } from "../components/Toast";
 import { askConfirm } from "../components/Confirm";
@@ -53,20 +45,15 @@ import {
 } from "../lib/receipts";
 import { receiptImageDataUrl } from "../lib/image";
 import {
-  hasReceiptTranslation,
-  isNonChineseReceipt,
   matchInventoryItemAny,
-  receiptLanguageLabel,
   receiptWarnings,
   recognizeReceipt,
-  RECEIPT_DOC_LABEL,
   type ReceiptDraft,
 } from "../lib/receiptAi";
 import { consumptionByItem } from "../lib/aggregate";
 import {
   buildPurchasePlan,
   CONSUMPTION_WINDOW_DAYS,
-  COVERAGE_DAYS,
   dailyFromConsumption,
   mergeRequestsIntoPlan,
   requestsByItem,
@@ -76,11 +63,7 @@ import {
   markPurchaseRequestsFulfilled,
   type PurchaseRequest,
 } from "../lib/staffOps";
-import {
-  compareInsight,
-  rivalItems,
-  supplierCompare,
-} from "../lib/supplierCompare";
+import { rivalItems } from "../lib/supplierCompare";
 import {
   sameUnit,
   conversionFactor,
@@ -89,7 +72,10 @@ import {
   type ReviewCheck,
 } from "./procurement/helpers";
 import { PriceAlertRow } from "./procurement/PriceAlertRow";
-import { AiReviewRowCard } from "./procurement/AiReviewRowCard";
+import PlanCard from "./procurement/PlanCard";
+import SupplierCompareCard from "./procurement/SupplierCompareCard";
+import PurchaseRecordsCard from "./procurement/PurchaseRecordsCard";
+import ReceiptReviewSheet from "./procurement/ReceiptReviewSheet";
 
 const newLocalId = () =>
   `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -211,15 +197,6 @@ export default function Procurement({ version = 0 }: { version?: number }) {
 
   // 供应商比价（≥2 家供应商的原料）
   const rivals = useMemo(() => rivalItems(list), [list]);
-  const [cmpId, setCmpId] = useState("");
-  const activeId = rivals.some((r) => r.itemId === cmpId)
-    ? cmpId
-    : rivals[0]?.itemId || "";
-  const cmpStats = useMemo(
-    () => (activeId ? supplierCompare(list, activeId) : []),
-    [list, activeId],
-  );
-  const insight = useMemo(() => compareInsight(cmpStats), [cmpStats]);
 
   // 采购单位换算：按最小单位归一（采购价异常判定/成本影响都用归一的单价）
   const selectedMeta = useMemo(
@@ -240,20 +217,6 @@ export default function Procurement({ version = 0 }: { version?: number }) {
     () => checkUnitPrice(byItem.get(form.itemId), pricePerMin),
     [byItem, form.itemId, pricePerMin],
   );
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter(
-      (p) =>
-        String(p.item_name || "")
-          .toLowerCase()
-          .includes(needle) ||
-        String(p.supplier || "")
-          .toLowerCase()
-          .includes(needle),
-    );
-  }, [list, q]);
 
   const impacts = useMemo(
     () =>
@@ -768,95 +731,15 @@ export default function Procurement({ version = 0 }: { version?: number }) {
       )}
 
       {plan.rows.length > 0 && (
-        <ChartCard
-          title="采购计划"
-          subtitle={`安全库存 + 近 ${CONSUMPTION_WINDOW_DAYS} 天日均消耗 × ${plan.coverageDays} 天 − 现存${
-            approvedReqs.length > 0
-              ? ` · 已并入 ${approvedReqs.length} 条员工申报`
-              : ""
-          }`}
-          action={<CalendarDays size={18} className="text-amber-400" />}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <Segmented
-              size="sm"
-              value={String(coverage)}
-              options={COVERAGE_DAYS.map(
-                (d) => [String(d), `${d} 天`] as const,
-              )}
-              onChange={(v) => setCoverage(Number(v))}
-            />
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-zinc-300">
-                合计约{" "}
-                <b className="text-amber-400">{fmtMoney(plan.totalCost)}</b>
-              </span>
-              <button
-                onClick={bulkBuy}
-                disabled={bulk}
-                className="px-3.5 py-1.5 rounded-lg btn-brand text-white text-xs font-semibold disabled:opacity-60"
-              >
-                {bulk ? "下单中…" : `一键采购 ${plan.rows.length} 项`}
-              </button>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            {plan.rows.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between gap-3 bg-zinc-950 rounded-lg px-3 py-2 text-sm"
-              >
-                <div className="min-w-0">
-                  <span className="text-zinc-200">{r.name}</span>
-                  {r.priority !== "normal" && (
-                    <span
-                      className={`inline-flex ml-2 align-middle text-[10px] px-1.5 py-0.5 rounded ${
-                        r.priority === "urgent"
-                          ? "bg-red-500/10 text-red-400"
-                          : "bg-amber-500/10 text-amber-400"
-                      }`}
-                    >
-                      {r.priority === "urgent" ? "缺货" : "低于安全"}
-                    </span>
-                  )}
-                  {!!r.requestQty && (
-                    <span className="inline-flex ml-2 align-middle text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400">
-                      员工申报 {num(r.requestQty)}
-                      {r.unit}
-                      {r.requestStaff?.length
-                        ? ` · ${r.requestStaff.join("、")}`
-                        : ""}
-                      {r.requestUrgent ? " 🔥" : ""}
-                    </span>
-                  )}
-                  <div className="text-zinc-500 text-xs mt-0.5">
-                    现存 {num(r.stock)}
-                    {r.unit} · 日均 {num(r.dailyAvg)}
-                    {r.unit}
-                    {r.daysLeft !== null && ` · 可撑 ${r.daysLeft} 天`}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-zinc-400 text-xs text-right">
-                    补 {num(r.gap)}
-                    {r.unit} · 约 {fmtMoney(r.estCost)}
-                    <span className="block text-zinc-500 text-[10px]">
-                      {r.reason}
-                    </span>
-                  </span>
-                  <button
-                    onClick={() =>
-                      preselect({ id: r.id, gap: r.gap, price: r.refPrice })
-                    }
-                    className="px-3 py-1.5 rounded-lg btn-brand text-white text-xs font-semibold"
-                  >
-                    采购
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </ChartCard>
+        <PlanCard
+          plan={plan}
+          coverage={coverage}
+          onCoverage={setCoverage}
+          bulk={bulk}
+          onBulkBuy={bulkBuy}
+          approvedCount={approvedReqs.length}
+          onPick={(r) => preselect({ id: r.id, gap: r.gap, price: r.refPrice })}
+        />
       )}
 
       {reqByItem.unmatched.length > 0 && (
@@ -879,219 +762,9 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         </ChartCard>
       )}
 
-      {rivals.length > 0 && (
-        <ChartCard
-          title="供应商比价"
-          subtitle="同一原料各供应商的加权均价、单价中位数与金额份额"
-          action={<Scale size={18} className="text-teal-400" />}
-        >
-          <div className="flex flex-wrap items-center gap-3 mb-3">
-            <select
-              value={activeId}
-              onChange={(e) => setCmpId(e.target.value)}
-              className="bg-zinc-950 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
-            >
-              {rivals.map((r) => (
-                <option key={r.itemId} value={r.itemId}>
-                  {r.itemName}（{r.suppliers} 家 · {r.count} 笔）
-                </option>
-              ))}
-            </select>
-            {insight && (
-              <span className="text-xs text-zinc-400">
-                换到 <b className="text-emerald-400">{insight.best.supplier}</b>
-                ， 每单位省{" "}
-                <b className="text-emerald-400">
-                  {fmtMoney(insight.savePerUnit)}
-                </b>
-                （约 {Math.round(insight.savePct * 100)}%，一次可省{" "}
-                {fmtMoney(insight.savePerBuy)}）
-              </span>
-            )}
-          </div>
-          <div className="sm:hidden space-y-2.5">
-            {cmpStats.map((s) => (
-              <div key={s.supplier} className="card-surface p-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-white font-medium truncate">
-                      {s.supplier}
-                    </span>
-                    {s.level !== "mid" && (
-                      <span
-                        className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
-                          s.level === "best"
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-red-500/10 text-red-400"
-                        }`}
-                      >
-                        {s.level === "best" ? "最低" : "最高"}
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={`shrink-0 font-semibold tnum ${
-                      s.level === "best"
-                        ? "text-emerald-400"
-                        : s.level === "worst"
-                          ? "text-red-400"
-                          : "text-zinc-200"
-                    }`}
-                  >
-                    {fmtMoney(s.avg)}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-zinc-500">
-                  <span>中位 {fmtMoney(s.medianUnit)}</span>
-                  <span>{s.count} 笔</span>
-                  <span>占比 {Math.round(s.share * 100)}%</span>
-                  <span>
-                    最近 {s.lastAt ? fmtDateTime(s.lastAt).slice(0, 10) : "—"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+      {rivals.length > 0 && <SupplierCompareCard list={list} />}
 
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-500 text-left border-b border-white/5">
-                  <th className="px-3 py-2 font-medium">供应商</th>
-                  <th className="px-3 py-2 font-medium text-right">加权均价</th>
-                  <th className="px-3 py-2 font-medium text-right">中位单价</th>
-                  <th className="px-3 py-2 font-medium text-right">笔数</th>
-                  <th className="px-3 py-2 font-medium text-right">金额占比</th>
-                  <th className="px-3 py-2 font-medium text-right">最近采购</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cmpStats.map((s) => (
-                  <tr
-                    key={s.supplier}
-                    className="border-b border-zinc-800/50 last:border-0"
-                  >
-                    <td className="px-3 py-2.5 text-zinc-200 whitespace-nowrap">
-                      {s.supplier}
-                      {s.level !== "mid" && (
-                        <span
-                          className={`inline-flex ml-2 align-middle text-[10px] px-1.5 py-0.5 rounded ${
-                            s.level === "best"
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : "bg-red-500/10 text-red-400"
-                          }`}
-                        >
-                          {s.level === "best" ? "最低" : "最高"}
-                        </span>
-                      )}
-                    </td>
-                    <td
-                      className={`px-3 py-2.5 text-right font-semibold ${
-                        s.level === "best"
-                          ? "text-emerald-400"
-                          : s.level === "worst"
-                            ? "text-red-400"
-                            : "text-zinc-200"
-                      }`}
-                    >
-                      {fmtMoney(s.avg)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-400">
-                      {fmtMoney(s.medianUnit)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-400">
-                      {s.count}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-400">
-                      {Math.round(s.share * 100)}%
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-zinc-500 whitespace-nowrap">
-                      {s.lastAt ? fmtDateTime(s.lastAt).slice(0, 10) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
-      )}
-
-      <ChartCard title="采购记录" subtitle={`共 ${filtered.length} 笔`}>
-        {loading ? (
-          <SkeletonRows rows={4} />
-        ) : filtered.length === 0 ? (
-          <EmptyState text="暂无采购记录" />
-        ) : (
-          <>
-            <div className="sm:hidden space-y-2.5">
-              {filtered.map((p) => (
-                <div key={p.id} className="card-surface p-3.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-white font-medium truncate">
-                        {p.item_name}
-                      </div>
-                      <div className="text-[11px] text-zinc-500 mt-0.5">
-                        {p.supplier || "-"} ·{" "}
-                        {fmtDateTime(p.purchased_at || p.created_at)}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-orange-400 font-semibold tnum">
-                      {fmtMoney(p.total_cost)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-x-3 mt-1.5 text-xs text-zinc-400">
-                    <span>
-                      {num(p.quantity)} {p.unit}
-                    </span>
-                    <span>单价 {fmtMoney(p.unit_price)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-zinc-500 text-left border-b border-white/5">
-                    <th className="px-3 py-2 font-medium">时间</th>
-                    <th className="px-3 py-2 font-medium">供应商</th>
-                    <th className="px-3 py-2 font-medium">原料</th>
-                    <th className="px-3 py-2 font-medium text-right">数量</th>
-                    <th className="px-3 py-2 font-medium text-right">单价</th>
-                    <th className="px-3 py-2 font-medium text-right">金额</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((p) => (
-                    <tr
-                      key={p.id}
-                      className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
-                    >
-                      <td className="px-3 py-2.5 text-zinc-400">
-                        {fmtDateTime(p.purchased_at || p.created_at)}
-                      </td>
-                      <td className="px-3 py-2.5 text-zinc-300">
-                        {p.supplier || "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-white">{p.item_name}</td>
-                      <td className="px-3 py-2.5 text-right text-zinc-300">
-                        {num(p.quantity)} {p.unit}
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-zinc-300">
-                        {fmtMoney(p.unit_price)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-orange-400 font-semibold">
-                        {fmtMoney(p.total_cost)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </ChartCard>
+      <PurchaseRecordsCard list={list} loading={loading} q={q} />
 
       <Sheet
         open={open}
@@ -1315,175 +988,25 @@ export default function Procurement({ version = 0 }: { version?: number }) {
         </button>
       </Sheet>
 
-      <Sheet
+      <ReceiptReviewSheet
         open={reviewOpen && !!draft}
-        title="AI 识别结果 · 人工复核"
-        subtitle="核对无误后再入库；未勾选项不会写入"
+        draft={draft}
+        rows={reviewRows}
+        inv={inv}
+        checks={reviewChecks}
+        flags={reviewFlags}
+        warnings={liveWarnings}
+        selectedCount={reviewSelected.length}
+        sum={reviewSum}
+        aiSaving={aiSaving}
+        onPatchRow={patchReviewRow}
+        onRemoveRow={(key) =>
+          setReviewRows((rows) => rows.filter((r) => r.key !== key))
+        }
+        onDraft={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))}
+        onSave={saveReview}
         onClose={clearReview}
-        maxW="max-w-2xl"
-      >
-        {draft && (
-          <div className="space-y-3.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full bg-sky-500/10 text-sky-400">
-                <FileText size={12} />
-                {RECEIPT_DOC_LABEL[draft.documentType]}
-              </span>
-              {isNonChineseReceipt(draft) && (
-                <span
-                  className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full ${
-                    hasReceiptTranslation(draft)
-                      ? "bg-violet-500/10 text-violet-400"
-                      : "bg-amber-500/10 text-amber-400"
-                  }`}
-                >
-                  <Languages size={12} />
-                  {receiptLanguageLabel(draft.sourceLanguage)}票据
-                  {hasReceiptTranslation(draft)
-                    ? " · 已附中文翻译"
-                    : " · 未附翻译"}
-                </span>
-              )}
-              <span
-                className={`text-[11px] px-2 py-1 rounded-full ${
-                  draft.confidence >= 0.8
-                    ? "bg-green-500/10 text-green-400"
-                    : draft.confidence >= 0.6
-                      ? "bg-amber-500/10 text-amber-400"
-                      : "bg-red-500/10 text-red-400"
-                }`}
-              >
-                置信度 {Math.round(draft.confidence * 100)}%
-              </span>
-              {draft.invoiceNumber && (
-                <span className="text-[11px] text-zinc-500">
-                  单号 {draft.invoiceNumber}
-                </span>
-              )}
-              <span className="text-[11px] text-zinc-500 ml-auto">
-                {reviewSelected.length}/{reviewRows.length} 项待入库
-              </span>
-            </div>
-
-            {(reviewFlags.price > 0 || reviewFlags.unit > 0) && (
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                {reviewFlags.unit > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400">
-                    <Ruler size={12} />
-                    单位不匹配 {reviewFlags.unit} 项
-                  </span>
-                )}
-                {reviewFlags.price > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-400">
-                    <TrendingUp size={12} />
-                    价格异常 {reviewFlags.price} 项
-                  </span>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <label className="col-span-2 text-[11px] text-zinc-500">
-                供应商
-                <input
-                  value={draft.supplier}
-                  onChange={(e) =>
-                    setDraft({ ...draft, supplier: e.target.value })
-                  }
-                  placeholder="未识别到，请手工补充"
-                  className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                />
-                {draft.supplierZh && draft.supplierZh !== draft.supplier && (
-                  <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-zinc-500">
-                    <Languages size={11} className="shrink-0" />
-                    <span className="truncate">
-                      中文译名{" "}
-                      <span className="text-zinc-300">{draft.supplierZh}</span>
-                    </span>
-                  </span>
-                )}
-              </label>
-              <label className="text-[11px] text-zinc-500">
-                开票 / 收货日期
-                <input
-                  type="date"
-                  value={draft.date}
-                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                  className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                />
-              </label>
-              <div className="text-[11px] text-zinc-500">
-                票面总额
-                <div className="mt-1 h-[42px] flex items-center justify-end px-3 rounded-lg bg-zinc-950 border border-white/5 tnum text-orange-400 font-semibold">
-                  {fmtMoney(draft.total)}
-                </div>
-              </div>
-            </div>
-
-            {liveWarnings.length > 0 && (
-              <div className="rounded-xl bg-amber-500/[0.07] border border-amber-500/25 px-3 py-2.5">
-                <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold mb-1">
-                  <AlertTriangle size={13} /> 请复核
-                </div>
-                <ul className="space-y-0.5 text-[11px] text-amber-300/90 list-disc pl-4">
-                  {liveWarnings.map((w) => (
-                    <li key={w}>{w}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
-              {reviewRows.map((row) => {
-                const check = reviewChecks.get(row.key);
-                return check ? (
-                  <AiReviewRowCard
-                    key={row.key}
-                    row={row}
-                    inv={inv}
-                    check={check}
-                    onPatch={(patch) => patchReviewRow(row.key, patch)}
-                    onRemove={() =>
-                      setReviewRows((rows) =>
-                        rows.filter((r) => r.key !== row.key),
-                      )
-                    }
-                  />
-                ) : null;
-              })}
-              {!reviewRows.length && (
-                <div className="text-sm text-zinc-500 text-center py-8">
-                  识别明细已全部移除
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-xl bg-zinc-950 border border-white/5 px-3.5 py-3 flex items-center justify-between gap-3">
-              <span className="text-sm text-zinc-400">
-                合计（勾选项）
-                <span className="block text-[11px] text-zinc-600">
-                  入库时按核对后的数量与单价计算
-                </span>
-              </span>
-              <span className="tnum text-lg font-bold text-orange-400">
-                {fmtMoney(reviewSum)}
-              </span>
-            </div>
-
-            <button
-              onClick={saveReview}
-              disabled={aiSaving || !reviewSelected.length}
-              className="w-full py-3 rounded-xl btn-brand text-white font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform"
-            >
-              <Sparkles size={15} className="inline mr-1.5" />
-              {aiSaving ? "入库中…" : `确认入库 ${reviewSelected.length} 项`}
-            </button>
-            <p className="text-[11px] text-zinc-500 leading-relaxed">
-              识别结果受图片质量影响，请核对名称、单位、数量、单价；单位与库存不一致时需先换算。
-            </p>
-          </div>
-        )}
-      </Sheet>
+      />
     </div>
   );
 }
