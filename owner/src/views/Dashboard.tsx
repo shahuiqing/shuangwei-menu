@@ -579,7 +579,8 @@ export default function Dashboard({
               <span className="tnum font-serif text-[34px] sm:text-[56px] font-black leading-none text-zinc-50">
                 {fmtMoney(kpi.revenue)}
               </span>
-              {kpi.revenueChange !== undefined && (
+              {/* 营收为 0 时涨跌无意义，不显示徽章（避免空数据的假警报） */}
+              {kpi.revenueChange !== undefined && kpi.revenue > 0 && (
                 <span
                   className={`inline-flex items-center gap-1 text-[12px] font-bold px-2 py-1 rounded-full ${
                     kpi.revenueChange > 0.05

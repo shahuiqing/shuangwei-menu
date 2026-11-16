@@ -30,7 +30,7 @@ const Assistant = lazy(() => import("./views/Assistant"));
 const StaffTasks = lazy(() => import("./views/StaffTasks"));
 const Stocktake = lazy(() => import("./views/Stocktake"));
 const PurchaseRequests = lazy(() => import("./views/PurchaseRequests"));
-import { Layout, type OwnerTab } from "./components/Layout";
+import { Layout, NAV, type OwnerTab } from "./components/Layout";
 import { ToastHost, toast } from "./components/Toast";
 import { ConfirmHost } from "./components/Confirm";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -97,7 +97,11 @@ export default function App() {
     StaffSession,
     "exp"
   > | null>(() => (isAuthed() ? null : loadStaffSession()));
-  const [tab, setTab] = useState<OwnerTab>("dashboard");
+  const [tab, setTab] = useState<OwnerTab>(() => {
+    // 深链：?tab=orders 直达某页（也便于测试与收藏）
+    const t = new URLSearchParams(location.search).get("tab");
+    return (NAV.some((n) => n.id === t) ? t : "dashboard") as OwnerTab;
+  });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -107,7 +111,11 @@ export default function App() {
     {},
   );
   /** 已访问过的页面（保活：切回不卸载重挂、不重新拉数据） */
-  const [visited, setVisited] = useState<OwnerTab[]>(["dashboard"]);
+  const [visited, setVisited] = useState<OwnerTab[]>(() => {
+    // 深链直达的页面也要进入保活列表，否则内容区不挂载
+    const t = new URLSearchParams(location.search).get("tab");
+    return NAV.some((n) => n.id === t) ? [t as OwnerTab] : ["dashboard"];
+  });
   const [live, setLive] = useState(false);
   const bumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabRef = useRef<OwnerTab>(tab);

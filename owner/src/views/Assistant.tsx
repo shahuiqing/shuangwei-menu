@@ -667,7 +667,7 @@ export default function Assistant({
   };
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-start">
       <ChartCard
         title="今日自动建议"
         subtitle="每天首次打开系统自动生成，紧急事项自动派发"
@@ -1036,6 +1036,7 @@ export default function Assistant({
       </ChartCard>
 
       <ChartCard
+        className="lg:col-span-2 lg:order-7"
         title="网站体检"
         subtitle="分析顾客端菜单与品牌设置，指出影响下单的问题"
         action={
@@ -1194,6 +1195,7 @@ export default function Assistant({
       </ChartCard>
 
       <ChartCard
+        className="lg:col-span-2 lg:order-8"
         title="经营助手"
         subtitle={
           snapshot
@@ -1355,7 +1357,11 @@ export default function Assistant({
       </ChartCard>
 
       {topP && (
-        <ChartCard title="执行草稿" subtitle="基于当前最大问题自动生成操作步骤">
+        <ChartCard
+          className="lg:order-6"
+          title="执行草稿"
+          subtitle="基于当前最大问题自动生成操作步骤"
+        >
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm text-zinc-300 truncate">{topP.title}</span>
             <button

@@ -63,6 +63,9 @@ export function KpiCard({
 }) {
   const up = (change ?? 0) > 0.05;
   const down = (change ?? 0) < -0.05;
+  // 数值为 0 时涨跌没有意义（空数据 → ↓100% 的假警报），不显示徽章
+  const showChange =
+    change !== undefined && !(valueNum !== undefined && valueNum === 0);
   const anim = useCountUp(valueNum);
   const display = valueNum !== undefined ? format(anim ?? 0) : value;
   return (
@@ -82,7 +85,7 @@ export function KpiCard({
       }
       className={`card-surface p-3.5 sm:p-5 transition-all duration-200 overflow-hidden ${
         onClick
-          ? "cursor-pointer hover:border-orange-500/30 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-20px_rgba(0,0,0,0.9)]"
+          ? "cursor-pointer hover:border-orange-500/30 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-22px_rgba(26,22,17,0.35)]"
           : "hover:border-white/15"
       }`}
     >
@@ -93,7 +96,7 @@ export function KpiCard({
           <Icon size={17} className="sm:hidden" />
           <Icon size={19} className="hidden sm:block" />
         </div>
-        {change !== undefined && (
+        {showChange && (
           <span
             className={`flex items-center gap-0.5 text-[11px] sm:text-xs font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full ${
               up
