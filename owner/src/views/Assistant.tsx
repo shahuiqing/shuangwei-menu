@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Send, Copy } from "lucide-react";
+import { Sparkles, Send, Copy, ShoppingCart } from "lucide-react";
 import { ChartCard } from "../components/ui";
 import { Sheet, SheetField } from "../components/Sheet";
 import { Dictation } from "../components/Dictation";
 import { toast } from "../components/Toast";
+import { askConfirm } from "../components/Confirm";
 import { STORE_NAME } from "../lib/supabase";
 import {
   rangeToIso,
@@ -65,6 +66,15 @@ import {
   type AiPrefs,
   type AiFocus,
 } from "../lib/aiPrefs";
+import {
+  loadReplenishPlan,
+  createReplenishPurchases,
+  replenishSummary,
+  replenishText,
+  type ReplenishSummary,
+} from "../lib/replenish";
+import type { PurchasePlan } from "../lib/purchasePlan";
+import { fmtMoney } from "../lib/format";
 
 const CHAT_SUGGESTIONS = [
   "今天最该先处理什么？",
@@ -128,6 +138,14 @@ export default function Assistant({
     setPrefs(next);
     saveAiPrefs(next);
   };
+  /** AI 一键补货 */
+  const [replenishOpen, setReplenishOpen] = useState(false);
+  const [replenishBusy, setReplenishBusy] = useState(false);
+  const [replenishCoverage, setReplenishCoverage] = useState(7);
+  const [replenish, setReplenish] = useState<{
+    plan: PurchasePlan;
+    summary: ReplenishSummary;
+  } | null>(null);
   const [summary, setSummary] = useState({ revenue: 0, orders: 0, cogs: 0 });
   const [topDish, setTopDish] = useState<{ name: string; qty: number } | null>(
     null,
@@ -412,6 +430,61 @@ export default function Assistant({
     }
   };
 
+  /** AI 一键补货：合成草稿 */
+  const runReplenish = async (coverage = replenishCoverage) => {
+    if (replenishBusy) return;
+    setReplenishBusy(true);
+    setReplenishOpen(true);
+    setReplenish(null);
+    const { plan, unmatched } = await loadReplenishPlan(coverage);
+    setReplenish({ plan, summary: replenishSummary(plan, unmatched.length) });
+    setReplenishBusy(false);
+  };
+
+  /** AI 一键补货：确认生成采购单 */
+  const confirmReplenish = async () => {
+    const cur = replenish;
+    if (!cur || cur.plan.rows.length === 0 || replenishBusy) return;
+    if (
+      !(await askConfirm(
+        `将生成 ${cur.plan.rows.length} 条采购单，预估 ${fmtMoney(
+          cur.plan.totalCost,
+        )}。确认生成？`,
+      ))
+    )
+      return;
+    setReplenishBusy(true);
+    const { created, fulfilled } = await createReplenishPurchases(
+      cur.plan,
+      replenishCoverage,
+    );
+    setReplenishBusy(false);
+    if (created > 0) {
+      toast.success(
+        `已生成 ${created} 条采购单${
+          fulfilled > 0 ? `，${fulfilled} 条员工申报已闭环` : ""
+        }，去采购页完成入库`,
+      );
+      setReplenishOpen(false);
+      setReplenish(null);
+    } else {
+      toast.error("生成失败，请检查网络后重试");
+    }
+  };
+
+  const copyReplenish = () => {
+    if (!replenish) return;
+    const text = replenishText(replenish.plan);
+    try {
+      navigator.clipboard?.writeText(text).then(
+        () => toast.success("补货清单已复制"),
+        () => toast.error("复制失败"),
+      );
+    } catch {
+      toast.error("复制失败");
+    }
+  };
+
   const copyBrief = () => {
     const text = brief.join("\n");
     try {
@@ -555,6 +628,40 @@ export default function Assistant({
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      <ChartCard
+        title="一键补货"
+        subtitle="低库存 + 30 天消耗 + 参考价 → 采购草稿"
+      >
+        <div className="flex items-center gap-2">
+          <select
+            value={replenishCoverage}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setReplenishCoverage(v);
+              if (replenishOpen) void runReplenish(v);
+            }}
+            className="bg-zinc-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+          >
+            {[3, 7, 14].map((d) => (
+              <option key={d} value={d}>
+                覆盖 {d} 天
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => runReplenish()}
+            disabled={replenishBusy}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold btn-brand text-white disabled:opacity-60"
+          >
+            <ShoppingCart size={13} />
+            {replenishBusy ? "合成中…" : "生成补货草稿"}
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-zinc-600 leading-relaxed">
+          会把已批准的员工申报合并进草稿；确认后才生成采购单，可先复制清单发给供应商。
+        </p>
+      </ChartCard>
+
       <ChartCard
         title="每日简报"
         subtitle="模板 + 真实数据自动生成"
@@ -1315,6 +1422,121 @@ export default function Assistant({
               <Send size={16} />
               {dispatching ? "派发中…" : "确认派发"}
             </button>
+          </>
+        )}
+      </Sheet>
+      {/* 一键补货草稿 */}
+      <Sheet
+        open={replenishOpen}
+        title="补货草稿"
+        subtitle={`低库存 + 30 天消耗 · 覆盖 ${replenishCoverage} 天`}
+        onClose={() => setReplenishOpen(false)}
+      >
+        {replenishBusy && !replenish ? (
+          <div className="py-8 text-center text-sm text-zinc-500">
+            正在合成补货计划…
+          </div>
+        ) : !replenish ? (
+          <div className="py-8 text-center text-sm text-zinc-500">暂无数据</div>
+        ) : replenish.plan.rows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-teal-400">
+            库存充足，没有需要补货的品项。
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="bg-rose-500/15 text-rose-400 px-1.5 py-0.5 rounded font-bold">
+                紧急 {replenish.summary.urgent}
+              </span>
+              <span className="bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded font-bold">
+                偏低 {replenish.summary.soon}
+              </span>
+              <span className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-bold">
+                备货 {replenish.summary.normal}
+              </span>
+              <span className="ml-auto text-zinc-300 font-semibold">
+                预估 {fmtMoney(replenish.plan.totalCost)}
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-1.5 max-h-72 overflow-y-auto">
+              {replenish.plan.rows.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center gap-2 bg-zinc-950 rounded-lg px-3 py-2"
+                >
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                      r.priority === "urgent"
+                        ? "bg-rose-500/15 text-rose-400"
+                        : r.priority === "soon"
+                          ? "bg-amber-500/15 text-amber-400"
+                          : "bg-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    {r.priority === "urgent"
+                      ? "紧急"
+                      : r.priority === "soon"
+                        ? "偏低"
+                        : "备货"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-zinc-200 truncate">
+                      {r.name}
+                    </div>
+                    <div className="text-[10px] text-zinc-600 truncate">
+                      {r.reason}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs text-zinc-200 font-semibold">
+                      {r.gap} {r.unit}
+                    </div>
+                    <div className="text-[10px] text-zinc-600">
+                      {fmtMoney(r.estCost)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(replenish.summary.mergedRequests > 0 ||
+              replenish.summary.unmatchedRequests > 0) && (
+              <div className="mt-3 text-[11px] text-zinc-600 leading-relaxed">
+                已并入员工申报 {replenish.summary.mergedRequests} 条
+                {replenish.summary.unmatchedRequests > 0
+                  ? `；${replenish.summary.unmatchedRequests} 条申报未匹配到库存品，请在采购页处理`
+                  : ""}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                onClick={copyReplenish}
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
+              >
+                <Copy size={13} /> 复制清单
+              </button>
+              {onTab && (
+                <button
+                  onClick={() => {
+                    setReplenishOpen(false);
+                    onTab("procurement");
+                  }}
+                  className="px-3 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
+                >
+                  去采购页
+                </button>
+              )}
+              <button
+                onClick={confirmReplenish}
+                disabled={replenishBusy}
+                className="ml-auto inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl btn-brand text-white text-xs font-semibold disabled:opacity-60"
+              >
+                <ShoppingCart size={13} />
+                {replenishBusy ? "生成中…" : "生成采购单"}
+              </button>
+            </div>
           </>
         )}
       </Sheet>
