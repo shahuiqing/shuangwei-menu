@@ -980,40 +980,6 @@ export default function Assistant({
                   <span className="text-sm font-semibold text-zinc-100">
                     {it.title}
                   </span>
-                  <div className="ml-auto flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() =>
-                        addTask(it.title, it.finding, it.actions, it.area)
-                      }
-                      className="text-[11px] text-zinc-500 hover:text-zinc-300"
-                    >
-                      加入任务
-                    </button>
-                    <button
-                      onClick={() =>
-                        openDispatch({
-                          title: it.title,
-                          desc: [
-                            it.finding,
-                            ...it.actions.map((a) => `· ${a}`),
-                          ].join("\n"),
-                          checklist: it.actions,
-                          tab: it.area,
-                        })
-                      }
-                      className="text-[11px] text-zinc-500 hover:text-sky-400"
-                    >
-                      派给员工
-                    </button>
-                    {onTab && (
-                      <button
-                        onClick={() => onTab(it.tab)}
-                        className="text-[11px] text-orange-400 hover:text-orange-300"
-                      >
-                        去处理 →
-                      </button>
-                    )}
-                  </div>
                 </div>
                 <div className="text-xs text-zinc-400">{it.finding}</div>
                 <ul className="space-y-1">
@@ -1029,6 +995,40 @@ export default function Assistant({
                     预期影响：{it.impact}
                   </div>
                 )}
+                <div className="flex items-center justify-end gap-3 pt-1">
+                  <button
+                    onClick={() =>
+                      addTask(it.title, it.finding, it.actions, it.area)
+                    }
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                  >
+                    加入任务
+                  </button>
+                  <button
+                    onClick={() =>
+                      openDispatch({
+                        title: it.title,
+                        desc: [
+                          it.finding,
+                          ...it.actions.map((a) => `· ${a}`),
+                        ].join("\n"),
+                        checklist: it.actions,
+                        tab: it.area,
+                      })
+                    }
+                    className="text-[11px] text-zinc-500 hover:text-sky-400"
+                  >
+                    派给员工
+                  </button>
+                  {onTab && (
+                    <button
+                      onClick={() => onTab(it.tab)}
+                      className="text-[11px] text-orange-400 hover:text-orange-300"
+                    >
+                      去处理 →
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -1100,7 +1100,13 @@ export default function Assistant({
                         <span className="text-sm text-zinc-100 font-medium">
                           {c.title}
                         </span>
-                        {c.tab && (
+                      </div>
+                      <div className="text-xs text-zinc-500">{c.finding}</div>
+                      <div className="text-xs text-zinc-400">
+                        建议：{c.recommendation}
+                      </div>
+                      {c.tab && (
+                        <div className="flex items-center justify-end gap-3 pt-1">
                           <button
                             onClick={() =>
                               addTask(
@@ -1110,12 +1116,10 @@ export default function Assistant({
                                 "site-audit",
                               )
                             }
-                            className="ml-auto text-[11px] text-zinc-500 hover:text-zinc-300"
+                            className="text-[11px] text-zinc-500 hover:text-zinc-300"
                           >
                             加入任务
                           </button>
-                        )}
-                        {c.tab && (
                           <button
                             onClick={() =>
                               openDispatch({
@@ -1129,22 +1133,14 @@ export default function Assistant({
                           >
                             派给员工
                           </button>
-                        )}
-                        {onTab && c.tab && (
                           <button
-                            onClick={() => onTab(c.tab)}
-                            className={`${
-                              c.tab ? "" : "ml-auto "
-                            }text-[11px] text-orange-400 hover:text-orange-300`}
+                            onClick={() => onTab?.(c.tab)}
+                            className="text-[11px] text-orange-400 hover:text-orange-300"
                           >
                             去处理 →
                           </button>
-                        )}
-                      </div>
-                      <div className="text-xs text-zinc-500">{c.finding}</div>
-                      <div className="text-xs text-zinc-400">
-                        建议：{c.recommendation}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
