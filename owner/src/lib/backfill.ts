@@ -5,6 +5,7 @@
  */
 import { supabase } from "./supabase";
 import { businessDayKey } from "./businessDay";
+import { getOwnerToken } from "./auth";
 
 export interface BackfillEntry {
   /** YYYY-MM-DD（与 owner_daily 的 day 对齐） */
@@ -61,6 +62,23 @@ export async function fetchBackfill(): Promise<BackfillEntry[]> {
 
 export async function saveBackfill(e: BackfillEntry): Promise<boolean> {
   if (!supabase) return false;
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_save_backfill", {
+      p_token: token,
+      p_day: e.day,
+      p_revenue: e.revenue,
+      p_orders: e.orders,
+      p_cogs: Number(e.cogs) || 0,
+      p_note: e.note,
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) {
+      invalidateBackfill();
+      return true;
+    }
+    console.warn("[owner] saveBackfill:", error?.message || "unauthorized");
+    return false;
+  }
   const row = {
     day: e.day,
     revenue: e.revenue,
@@ -90,6 +108,19 @@ export async function saveBackfill(e: BackfillEntry): Promise<boolean> {
 
 export async function deleteBackfill(day: string): Promise<boolean> {
   if (!supabase) return false;
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_delete_backfill", {
+      p_token: token,
+      p_day: day,
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) {
+      invalidateBackfill();
+      return true;
+    }
+    console.warn("[owner] deleteBackfill:", error?.message || "unauthorized");
+    return false;
+  }
   const { error } = await supabase
     .from("owner_backfill")
     .delete()

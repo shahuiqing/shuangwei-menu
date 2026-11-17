@@ -1297,10 +1297,8 @@ export async function reviewStocktakeTask(
     .eq("id", task.id);
   if (!warn("calibrateStocktakeTask", e2)) return false;
   // 记录物品上次盘点时间
-  await supabase
-    .from("inventory_items")
-    .update({ last_counted_at: now })
-    .eq("id", task.item_id);
+  const { touchLastCounted } = await import("./inventory");
+  await touchLastCounted([task.item_id], now);
   // 同步到全局盘点提醒/历史（与「库存管理」全量盘点同一口径）
   if (task.actual_qty !== null) {
     const [

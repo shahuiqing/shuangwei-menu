@@ -158,15 +158,19 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 -- 4. 采购原子入库 RPC（采购单 + 库存 + 流水 一次事务完成）
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.owner_create_purchase(
+  p_token text,
   p_id text, p_supplier text, p_item_id text, p_item_name text,
   p_qty numeric, p_unit text, p_unit_price numeric, p_notes text, p_purchased_at timestamptz
-) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions
 AS $$
 DECLARE
   v_when timestamptz := COALESCE(p_purchased_at, now());
   v_unit text := COALESCE(NULLIF(p_unit, ''), 'kg');
 BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
   INSERT INTO public.purchase_orders
     (id, supplier, item_id, item_name, quantity, unit, unit_price, total_cost, purchased_at, notes, created_at)
   VALUES
@@ -189,6 +193,7 @@ BEGIN
     ('TXN-' || md5(p_id || '|' || p_item_id), p_item_id, p_item_name, 'purchase_in',
      COALESCE(p_qty, 0), v_unit, COALESCE(p_unit_price, 0), p_id,
      CASE WHEN COALESCE(p_supplier, '') <> '' THEN '采购 · ' || p_supplier ELSE '采购入库' END, v_when);
+  RETURN jsonb_build_object('ok', true);
 END;
 $$;
 
@@ -1629,5 +1634,233 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.owner_delete_fixed_cost(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.owner_delete_fixed_cost(text, text) TO anon, authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- =============================================================================
+-- 11. RLS 收紧（第三批）：库存/采购/配方/补录 收回匿名写，改走带鉴权的 RPC
+-- =============================================================================
+
+-- 11.0 收回匿名写权限（保留 SELECT 读——读的收紧属方案 B 范畴）
+REVOKE INSERT, UPDATE, DELETE
+  ON public.inventory_items, public.recipe_boms, public.purchase_orders, public.inventory_transactions
+  FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.owner_backfill FROM anon, authenticated;
+
+-- 11.1 原料档案 upsert
+CREATE OR REPLACE FUNCTION public.owner_upsert_inventory_item(
+  p_token text, p_id text, p_name text, p_category text, p_stock numeric,
+  p_unit text, p_safety_stock numeric, p_price numeric, p_shelf_life_days integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  IF length(coalesce(p_name, '')) = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'name required');
+  END IF;
+  INSERT INTO public.inventory_items
+    (id, name, category, stock, unit, safety_stock, price, shelf_life_days, updated_at)
+  VALUES
+    (p_id, p_name, coalesce(p_category, '食材'), coalesce(p_stock, 0), coalesce(p_unit, 'kg'),
+     coalesce(p_safety_stock, 0), coalesce(p_price, 0), p_shelf_life_days, now())
+  ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, category = EXCLUDED.category, stock = EXCLUDED.stock,
+      unit = EXCLUDED.unit, safety_stock = EXCLUDED.safety_stock,
+      price = EXCLUDED.price, shelf_life_days = EXCLUDED.shelf_life_days,
+      updated_at = now();
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_upsert_inventory_item(text, text, text, text, numeric, text, numeric, numeric, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_upsert_inventory_item(text, text, text, text, numeric, text, numeric, numeric, integer) TO anon, authenticated;
+
+-- 11.2 原料删除（recipe_boms 有 ON DELETE CASCADE，级联解除引用）
+CREATE OR REPLACE FUNCTION public.owner_delete_inventory_item(p_token text, p_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE refs int;
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  SELECT count(*) INTO refs FROM public.recipe_boms WHERE inventory_item_id = p_id;
+  DELETE FROM public.inventory_items WHERE id = p_id;
+  RETURN jsonb_build_object('ok', true, 'referenced_boms', refs);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_delete_inventory_item(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_delete_inventory_item(text, text) TO anon, authenticated;
+
+-- 11.3 库存调整：更新库存 + 写流水（事务，库存不可为负）
+CREATE OR REPLACE FUNCTION public.owner_adjust_stock(
+  p_token text, p_item_id text, p_item_name text, p_unit text, p_price numeric,
+  p_delta numeric, p_type text, p_notes text, p_reason text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE cur numeric; next numeric;
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  SELECT stock INTO cur FROM public.inventory_items WHERE id = p_item_id;
+  next := coalesce(cur, 0) + coalesce(p_delta, 0);
+  IF next < 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', '库存不可为负');
+  END IF;
+  UPDATE public.inventory_items SET stock = next, updated_at = now() WHERE id = p_item_id;
+  INSERT INTO public.inventory_transactions
+    (id, item_id, item_name, type, quantity, unit, unit_cost, reference, notes, reason, created_at)
+  VALUES
+    ('ADJ-' || md5(p_item_id || p_delta::text || clock_timestamp()::text),
+     p_item_id, p_item_name, coalesce(p_type, 'adjustment'), coalesce(p_delta, 0),
+     coalesce(p_unit, 'kg'), coalesce(p_price, 0), '', coalesce(p_notes, ''),
+     coalesce(p_reason, ''), now());
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_adjust_stock(text, text, text, text, numeric, numeric, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_adjust_stock(text, text, text, text, numeric, numeric, text, text, text) TO anon, authenticated;
+
+-- 11.4 批量标记最后盘点时间
+CREATE OR REPLACE FUNCTION public.owner_touch_last_counted(p_token text, p_ids text[], p_at timestamptz)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  UPDATE public.inventory_items SET last_counted_at = coalesce(p_at, now())
+  WHERE id = ANY(p_ids);
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_touch_last_counted(text, text[], timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_touch_last_counted(text, text[], timestamptz) TO anon, authenticated;
+
+-- 11.5 配方 upsert（p_id 为空时生成 UUID）
+CREATE OR REPLACE FUNCTION public.owner_upsert_bom(
+  p_token text, p_id text, p_menu_item_name text, p_inventory_item_id text,
+  p_dosage numeric, p_unit text, p_station text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE rid text;
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  IF coalesce(p_dosage, 0) <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'dosage must be positive');
+  END IF;
+  rid := coalesce(nullif(p_id, ''), gen_random_uuid()::text);
+  INSERT INTO public.recipe_boms
+    (id, menu_item_name, inventory_item_id, dosage, unit, station)
+  VALUES
+    (rid, p_menu_item_name, p_inventory_item_id, p_dosage, coalesce(p_unit, 'kg'), coalesce(p_station, ''))
+  ON CONFLICT (id) DO UPDATE
+  SET menu_item_name = EXCLUDED.menu_item_name, inventory_item_id = EXCLUDED.inventory_item_id,
+      dosage = EXCLUDED.dosage, unit = EXCLUDED.unit, station = EXCLUDED.station;
+  RETURN jsonb_build_object('ok', true, 'id', rid);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_upsert_bom(text, text, text, text, numeric, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_upsert_bom(text, text, text, text, numeric, text, text) TO anon, authenticated;
+
+-- 11.6 配方删除
+CREATE OR REPLACE FUNCTION public.owner_delete_bom(p_token text, p_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  DELETE FROM public.recipe_boms WHERE id::text = p_id;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_delete_bom(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_delete_bom(text, text) TO anon, authenticated;
+
+-- 11.7 配方改名（菜品改名后同步）
+CREATE OR REPLACE FUNCTION public.owner_rename_bom(p_token text, p_old_name text, p_new_name text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  UPDATE public.recipe_boms SET menu_item_name = p_new_name WHERE menu_item_name = p_old_name;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_rename_bom(text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_rename_bom(text, text, text) TO anon, authenticated;
+
+-- 11.8 补录 upsert
+CREATE OR REPLACE FUNCTION public.owner_save_backfill(
+  p_token text, p_day text, p_revenue numeric, p_orders integer, p_cogs numeric, p_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  INSERT INTO public.owner_backfill (day, revenue, orders, cogs, note)
+  VALUES (p_day, coalesce(p_revenue, 0), coalesce(p_orders, 0), coalesce(p_cogs, 0), coalesce(p_note, ''))
+  ON CONFLICT (day) DO UPDATE
+  SET revenue = EXCLUDED.revenue, orders = EXCLUDED.orders,
+      cogs = EXCLUDED.cogs, note = EXCLUDED.note;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_save_backfill(text, text, numeric, integer, numeric, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_save_backfill(text, text, numeric, integer, numeric, text) TO anon, authenticated;
+
+-- 11.9 补录删除
+CREATE OR REPLACE FUNCTION public.owner_delete_backfill(p_token text, p_day text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  DELETE FROM public.owner_backfill WHERE day = p_day;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_delete_backfill(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_delete_backfill(text, text) TO anon, authenticated;
 
 NOTIFY pgrst, 'reload schema';

@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { saveSnap, snapFallback } from "./snapshot";
 import { logAction } from "./auditLog";
+import { getOwnerToken } from "./auth";
 
 /* ============ 类型 ============ */
 
@@ -95,8 +96,29 @@ export async function saveInventoryItem(
   item: Partial<InventoryItem> & { name: string },
 ): Promise<boolean> {
   if (!supabase) return false;
+  const id = item.id || newId("INV");
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_upsert_inventory_item", {
+      p_token: token,
+      p_id: id,
+      p_name: item.name.trim(),
+      p_category: item.category || "食材",
+      p_stock: num(item.stock),
+      p_unit: item.unit || "kg",
+      p_safety_stock: num(item.safety_stock),
+      p_price: num(item.price),
+      p_shelf_life_days: num(item.shelf_life_days) || null,
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) return true;
+    console.warn(
+      "[owner] saveInventoryItem:",
+      error?.message || "unauthorized",
+    );
+    return false;
+  }
   const payload = {
-    id: item.id || newId("INV"),
+    id,
     name: item.name.trim(),
     category: item.category || "食材",
     stock: num(item.stock),
@@ -129,7 +151,19 @@ export interface DeleteResult {
 export async function deleteInventoryItem(id: string): Promise<DeleteResult> {
   if (!supabase) return { ok: false, error: "未配置数据库" };
 
-  // 先查引用
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_delete_inventory_item", {
+      p_token: token,
+      p_id: id,
+    });
+    if (error) return { ok: false, error: error.message };
+    const res = data as { ok?: boolean; referenced_boms?: number } | null;
+    if (!res?.ok) return { ok: false, error: "unauthorized" };
+    return { ok: true, referencedBoms: res.referenced_boms };
+  }
+
+  // 无 token：回退直连（旧行为）
   const { data: refs } = await supabase
     .from("recipe_boms")
     .select("id")
@@ -162,19 +196,6 @@ export async function deleteInventoryItem(id: string): Promise<DeleteResult> {
   return { ok: true, referencedBoms: refCount };
 }
 
-/** 写流水；reason 列未执行迁移时降级为不含 reason 重试（不阻断业务） */
-async function insertTxn(
-  row: Partial<InventoryTransaction> & { id: string; item_id: string },
-): Promise<void> {
-  if (!supabase) return;
-  let { error } = await supabase.from("inventory_transactions").insert(row);
-  if (error && "reason" in row && /reason/i.test(error.message)) {
-    const { reason: _omit, ...rest } = row;
-    ({ error } = await supabase.from("inventory_transactions").insert(rest));
-  }
-  if (error) console.warn("[owner] inventory txn:", error.message);
-}
-
 /** 盘点/损耗调整：delta 正数入库、负数出库 */
 export async function adjustStock(
   item: InventoryItem,
@@ -189,6 +210,24 @@ export async function adjustStock(
     console.warn("[owner] adjustStock: 库存不可为负", item.name, next);
     return false;
   }
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_adjust_stock", {
+      p_token: token,
+      p_item_id: item.id,
+      p_item_name: item.name,
+      p_unit: item.unit,
+      p_price: num(item.price),
+      p_delta: num(delta),
+      p_type: type,
+      p_notes: notes,
+      p_reason: reason,
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) return true;
+    console.warn("[owner] adjustStock:", error?.message || "unauthorized");
+    return false;
+  }
+  // 无 token：回退直连（旧行为）
   const { error } = await supabase
     .from("inventory_items")
     .update({ stock: next, updated_at: new Date().toISOString() })
@@ -197,7 +236,7 @@ export async function adjustStock(
     console.warn("[owner] adjustStock:", error.message);
     return false;
   }
-  await insertTxn({
+  await supabase.from("inventory_transactions").insert({
     id: newId("ADJ"),
     item_id: item.id,
     item_name: item.name,
@@ -222,6 +261,17 @@ export async function touchLastCounted(
   at = new Date().toISOString(),
 ): Promise<boolean> {
   if (!supabase || ids.length === 0) return true;
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_touch_last_counted", {
+      p_token: token,
+      p_ids: ids,
+      p_at: at,
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) return true;
+    console.warn("[owner] touchLastCounted:", error?.message || "unauthorized");
+    return false;
+  }
   const { error } = await supabase
     .from("inventory_items")
     .update({ last_counted_at: at })
@@ -284,6 +334,21 @@ export async function saveBom(
     console.warn("[owner] saveBom: dosage 必须 > 0");
     return false;
   }
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_upsert_bom", {
+      p_token: token,
+      p_id: bom.id || null,
+      p_menu_item_name: bom.menu_item_name,
+      p_inventory_item_id: bom.inventory_item_id,
+      p_dosage: num(bom.dosage),
+      p_unit: bom.unit || "kg",
+      p_station: bom.station || "",
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) return true;
+    console.warn("[owner] saveBom:", error?.message || "unauthorized");
+    return false;
+  }
   const payload = {
     id: bom.id || newId("BOM"),
     menu_item_name: bom.menu_item_name,
@@ -302,6 +367,16 @@ export async function saveBom(
 
 export async function deleteBom(id: string): Promise<boolean> {
   if (!supabase) return false;
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_delete_bom", {
+      p_token: token,
+      p_id: id,
+    });
+    if (!error && (data as { ok?: boolean } | null)?.ok) return true;
+    console.warn("[owner] deleteBom:", error?.message || "unauthorized");
+    return false;
+  }
   const { error } = await supabase.from("recipe_boms").delete().eq("id", id);
   if (error) {
     console.warn("[owner] deleteBom:", error.message);
@@ -316,6 +391,16 @@ export async function renameBom(
   newName: string,
 ): Promise<void> {
   if (!supabase || !oldName || !newName || oldName === newName) return;
+  const token = getOwnerToken();
+  if (token) {
+    const { error } = await supabase.rpc("owner_rename_bom", {
+      p_token: token,
+      p_old_name: oldName,
+      p_new_name: newName,
+    });
+    if (error) console.warn("[owner] renameBom:", error.message);
+    return;
+  }
   const { error } = await supabase
     .from("recipe_boms")
     .update({ menu_item_name: newName })
@@ -380,7 +465,9 @@ export async function createPurchase(input: {
   id?: string;
 }): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase.rpc("owner_create_purchase", {
+  const token = getOwnerToken();
+  const { data, error } = await supabase.rpc("owner_create_purchase", {
+    p_token: token || "",
     p_id: input.id || newId("PO"),
     p_supplier: input.supplier || "",
     p_item_id: input.inventory_item_id,
@@ -393,6 +480,10 @@ export async function createPurchase(input: {
   });
   if (error) {
     console.warn("[owner] createPurchase:", error.message);
+    return false;
+  }
+  if ((data as { ok?: boolean } | null)?.ok === false) {
+    console.warn("[owner] createPurchase: unauthorized");
     return false;
   }
   logAction(
