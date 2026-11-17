@@ -1346,3 +1346,104 @@ ORDER BY proname;
 SELECT table_name FROM information_schema.tables
  WHERE table_schema = 'public' AND table_name LIKE 'owner_%'
  ORDER BY table_name;
+
+-- =============================================================================
+-- 9. RLS 收紧（第一批）：员工账号表收回匿名直连，读写改走 RPC
+-- -----------------------------------------------------------------------------
+-- 背景：staff_members.password_hash 是 bcrypt 哈希，匿名可读即可离线爆破弱密码；
+--       员工姓名/电话等名单也不应匿名可枚举。
+--       仿照 owner_secrets：REVOKE 表权限 + 仅 SECURITY DEFINER 函数可访问。
+-- =============================================================================
+
+-- 9.1 员工表整体收权（含 password_hash；老板端读写全部走下方 RPC）
+DROP POLICY IF EXISTS anon_all_staff_members ON public.staff_members;
+REVOKE ALL ON public.staff_members FROM anon, authenticated;
+
+-- 9.2 老板端读员工列表（不含 password_hash）
+CREATE OR REPLACE FUNCTION public.owner_list_staff()
+RETURNS TABLE(
+  id uuid,
+  name text,
+  roles text[],
+  status text,
+  phone text,
+  note text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+  SELECT id, name, roles, status, phone, note, created_at, updated_at
+  FROM public.staff_members
+  ORDER BY created_at ASC, name ASC;
+$$;
+REVOKE ALL ON FUNCTION public.owner_list_staff() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_list_staff() TO anon, authenticated;
+
+-- 9.3 新增/更新员工资料（不含密码；密码须走 owner_set_staff_password 单独设置）
+CREATE OR REPLACE FUNCTION public.owner_upsert_staff(
+  p_id uuid,
+  p_name text,
+  p_roles text[],
+  p_status text,
+  p_phone text,
+  p_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE new_id uuid; n int;
+BEGIN
+  IF length(coalesce(p_name, '')) = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'name required');
+  END IF;
+  IF p_id IS NOT NULL THEN
+    UPDATE public.staff_members
+    SET name = p_name,
+        roles = coalesce(p_roles, '{}'),
+        status = coalesce(p_status, 'active'),
+        phone = coalesce(p_phone, ''),
+        note = coalesce(p_note, ''),
+        updated_at = now()
+    WHERE id = p_id;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n = 0 THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'staff not found');
+    END IF;
+    RETURN jsonb_build_object('ok', true, 'id', p_id);
+  END IF;
+  INSERT INTO public.staff_members (name, roles, status, phone, note)
+  VALUES (p_name, coalesce(p_roles, '{}'), coalesce(p_status, 'active'),
+          coalesce(p_phone, ''), coalesce(p_note, ''))
+  RETURNING id INTO new_id;
+  RETURN jsonb_build_object('ok', true, 'id', new_id);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_upsert_staff(uuid, text, text[], text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_upsert_staff(uuid, text, text[], text, text, text) TO anon, authenticated;
+
+-- 9.4 删除员工
+CREATE OR REPLACE FUNCTION public.owner_delete_staff(p_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE n int;
+BEGIN
+  DELETE FROM public.staff_members WHERE id = p_id;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'staff not found');
+  END IF;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_delete_staff(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_delete_staff(uuid) TO anon, authenticated;
+
+NOTIFY pgrst, 'reload schema';

@@ -645,15 +645,9 @@ function warn(op: string, error: { message: string } | null): boolean {
 
 // ───────────────────────── 员工账号 ─────────────────────────
 
-/** 员工表可读列（password_hash 已收回前端读取权限） */
-const STAFF_COLS = "id,name,roles,status,phone,note,created_at,updated_at";
-
 export async function fetchStaffMembers(): Promise<StaffMember[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("staff_members")
-    .select(STAFF_COLS)
-    .order("created_at", { ascending: true });
+  const { data, error } = await supabase.rpc("owner_list_staff");
   if (!warn("fetchStaffMembers", error)) return [];
   return (data || []).map((s: any) => ({
     ...s,
@@ -669,28 +663,17 @@ export async function upsertStaffMember(
   member: Partial<StaffMember> & { id?: string; name: string },
 ): Promise<{ ok: boolean; id?: string }> {
   if (!supabase) return { ok: false };
-  const patch: Record<string, unknown> = {
-    name: member.name.trim(),
-    roles: member.roles || [],
-    status: member.status || "active",
-    phone: member.phone || "",
-    note: member.note || "",
-    updated_at: new Date().toISOString(),
-  };
-  if (member.id) {
-    const { error } = await supabase
-      .from("staff_members")
-      .update(patch)
-      .eq("id", member.id);
-    return { ok: warn("upsertStaffMember", error), id: member.id };
-  }
-  const { data, error } = await supabase
-    .from("staff_members")
-    .insert(patch)
-    .select("id")
-    .single();
-  if (!warn("insertStaffMember", error)) return { ok: false };
-  return { ok: true, id: data?.id };
+  const { data, error } = await supabase.rpc("owner_upsert_staff", {
+    p_id: member.id || null,
+    p_name: member.name.trim(),
+    p_roles: member.roles || [],
+    p_status: member.status || "active",
+    p_phone: member.phone || "",
+    p_note: member.note || "",
+  });
+  if (!warn("upsertStaffMember", error)) return { ok: false };
+  const res = data as { ok?: boolean; id?: string } | null;
+  return res?.ok ? { ok: true, id: res.id } : { ok: false };
 }
 
 /**
@@ -719,8 +702,12 @@ export async function setStaffPassword(
 
 export async function deleteStaffMember(id: string): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase.from("staff_members").delete().eq("id", id);
-  return warn("deleteStaffMember", error);
+  const { data, error } = await supabase.rpc("owner_delete_staff", {
+    p_id: id,
+  });
+  if (!warn("deleteStaffMember", error)) return false;
+  const res = data as { ok?: boolean } | null;
+  return !!res?.ok;
 }
 
 // ───────────────────────── 任务模板 ─────────────────────────
