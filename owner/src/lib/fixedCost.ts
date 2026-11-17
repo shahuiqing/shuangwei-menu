@@ -4,6 +4,7 @@
  * 依赖 SQL：supabase_owner_all.sql（未执行时读写静默失败，返回空，净利退回毛利口径）。
  */
 import { supabase } from "./supabase";
+import { getOwnerToken } from "./auth";
 
 export interface FixedCost {
   id: string;
@@ -135,12 +136,35 @@ export async function fetchFixedCosts(): Promise<FixedCost[]> {
 
 export async function saveFixedCost(c: FixedCost): Promise<boolean> {
   if (!supabase) return false;
+  const startDate = (c.startDate || currentMonth()).slice(0, 7);
+  // 有会话 token：走带鉴权的 RPC（SQL 已收紧匿名写）
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_upsert_fixed_cost", {
+      p_token: token,
+      p_id: c.id,
+      p_name: c.name,
+      p_category: c.category,
+      p_amount: c.amount,
+      p_start_date: startDate,
+      p_note: c.note,
+    });
+    if (error) {
+      console.warn("[owner] saveFixedCost:", error.message);
+      return false;
+    }
+    const res = data as { ok?: boolean } | null;
+    if (res?.ok) return true;
+    console.warn("[owner] saveFixedCost: unauthorized");
+    return false;
+  }
+  // 无 token（未跑 SQL / 未登录 / 本地模式）：回退直连，保持旧行为
   const { error } = await supabase.from("owner_fixed_cost").upsert({
     id: c.id,
     name: c.name,
     category: c.category,
     amount: c.amount,
-    start_date: (c.startDate || currentMonth()).slice(0, 7),
+    start_date: startDate,
     note: c.note,
   });
   if (error) {
@@ -152,6 +176,21 @@ export async function saveFixedCost(c: FixedCost): Promise<boolean> {
 
 export async function deleteFixedCost(id: string): Promise<boolean> {
   if (!supabase) return false;
+  const token = getOwnerToken();
+  if (token) {
+    const { data, error } = await supabase.rpc("owner_delete_fixed_cost", {
+      p_token: token,
+      p_id: id,
+    });
+    if (error) {
+      console.warn("[owner] deleteFixedCost:", error.message);
+      return false;
+    }
+    const res = data as { ok?: boolean } | null;
+    if (res?.ok) return true;
+    console.warn("[owner] deleteFixedCost: unauthorized");
+    return false;
+  }
   const { error } = await supabase
     .from("owner_fixed_cost")
     .delete()

@@ -12,6 +12,8 @@ import { supabase } from "./supabase";
 
 const SESSION_KEY = "ownerAuthedUntil";
 const LOCAL_HASH_KEY = "ownerPasswordHash";
+/** 会话 token（sessionStorage：标签页级，刷新保留、关闭丢失；不落 localStorage 以免被 XSS 读） */
+const TOKEN_KEY = "ownerSessionToken";
 /** 部署时可配置初始密码；不再有内置的通用弱默认值 */
 const ENV_PASSWORD = String(import.meta.env.VITE_OWNER_PASSWORD || "");
 const SESSION_MS = 3 * 24 * 60 * 60 * 1000; // 3 天
@@ -163,13 +165,12 @@ export async function changeOwnerPassword(
   return { ok: true, local: true, cloud };
 }
 
-/** 首次设置密码：写入本机哈希，并尝试同步云端（云端已有密码时忽略） */
-export function setupOwnerPassword(pw: string): boolean {
+/** 首次设置密码：写入本机哈希，并同步云端（同步等待，便于随后立即换取会话 token） */
+export async function setupOwnerPassword(pw: string): Promise<boolean> {
   const v = String(pw || "").trim();
   if (v.length < MIN_PASSWORD_LEN) return false;
   setOwnerPasswordLocal(v);
-  // 异步首次同步云端，不阻塞 UI；失败留待下次修改密码时再同步
-  void rpcSecret<SecretRes>("owner_set_owner_password", { p_password: v });
+  await rpcSecret<SecretRes>("owner_set_owner_password", { p_password: v });
   return hasLocalPassword();
 }
 
@@ -179,6 +180,44 @@ export function markAuthed(): void {
 
 export function clearAuthed(): void {
   localRemove(SESSION_KEY);
+  clearOwnerToken();
+}
+
+/** 登录成功后换取会话 token（凭老板密码，库内校验 + 防爆破 + 发 token） */
+export async function ownerLogin(password: string): Promise<boolean> {
+  if (!supabase || !password) return false;
+  const { data, error } = await supabase.rpc("owner_login", {
+    p_password: password,
+  });
+  if (error) {
+    console.warn("[auth] ownerLogin:", error.message);
+    return false;
+  }
+  const res = data as { ok?: boolean; token?: string } | null;
+  if (!res?.ok || !res.token) return false;
+  try {
+    sessionStorage.setItem(TOKEN_KEY, res.token);
+  } catch {
+    /* 隐私模式下 sessionStorage 可能不可用，忽略 */
+  }
+  return true;
+}
+
+/** 当前会话 token（未登录/未配置 Supabase 时返回 null） */
+export function getOwnerToken(): string | null {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearOwnerToken(): void {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function isAuthed(): boolean {

@@ -1447,3 +1447,158 @@ REVOKE ALL ON FUNCTION public.owner_delete_staff(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.owner_delete_staff(uuid) TO anon, authenticated;
 
 NOTIFY pgrst, 'reload schema';
+
+-- =============================================================================
+-- 10. RLS 收紧（第二批）：老板会话 + 写操作鉴权
+-- -----------------------------------------------------------------------------
+-- 思路：老板端登录后凭密码换一个短期会话 token（存 owner_sessions），
+--       敏感「写」操作走 SECURITY DEFINER RPC 并在内部校验 token。
+--       顾客端不碰的老板独占表收回匿名写权限，杜绝「匿名篡改数据」。
+--       注：方案 A 边界内「读」经营数据暂未收紧（读需走方案 B 会话代理）。
+-- =============================================================================
+
+-- 10.1 会话表（仅 SECURITY DEFINER 函数可读写）
+CREATE TABLE IF NOT EXISTS public.owner_sessions (
+  token TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+ALTER TABLE public.owner_sessions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.owner_sessions FROM anon, authenticated;
+
+-- 10.2 登录防爆破字段（挂在受保护的 owner_secrets 上）
+ALTER TABLE public.owner_secrets
+  ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.owner_secrets
+  ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+
+-- 10.3 老板登录：验密码 + 防爆破 + 发会话 token
+CREATE OR REPLACE FUNCTION public.owner_login(p_password text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  h text; lockt timestamptz; fails int; tok text;
+BEGIN
+  SELECT password_hash, locked_until, failed_attempts INTO h, lockt, fails
+  FROM public.owner_secrets WHERE id = 'global';
+
+  IF lockt IS NOT NULL AND lockt > now() THEN
+    RETURN jsonb_build_object(
+      'ok', false, 'error', 'locked',
+      'retry_after_sec', ceil(extract(epoch FROM (lockt - now())))
+    );
+  END IF;
+
+  IF coalesce(h, '') = '' OR substr(h, 1, 2) <> '$2' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'not_configured');
+  END IF;
+
+  IF crypt(p_password, h) <> h THEN
+    fails := coalesce(fails, 0) + 1;
+    IF fails >= 5 THEN
+      UPDATE public.owner_secrets
+      SET failed_attempts = 0, locked_until = now() + interval '5 minutes'
+      WHERE id = 'global';
+    ELSE
+      UPDATE public.owner_secrets SET failed_attempts = fails WHERE id = 'global';
+    END IF;
+    RETURN jsonb_build_object('ok', false, 'error', 'wrong_password');
+  END IF;
+
+  UPDATE public.owner_secrets
+  SET failed_attempts = 0, locked_until = NULL
+  WHERE id = 'global';
+
+  DELETE FROM public.owner_sessions WHERE expires_at < now();
+  tok := encode(gen_random_bytes(32), 'hex');
+  INSERT INTO public.owner_sessions (token, expires_at)
+  VALUES (tok, now() + interval '12 hours');
+  RETURN jsonb_build_object(
+    'ok', true, 'token', tok,
+    'expires_at', to_char(now() + interval '12 hours', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_login(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_login(text) TO anon, authenticated;
+
+-- 10.4 会话校验（仅供其它 SECURITY DEFINER 函数内部调用，不暴露给匿名）
+CREATE OR REPLACE FUNCTION public.owner_auth(p_token text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+  SELECT EXISTS(
+    SELECT 1 FROM public.owner_sessions
+    WHERE token = p_token AND expires_at > now()
+  );
+$$;
+REVOKE ALL ON FUNCTION public.owner_auth(text) FROM PUBLIC;
+
+-- 10.5 固定成本（工资/房租）：收回匿名写，改走带鉴权的 RPC
+REVOKE INSERT, UPDATE, DELETE ON public.owner_fixed_cost FROM anon, authenticated;
+DROP POLICY IF EXISTS anon_all_owner_fixed_cost ON public.owner_fixed_cost;
+
+CREATE OR REPLACE FUNCTION public.owner_upsert_fixed_cost(
+  p_token text,
+  p_id text,
+  p_name text,
+  p_category text,
+  p_amount numeric,
+  p_start_date text,
+  p_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  IF length(coalesce(p_name, '')) = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'name required');
+  END IF;
+  INSERT INTO public.owner_fixed_cost (id, name, category, amount, start_date, note)
+  VALUES (p_id, p_name, coalesce(p_category, '其他'), coalesce(p_amount, 0),
+          coalesce(p_start_date, ''), coalesce(p_note, ''))
+  ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name,
+      category = EXCLUDED.category,
+      amount = EXCLUDED.amount,
+      start_date = EXCLUDED.start_date,
+      note = EXCLUDED.note;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_upsert_fixed_cost(text, text, text, text, numeric, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_upsert_fixed_cost(text, text, text, text, numeric, text, text) TO anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.owner_delete_fixed_cost(p_token text, p_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE n int;
+BEGIN
+  IF NOT public.owner_auth(p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+  END IF;
+  DELETE FROM public.owner_fixed_cost WHERE id = p_id;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n = 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'not found');
+  END IF;
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.owner_delete_fixed_cost(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.owner_delete_fixed_cost(text, text) TO anon, authenticated;
+
+NOTIFY pgrst, 'reload schema';

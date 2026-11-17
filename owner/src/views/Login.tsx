@@ -12,6 +12,7 @@ import {
 import {
   verifyOwnerPassword,
   markAuthed,
+  ownerLogin,
   changeOwnerPassword,
   needsPasswordSetup,
   setupOwnerPassword,
@@ -90,7 +91,7 @@ export default function Login({
     }
   };
 
-  const handleSetup = (e: FormEvent) => {
+  const handleSetup = async (e: FormEvent) => {
     e.preventDefault();
     if (pw.length < MIN_PASSWORD_LEN) {
       setErr(t("login.errPwLen", { n: MIN_PASSWORD_LEN }));
@@ -100,10 +101,11 @@ export default function Login({
       setErr(t("login.errPwMismatch"));
       return;
     }
-    if (!setupOwnerPassword(pw)) {
+    if (!(await setupOwnerPassword(pw))) {
       setErr(t("login.errSetFail"));
       return;
     }
+    await ownerLogin(pw);
     markAuthed();
     onDone();
   };
@@ -114,6 +116,7 @@ export default function Login({
     const ok = await verifyOwnerPassword(pw);
     setBusy(false);
     if (ok) {
+      await ownerLogin(pw);
       markAuthed();
       onDone();
     } else {
@@ -139,6 +142,7 @@ export default function Login({
       setErr(t("login.errPwLen", { n: MIN_PASSWORD_LEN }));
       return;
     }
+    await ownerLogin(newPw.trim());
     markAuthed();
     onDone();
   };

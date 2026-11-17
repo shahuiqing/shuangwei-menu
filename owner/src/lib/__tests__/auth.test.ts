@@ -60,12 +60,12 @@ describe("首次设置密码流程", () => {
     expect(needsPasswordSetup()).toBe(true);
   });
 
-  it("短密码被拒绝，长度达标才写入", () => {
-    expect(setupOwnerPassword("123")).toBe(false);
+  it("短密码被拒绝，长度达标才写入", async () => {
+    expect(await setupOwnerPassword("123")).toBe(false);
     expect(hasLocalPassword()).toBe(false);
     expect(needsPasswordSetup()).toBe(true);
 
-    expect(setupOwnerPassword("abc123")).toBe(true);
+    expect(await setupOwnerPassword("abc123")).toBe(true);
     expect(hasLocalPassword()).toBe(true);
     expect(needsPasswordSetup()).toBe(false);
   });
@@ -78,7 +78,7 @@ describe("verifyOwnerPassword（本地兜底路径）", () => {
   });
 
   it("设置密码后仅正确口令通过", async () => {
-    setupOwnerPassword("secret6");
+    await setupOwnerPassword("secret6");
     await expect(verifyOwnerPassword("secret6")).resolves.toBe(true);
     await expect(verifyOwnerPassword("secret7")).resolves.toBe(false);
     await expect(verifyOwnerPassword("")).resolves.toBe(false);
