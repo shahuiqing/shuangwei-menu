@@ -1549,10 +1549,10 @@ BEGIN
   DELETE FROM public.owner_sessions WHERE expires_at < now();
   tok := encode(gen_random_bytes(32), 'hex');
   INSERT INTO public.owner_sessions (token, expires_at)
-  VALUES (tok, now() + interval '12 hours');
+  VALUES (tok, now() + interval '3 days');
   RETURN jsonb_build_object(
     'ok', true, 'token', tok,
-    'expires_at', to_char(now() + interval '12 hours', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    'expires_at', to_char(now() + interval '3 days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
   );
 END;
 $$;

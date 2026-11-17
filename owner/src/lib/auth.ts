@@ -12,7 +12,7 @@ import { supabase } from "./supabase";
 
 const SESSION_KEY = "ownerAuthedUntil";
 const LOCAL_HASH_KEY = "ownerPasswordHash";
-/** 会话 token（sessionStorage：标签页级，刷新保留、关闭丢失；不落 localStorage 以免被 XSS 读） */
+/** 会话 token（localStorage：与登录态一致持久化，避免「关标签页重开后登录态在但 token 丢」导致的写失败） */
 const TOKEN_KEY = "ownerSessionToken";
 /** 部署时可配置初始密码；不再有内置的通用弱默认值 */
 const ENV_PASSWORD = String(import.meta.env.VITE_OWNER_PASSWORD || "");
@@ -195,29 +195,18 @@ export async function ownerLogin(password: string): Promise<boolean> {
   }
   const res = data as { ok?: boolean; token?: string } | null;
   if (!res?.ok || !res.token) return false;
-  try {
-    sessionStorage.setItem(TOKEN_KEY, res.token);
-  } catch {
-    /* 隐私模式下 sessionStorage 可能不可用，忽略 */
-  }
+  localSetRaw(TOKEN_KEY, res.token);
   return true;
 }
 
 /** 当前会话 token（未登录/未配置 Supabase 时返回 null） */
 export function getOwnerToken(): string | null {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  const t = localRaw(TOKEN_KEY);
+  return typeof t === "string" && t ? t : null;
 }
 
 export function clearOwnerToken(): void {
-  try {
-    sessionStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
+  localRemove(TOKEN_KEY);
 }
 
 export function isAuthed(): boolean {
