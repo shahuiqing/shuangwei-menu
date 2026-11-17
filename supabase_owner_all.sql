@@ -1256,16 +1256,31 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
-DECLARE h text;
+DECLARE h text; lockt timestamptz; fails int;
 BEGIN
-  SELECT password_hash INTO h FROM public.owner_secrets WHERE id = 'global';
+  SELECT password_hash, locked_until, failed_attempts INTO h, lockt, fails
+  FROM public.owner_secrets WHERE id = 'global';
+  IF lockt IS NOT NULL AND lockt > now() THEN
+    RETURN jsonb_build_object('ok', false, 'configured', true, 'locked', true);
+  END IF;
   IF COALESCE(h, '') = '' OR substr(h, 1, 2) <> '$2' THEN
     RETURN jsonb_build_object('ok', false, 'configured', false);
   END IF;
-  RETURN jsonb_build_object(
-    'ok', crypt(p_password, h) = h,
-    'configured', true
-  );
+  IF crypt(p_password, h) <> h THEN
+    fails := coalesce(fails, 0) + 1;
+    IF fails >= 5 THEN
+      UPDATE public.owner_secrets
+      SET failed_attempts = 0, locked_until = now() + interval '5 minutes'
+      WHERE id = 'global';
+    ELSE
+      UPDATE public.owner_secrets SET failed_attempts = fails WHERE id = 'global';
+    END IF;
+    RETURN jsonb_build_object('ok', false, 'configured', true);
+  END IF;
+  UPDATE public.owner_secrets
+  SET failed_attempts = 0, locked_until = NULL
+  WHERE id = 'global';
+  RETURN jsonb_build_object('ok', true, 'configured', true);
 END;
 $$;
 
@@ -1306,21 +1321,35 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
-DECLARE h text;
+DECLARE h text; lockt timestamptz; fails int;
 BEGIN
   IF length(coalesce(p_new, '')) < 6 THEN
     RETURN jsonb_build_object('ok', false, 'error', 'password too short');
   END IF;
-  SELECT password_hash INTO h FROM public.owner_secrets WHERE id = 'global';
+  SELECT password_hash, locked_until, failed_attempts INTO h, lockt, fails
+  FROM public.owner_secrets WHERE id = 'global';
+  IF lockt IS NOT NULL AND lockt > now() THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'locked');
+  END IF;
   IF COALESCE(h, '') = '' OR substr(h, 1, 2) <> '$2' THEN
     RETURN jsonb_build_object('ok', false, 'error', 'owner password not configured');
   END IF;
   IF crypt(p_old, h) <> h THEN
+    fails := coalesce(fails, 0) + 1;
+    IF fails >= 5 THEN
+      UPDATE public.owner_secrets
+      SET failed_attempts = 0, locked_until = now() + interval '5 minutes'
+      WHERE id = 'global';
+    ELSE
+      UPDATE public.owner_secrets SET failed_attempts = fails WHERE id = 'global';
+    END IF;
     RETURN jsonb_build_object('ok', false, 'error', 'old password incorrect');
   END IF;
   UPDATE public.owner_secrets
   SET password_hash = crypt(p_new, gen_salt('bf', 10)),
-      updated_at = now()
+      updated_at = now(),
+      failed_attempts = 0,
+      locked_until = NULL
   WHERE id = 'global';
   RETURN jsonb_build_object('ok', true);
 END;
